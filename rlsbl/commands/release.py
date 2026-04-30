@@ -127,21 +127,40 @@ def run_cmd(registry, args, flags):
         log("--- No changes made ---")
         return
 
-    # Write new version to the primary registry file
+    # Pre-compute which files will be modified
     version_file = reg.get_version_file()
-    reg.write_version(".", new_version)
-    log(f"Updated version in {version_file}")
-
-    # Sync version to all other recognized version files
     files_to_commit = [version_file]
     for name, other_reg in REGISTRIES.items():
         if name == registry:
             continue
         if other_reg.check_project_exists("."):
+            files_to_commit.append(other_reg.get_version_file())
+
+    # Confirmation prompt (skip with --yes)
+    if not flags.get("yes"):
+        print(f"\nAbout to release {new_version} ({bump_type}) on {branch}")
+        print(f"  Tag: {tag}")
+        print(f"  Files: {', '.join(files_to_commit)}")
+        try:
+            answer = input("Proceed? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborted.")
+            sys.exit(1)
+        if answer != "y":
+            print("Aborted.")
+            sys.exit(0)
+
+    # Write new version to the primary registry file
+    reg.write_version(".", new_version)
+    log(f"Updated version in {version_file}")
+
+    # Sync version to all other recognized version files
+    for name, other_reg in REGISTRIES.items():
+        if name == registry:
+            continue
+        if other_reg.check_project_exists("."):
             other_reg.write_version(".", new_version)
-            other_file = other_reg.get_version_file()
-            files_to_commit.append(other_file)
-            log(f"Synced version to {other_file}")
+            log(f"Synced version to {other_reg.get_version_file()}")
 
     # Commit all bumped version files together
     commit_tool = find_commit_tool()
