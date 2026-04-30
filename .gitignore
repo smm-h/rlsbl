@@ -1,0 +1,14 @@
+node_modules/
+__pycache__/
+*.pyc
+dist/
+*.egg-info/
+uv.lock
+*.log
+.DS_Store
+coverage/
+.rlsbl-notes-*.tmp
+.credentials.json
+.*-cache.json
+.env
+.env.local

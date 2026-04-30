@@ -1,0 +1,12 @@
+{
+  "name": "rlsbl",
+  "version": "0.0.1",
+  "description": "Release orchestration and project scaffolding for npm and PyPI",
+  "license": "MIT",
+  "bin": { "rlsbl": "bin/cli.js" },
+  "files": ["bin/", "rlsbl/", "templates/"],
+  "repository": { "type": "git", "url": "git+https://github.com/smm-h/rlsbl.git" },
+  "engines": { "node": ">=18" },
+  "keywords": ["release", "npm", "pypi", "publish", "cli", "scaffold"],
+  "author": "smm-h"
+}
