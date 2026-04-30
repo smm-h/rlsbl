@@ -10,7 +10,7 @@ except Exception:
     __version__ = "unknown"
 
 REGISTRIES = ("npm", "pypi")
-COMMANDS = ("release", "status", "scaffold", "check", "config")
+COMMANDS = ("release", "status", "scaffold", "check", "config", "undo")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -22,6 +22,7 @@ Usage:
   rlsbl scaffold [--force] [--update]                       Scaffold release infrastructure
   rlsbl check <name>                                        Check name availability
   rlsbl config                                              Show project configuration
+  rlsbl undo [--yes]                                        Revert the last release
 
 Options:
   --registry <npm|pypi>  Target a specific registry (auto-detected if omitted)
@@ -82,6 +83,7 @@ def _get_command_module(command):
         "scaffold": "init_cmd",
         "check": "check",
         "config": "config",
+        "undo": "undo",
     }
     module_name = module_map.get(command)
     if not module_name:
@@ -163,6 +165,15 @@ def main():
             # config: auto-detect, pass first registry or fallback
             regs = detect_registries()
             handler.run_cmd(registry or (regs[0] if regs else "npm"), args, flags)
+        elif command == "undo":
+            # undo: auto-detect like release
+            if not registry:
+                regs = detect_registries()
+                if not regs:
+                    print("Error: no package.json or pyproject.toml found.", file=sys.stderr)
+                    sys.exit(1)
+                registry = regs[0]
+            handler.run_cmd(registry, args, flags)
         else:
             # release, status: use explicit registry or auto-detect primary
             if not registry:
