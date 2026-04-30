@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Go project support: scaffold with GoReleaser, CI, and publish workflows
+- Version-file-less registries: release skips commit step when version is the git tag
+- Go name availability check via pkg.go.dev
+- Cross-compilation template (linux/darwin/windows x amd64/arm64)
+
 ## 0.3.0
 
 - Confirmation prompt on release (skip with --yes)
