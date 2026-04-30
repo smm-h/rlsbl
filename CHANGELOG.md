@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- CLI redesign: `--registry` flag replaces positional registry argument
+- Rename `check-name` command to `check`
+- All commands are top-level: `rlsbl release`, `rlsbl check`, `rlsbl scaffold`, `rlsbl status`
+- Fix astral-sh/setup-uv version (v7, not v8)
+
 ## 0.1.1
 
 - Fix astral-sh/setup-uv version (v8 tag doesn't exist, use v7)
