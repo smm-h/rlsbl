@@ -208,6 +208,75 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
     return created, skipped, warnings, new_hashes
 
 
+def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnings,
+                       registry=None):
+    """Shared post-processing for scaffold: chmod, hooks, version marker, hashes, summary.
+
+    all_hash_dicts is a list of dicts to merge into existing_hashes.
+    """
+    # Make all shell scripts in scripts/ executable
+    scripts_dir = os.path.join(".", "scripts")
+    if os.path.isdir(scripts_dir):
+        for entry in os.listdir(scripts_dir):
+            if entry.endswith(".sh"):
+                os.chmod(os.path.join(scripts_dir, entry), 0o755)
+
+    # Auto-install pre-push hook if not already present
+    hook_source = os.path.join("scripts", "pre-push-hook.sh")
+    hook_target = os.path.join(".git", "hooks", "pre-push")
+    if os.path.exists(hook_source) and os.path.isdir(".git"):
+        if not os.path.exists(hook_target):
+            os.makedirs(os.path.join(".git", "hooks"), exist_ok=True)
+            shutil.copy2(hook_source, hook_target)
+            os.chmod(hook_target, 0o755)
+            print("Installed pre-push hook (.git/hooks/pre-push)")
+
+    # Write scaffolding version marker so the pre-push hook can detect drift
+    from rlsbl import __version__
+    marker_dir = os.path.join(".", ".rlsbl")
+    os.makedirs(marker_dir, exist_ok=True)
+    marker_path = os.path.join(marker_dir, "version")
+    with open(marker_path, "w") as f:
+        f.write(__version__ + "\n")
+    print("Wrote scaffolding version marker (.rlsbl/version)")
+
+    # Persist file hashes for future --update customization detection
+    all_new_hashes = {}
+    for h in all_hash_dicts:
+        all_new_hashes.update(h)
+    existing_hashes.update(all_new_hashes)
+    save_hashes(existing_hashes)
+
+    # Print summary
+    if created:
+        print("Created:")
+        for f in created:
+            print(f"  {f}")
+
+    if skipped:
+        print("Skipped (already exist, use --update to refresh managed files or --force to overwrite all):")
+        for f in skipped:
+            print(f"  {f}")
+
+    if warnings:
+        print("Warnings:")
+        for w in warnings:
+            print(f"  {w}")
+
+    # Helpful note when existing CI workflow is preserved
+    ci_path = ".github/workflows/ci.yml"
+    if any(s.startswith(ci_path) for s in skipped):
+        print("\nNote: Existing CI workflow preserved. Review and merge manually if needed.")
+
+    # Next steps
+    if registry:
+        steps = NEXT_STEPS.get(registry)
+        if steps:
+            print("\nNext steps:")
+            for i, step in enumerate(steps, 1):
+                print(f"  {i}. {step}")
+
+
 def run_cmd(registry, args, flags):
     """Init command handler.
 
@@ -254,68 +323,85 @@ def run_cmd(registry, args, flags):
             existing_hashes,
         )
 
-    # Make all shell scripts in scripts/ executable
-    scripts_dir = os.path.join(".", "scripts")
-    if os.path.isdir(scripts_dir):
-        for entry in os.listdir(scripts_dir):
-            if entry.endswith(".sh"):
-                os.chmod(os.path.join(scripts_dir, entry), 0o755)
-
-    # Auto-install pre-push hook if not already present
-    hook_source = os.path.join("scripts", "pre-push-hook.sh")
-    hook_target = os.path.join(".git", "hooks", "pre-push")
-    if os.path.exists(hook_source) and os.path.isdir(".git"):
-        if not os.path.exists(hook_target):
-            os.makedirs(os.path.join(".git", "hooks"), exist_ok=True)
-            shutil.copy2(hook_source, hook_target)
-            os.chmod(hook_target, 0o755)
-            print("Installed pre-push hook (.git/hooks/pre-push)")
-
-    # Write scaffolding version marker so the pre-push hook can detect drift
-    from rlsbl import __version__
-    marker_dir = os.path.join(".", ".rlsbl")
-    os.makedirs(marker_dir, exist_ok=True)
-    marker_path = os.path.join(marker_dir, "version")
-    with open(marker_path, "w") as f:
-        f.write(__version__ + "\n")
-    print("Wrote scaffolding version marker (.rlsbl/version)")
-
-    # Persist file hashes for future --update customization detection
-    all_new_hashes = {}
-    all_new_hashes.update(reg_hashes)
-    all_new_hashes.update(shared_hashes)
-    existing_hashes.update(all_new_hashes)
-    save_hashes(existing_hashes)
-
-    # Merge results
     created = reg_created + shared_created
     skipped = reg_skipped + shared_skipped
     warnings = reg_warnings + shared_warnings
 
-    # Print summary
-    if created:
-        print("Created:")
-        for f in created:
-            print(f"  {f}")
+    _finalize_scaffold(
+        existing_hashes, [reg_hashes, shared_hashes],
+        created, skipped, warnings, registry=registry,
+    )
 
-    if skipped:
-        print("Skipped (already exist, use --update to refresh managed files or --force to overwrite all):")
-        for f in skipped:
-            print(f"  {f}")
 
-    if warnings:
-        print("Warnings:")
-        for w in warnings:
-            print(f"  {w}")
+def run_cmd_multi(registries_list, args, flags):
+    """Scaffold for multiple registries with a merged publish workflow.
 
-    # Helpful note when existing CI workflow is preserved
-    ci_path = ".github/workflows/ci.yml"
-    if any(s.startswith(ci_path) for s in skipped):
-        print("\nNote: Existing CI workflow preserved. Review and merge manually if needed.")
+    Uses the primary registry for template vars and CI, then writes a merged
+    publish.yml that contains jobs for all detected registries.
+    """
+    primary = registries_list[0]
+    reg = REGISTRIES[primary]
 
-    # Next steps
-    steps = NEXT_STEPS.get(registry)
-    if steps:
-        print("\nNext steps:")
-        for i, step in enumerate(steps, 1):
-            print(f"  {i}. {step}")
+    if not reg.check_project_exists("."):
+        print(f"Error: no {primary} project found in current directory.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Multiple registries detected: {', '.join(registries_list)}")
+    print("Scaffolding with merged publish workflow.")
+
+    vars_dict = reg.get_template_vars(".")
+    from datetime import datetime
+    vars_dict["year"] = str(datetime.now().year)
+
+    force = flags.get("force", False)
+    update = flags.get("update", False)
+    existing_hashes = load_hashes()
+
+    # Process primary registry CI template only (publish will come from merged)
+    ci_mappings = [m for m in reg.get_template_mappings() if "publish" not in m["template"]]
+    ci_created, ci_skipped, ci_warnings, ci_hashes = process_mappings(
+        reg.get_template_dir(),
+        ci_mappings,
+        vars_dict,
+        force,
+        update,
+        existing_hashes,
+    )
+
+    # Process merged publish workflow template
+    merged_tpl_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                  "..", "templates", "merged")
+    merged_created, merged_skipped, merged_warnings, merged_hashes = process_mappings(
+        merged_tpl_dir,
+        [{"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"}],
+        vars_dict,
+        force,
+        update,
+        existing_hashes,
+    )
+
+    # Process shared templates (once)
+    shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
+        reg.get_shared_template_dir(),
+        reg.get_shared_template_mappings(),
+        vars_dict,
+        force,
+        update,
+        existing_hashes,
+    )
+
+    created = ci_created + merged_created + shared_created
+    skipped = ci_skipped + merged_skipped + shared_skipped
+    warnings = ci_warnings + merged_warnings + shared_warnings
+
+    _finalize_scaffold(
+        existing_hashes, [ci_hashes, merged_hashes, shared_hashes],
+        created, skipped, warnings,
+    )
+
+    # Show combined next steps for dual-registry
+    print("\nNext steps:")
+    print("  1. Add an NPM_TOKEN secret to your GitHub repo (Settings > Secrets > Actions)")
+    print("  2. Configure Trusted Publishing on pypi.org")
+    print("  3. Push to GitHub to activate the CI workflow")
+    print("  4. Run rlsbl release [patch|minor|major]")

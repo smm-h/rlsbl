@@ -157,10 +157,9 @@ def main():
                     print("Error: no package.json or pyproject.toml found.", file=sys.stderr)
                     sys.exit(1)
                 if len(regs) > 1:
-                    print(f"Multiple registries detected: {', '.join(regs)}")
-                    print(f"Scaffolding for primary registry: {regs[0]}")
-                    print("For dual-registry projects, manually configure workflows with both jobs.")
-                handler.run_cmd(regs[0], args, flags)
+                    handler.run_cmd_multi(regs, args, flags)
+                else:
+                    handler.run_cmd(regs[0], args, flags)
         elif command == "config":
             # config: auto-detect, pass first registry or fallback
             regs = detect_registries()
