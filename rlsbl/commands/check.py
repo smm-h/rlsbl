@@ -1,4 +1,4 @@
-"""Check command: check package name availability on npm or PyPI."""
+"""Check command: check package name availability on npm, PyPI, or Go (pkg.go.dev)."""
 
 import re
 import subprocess
@@ -165,10 +165,44 @@ def _check_name_pypi(name):
             )
 
 
+def check_go_availability(name):
+    """Check if a Go module path exists on pkg.go.dev.
+
+    Returns {"status": "available"|"taken"|"error", "message"?: str}.
+    """
+    url = f"https://pkg.go.dev/{name}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 200:
+                return {"status": "taken"}
+            return {"status": "error", "message": f"Unexpected status {resp.status}"}
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {"status": "available"}
+        return {"status": "error", "message": f"Unexpected status {e.code}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e) or "Network error"}
+
+
+def _check_name_go(name):
+    """Check Go module path availability on pkg.go.dev."""
+    print(f'Checking pkg.go.dev for "{name}"...')
+
+    result = check_go_availability(name)
+    if result["status"] == "error":
+        print(f"Error checking pkg.go.dev: {result['message']}", file=sys.stderr)
+        sys.exit(1)
+    if result["status"] == "available":
+        print(f'"{name}" is available on pkg.go.dev.')
+    else:
+        print(f'"{name}" already exists on pkg.go.dev.')
+
+
 def run_cmd(registry, args, flags):
     """Check command handler.
 
-    Checks package name availability on npm or PyPI, and warns about similar names.
+    Checks package name availability on npm, PyPI, or Go, and warns about similar names.
     """
     name = args[0] if args else None
     if not name:
@@ -180,5 +214,7 @@ def run_cmd(registry, args, flags):
 
     if registry == "npm":
         _check_name_npm(name)
-    else:
+    elif registry == "pypi":
         _check_name_pypi(name)
+    elif registry == "go":
+        _check_name_go(name)

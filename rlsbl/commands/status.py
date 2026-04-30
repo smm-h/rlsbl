@@ -33,7 +33,7 @@ def run_cmd(registry, args, flags):
     for r_name, r_mod in REGISTRIES.items():
         if r_mod.check_project_exists("."):
             ver = r_mod.read_version(".")
-            file = r_mod.get_version_file()
+            file = r_mod.get_version_file() or "git tag"
             print(f"Version:   {ver} ({r_name}, {file})")
 
     # Git info

@@ -9,7 +9,8 @@ def run_cmd(registry, args, flags):
     for name, reg in REGISTRIES.items():
         if reg.check_project_exists("."):
             version = reg.read_version(".")
-            print(f"  {name}: {reg.get_version_file()} (v{version})")
+            vfile = reg.get_version_file() or "git tag"
+            print(f"  {name}: {vfile} (v{version})")
         else:
             print(f"  {name}: not found")
 

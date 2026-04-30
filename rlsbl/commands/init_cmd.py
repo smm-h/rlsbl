@@ -60,6 +60,11 @@ NEXT_STEPS = {
         "Configure Trusted Publishing on pypi.org",
         "Run rlsbl release [patch|minor|major]",
     ],
+    "go": [
+        "Install GoReleaser (https://goreleaser.com/install/)",
+        "Push to GitHub to activate the CI workflow",
+        "Run rlsbl release [patch|minor|major]",
+    ],
 }
 
 

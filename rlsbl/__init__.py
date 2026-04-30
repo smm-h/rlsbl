@@ -1,4 +1,4 @@
-"""rlsbl: Release orchestration and project scaffolding for npm and PyPI."""
+"""rlsbl: Release orchestration and project scaffolding for npm, PyPI, and Go."""
 
 import os
 import sys
@@ -9,12 +9,12 @@ try:
 except Exception:
     __version__ = "unknown"
 
-REGISTRIES = ("npm", "pypi")
+REGISTRIES = ("npm", "pypi", "go")
 COMMANDS = ("release", "status", "scaffold", "check", "config", "undo")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
-rlsbl v{__version__} -- Release orchestration and project scaffolding for npm and PyPI
+rlsbl v{__version__} -- Release orchestration and project scaffolding for npm, PyPI, and Go
 
 Usage:
   rlsbl release [patch|minor|major] [--dry-run] [--yes] [--quiet]  Orchestrate a release
@@ -25,7 +25,7 @@ Usage:
   rlsbl undo [--yes]                                        Revert the last release
 
 Options:
-  --registry <npm|pypi>  Target a specific registry (auto-detected if omitted)
+  --registry <npm|pypi|go>  Target a specific registry (auto-detected if omitted)
   --help, -h             Show this help
   --version, -v          Show version"""
 
@@ -40,6 +40,8 @@ def detect_registries():
         found.append("npm")
     if os.path.exists("pyproject.toml"):
         found.append("pypi")
+    if os.path.exists("go.mod"):
+        found.append("go")
     return found
 
 
@@ -144,9 +146,10 @@ def main():
             if registry:
                 handler.run_cmd(registry, args, flags)
             else:
-                for i, r in enumerate(["npm", "pypi"]):
+                all_registries = ["npm", "pypi", "go"]
+                for i, r in enumerate(all_registries):
                     handler.run_cmd(r, args, flags)
-                    if i < 1:
+                    if i < len(all_registries) - 1:
                         print("")
         elif command == "scaffold":
             if registry:
@@ -154,7 +157,7 @@ def main():
             else:
                 regs = detect_registries()
                 if not regs:
-                    print("Error: no package.json or pyproject.toml found.", file=sys.stderr)
+                    print("Error: no package.json, pyproject.toml, or go.mod found.", file=sys.stderr)
                     sys.exit(1)
                 if len(regs) > 1:
                     handler.run_cmd_multi(regs, args, flags)
@@ -169,7 +172,7 @@ def main():
             if not registry:
                 regs = detect_registries()
                 if not regs:
-                    print("Error: no package.json or pyproject.toml found.", file=sys.stderr)
+                    print("Error: no package.json, pyproject.toml, or go.mod found.", file=sys.stderr)
                     sys.exit(1)
                 registry = regs[0]
             handler.run_cmd(registry, args, flags)
@@ -178,7 +181,7 @@ def main():
             if not registry:
                 regs = detect_registries()
                 if not regs:
-                    print("Error: no package.json or pyproject.toml found.", file=sys.stderr)
+                    print("Error: no package.json, pyproject.toml, or go.mod found.", file=sys.stderr)
                     sys.exit(1)
                 registry = regs[0]
             handler.run_cmd(registry, args, flags)
