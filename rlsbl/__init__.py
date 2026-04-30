@@ -10,7 +10,7 @@ except Exception:
     __version__ = "unknown"
 
 REGISTRIES = ("npm", "pypi")
-COMMANDS = ("release", "status", "scaffold", "check")
+COMMANDS = ("release", "status", "scaffold", "check", "config")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -21,6 +21,7 @@ Usage:
   rlsbl status                                              Show project status
   rlsbl scaffold [--force] [--update]                       Scaffold release infrastructure
   rlsbl check <name>                                        Check name availability
+  rlsbl config                                              Show project configuration
 
 Options:
   --registry <npm|pypi>  Target a specific registry (auto-detected if omitted)
@@ -80,6 +81,7 @@ def _get_command_module(command):
         "status": "status",
         "scaffold": "init_cmd",
         "check": "check",
+        "config": "config",
     }
     module_name = module_map.get(command)
     if not module_name:
@@ -157,6 +159,10 @@ def main():
                     print(f"Scaffolding for primary registry: {regs[0]}")
                     print("For dual-registry projects, manually configure workflows with both jobs.")
                 handler.run_cmd(regs[0], args, flags)
+        elif command == "config":
+            # config: auto-detect, pass first registry or fallback
+            regs = detect_registries()
+            handler.run_cmd(registry or (regs[0] if regs else "npm"), args, flags)
         else:
             # release, status: use explicit registry or auto-detect primary
             if not registry:
