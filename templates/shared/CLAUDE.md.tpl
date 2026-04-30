@@ -5,11 +5,11 @@
 This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestration.
 
 - Update CHANGELOG.md with a `## X.Y.Z` entry describing changes
-- Run `rlsbl <registry> release [patch|minor|major]` to bump version and create a GitHub Release
+- Run `rlsbl release [patch|minor|major]` to bump version and create a GitHub Release
 - CI handles publishing automatically via the publish workflow
-- Never publish manually — always use `rlsbl <registry> release`
+- Never publish manually — always use `rlsbl release`
 - Requires `NPM_TOKEN` secret on GitHub (for npm projects)
-- Use `rlsbl <registry> release --dry-run` to preview a release without making changes
+- Use `rlsbl release --dry-run` to preview a release without making changes
 
 ## Conventions
 

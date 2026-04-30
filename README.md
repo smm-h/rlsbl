@@ -25,7 +25,7 @@ rlsbl release minor
 
 ## Commands
 
-All commands work at the top level -- registries are auto-detected from project files (`package.json`, `pyproject.toml`). Use the registry-specific form (`rlsbl <registry> <command>`) only when you need to target a single registry.
+All commands work at the top level -- registries are auto-detected from project files (`package.json`, `pyproject.toml`). Use `--registry <npm|pypi>` when you need to target a specific registry.
 
 ### scaffold [--force] [--update]
 
@@ -33,8 +33,8 @@ Scaffolds CI/CD infrastructure and release tooling for all detected registries.
 
 ```
 rlsbl scaffold
-rlsbl npm scaffold          # target npm only
-rlsbl pypi scaffold --force # overwrite existing files
+rlsbl scaffold --registry npm          # target npm only
+rlsbl scaffold --registry pypi --force # overwrite existing files
 ```
 
 Context-aware behavior when files already exist (without `--force`):
@@ -52,7 +52,7 @@ Bumps version, commits, pushes, and creates a GitHub Release. Defaults to `patch
 
 ```
 rlsbl release minor
-rlsbl npm release major --dry-run
+rlsbl release major --dry-run --registry npm
 ```
 
 The version is synced across all detected project files (`package.json`, `pyproject.toml`) regardless of which registry is primary.
@@ -65,16 +65,16 @@ Shows project status: package name, version (per registry), git branch, last tag
 
 ```
 rlsbl status
-rlsbl pypi status
+rlsbl status --registry pypi
 ```
 
-### check-name \<name\>
+### check \<name\>
 
 Checks name availability on both npm and PyPI, and warns about confusingly similar names.
 
 ```
-rlsbl check-name my-cool-lib
-rlsbl npm check-name my-cool-lib   # npm only
+rlsbl check my-cool-lib
+rlsbl check my-cool-lib --registry npm   # npm only
 ```
 
 npm checks variant spellings (hyphens, underscores, dots, no separator). PyPI normalizes per PEP 503 and checks common alternatives.

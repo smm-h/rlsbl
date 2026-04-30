@@ -53,12 +53,12 @@ NEXT_STEPS = {
     "npm": [
         "Add an NPM_TOKEN secret to your GitHub repo (Settings > Secrets > Actions)",
         "Push to GitHub to activate the CI workflow",
-        "Run rlsbl npm release [patch|minor|major]",
+        "Run rlsbl release [patch|minor|major]",
     ],
     "pypi": [
         "Push to GitHub",
         "Configure Trusted Publishing on pypi.org",
-        "Run rlsbl pypi release [patch|minor|major]",
+        "Run rlsbl release [patch|minor|major]",
     ],
 }
 
