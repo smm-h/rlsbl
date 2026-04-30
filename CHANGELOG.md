@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Fix astral-sh/setup-uv version (v8 tag doesn't exist, use v7)
+
 ## 0.1.0
 
 - Initial release as `rlsbl` (renamed from share-it-on)
