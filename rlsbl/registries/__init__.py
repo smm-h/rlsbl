@@ -1,5 +1,5 @@
 """Registry lookup for rlsbl."""
 
-from . import npm, pypi
+from . import go, npm, pypi
 
-REGISTRIES = {"npm": npm, "pypi": pypi}
+REGISTRIES = {"npm": npm, "pypi": pypi, "go": go}
