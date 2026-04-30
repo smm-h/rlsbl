@@ -20,7 +20,7 @@ jobs:
       - run: pip install pytest
       - run: python -m rlsbl --version
       - run: python -m rlsbl --help
-      - run: python -m rlsbl npm check-name test-ci-check-12345
+      - run: python -m rlsbl check test-ci-check-12345 --registry npm
       - run: python -m pytest tests/ -v
 
   test-npm-wrapper:

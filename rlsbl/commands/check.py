@@ -1,4 +1,4 @@
-"""Check-name command: check package name availability on npm or PyPI."""
+"""Check command: check package name availability on npm or PyPI."""
 
 import re
 import subprocess
@@ -166,14 +166,14 @@ def _check_name_pypi(name):
 
 
 def run_cmd(registry, args, flags):
-    """Check-name command handler.
+    """Check command handler.
 
     Checks package name availability on npm or PyPI, and warns about similar names.
     """
     name = args[0] if args else None
     if not name:
         print(
-            "Error: missing package name. Usage: rlsbl check-name <name>",
+            "Error: missing package name. Usage: rlsbl check <name>",
             file=sys.stderr,
         )
         sys.exit(1)
