@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Confirmation prompt on release (skip with --yes)
+- `config` command: show detected registries, scaffolding state, workflows, hooks
+- `undo` command: revert a botched release (deletes tag, reverts commit, deletes GitHub Release)
+- Merged publish workflow for dual-registry projects (scaffold generates one file with both npm + pypi jobs)
+
 ## 0.2.0
 
 - CLI redesign: `--registry` flag replaces positional registry argument
