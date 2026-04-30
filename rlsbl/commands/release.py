@@ -120,7 +120,9 @@ def run_cmd(registry, args, flags):
             if name == registry:
                 continue
             if other_reg.check_project_exists("."):
-                other_files.append(other_reg.get_version_file())
+                other_file = other_reg.get_version_file()
+                if other_file:
+                    other_files.append(other_file)
         if other_files:
             log(f"Sync to:   {', '.join(other_files)}")
         log(f"Changelog:\n{changelog_entry}")
@@ -129,18 +131,25 @@ def run_cmd(registry, args, flags):
 
     # Pre-compute which files will be modified
     version_file = reg.get_version_file()
-    files_to_commit = [version_file]
+    files_to_commit = []
+    if version_file:
+        files_to_commit.append(version_file)
     for name, other_reg in REGISTRIES.items():
         if name == registry:
             continue
         if other_reg.check_project_exists("."):
-            files_to_commit.append(other_reg.get_version_file())
+            other_file = other_reg.get_version_file()
+            if other_file:
+                files_to_commit.append(other_file)
 
     # Confirmation prompt (skip with --yes)
     if not flags.get("yes"):
         print(f"\nAbout to release {new_version} ({bump_type}) on {branch}")
         print(f"  Tag: {tag}")
-        print(f"  Files: {', '.join(files_to_commit)}")
+        if files_to_commit:
+            print(f"  Files: {', '.join(files_to_commit)}")
+        else:
+            print("  Files: (none -- version is the git tag)")
         try:
             answer = input("Proceed? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -151,25 +160,31 @@ def run_cmd(registry, args, flags):
             sys.exit(0)
 
     # Write new version to the primary registry file
-    reg.write_version(".", new_version)
-    log(f"Updated version in {version_file}")
+    if version_file:
+        reg.write_version(".", new_version)
+        log(f"Updated version in {version_file}")
 
     # Sync version to all other recognized version files
     for name, other_reg in REGISTRIES.items():
         if name == registry:
             continue
         if other_reg.check_project_exists("."):
-            other_reg.write_version(".", new_version)
-            log(f"Synced version to {other_reg.get_version_file()}")
+            other_file = other_reg.get_version_file()
+            if other_file:
+                other_reg.write_version(".", new_version)
+                log(f"Synced version to {other_file}")
 
     # Commit all bumped version files together
-    commit_tool = find_commit_tool()
-    if commit_tool == "safegit":
-        run(commit_tool, ["commit", "-m", tag, "--", *files_to_commit])
+    if files_to_commit:
+        commit_tool = find_commit_tool()
+        if commit_tool == "safegit":
+            run(commit_tool, ["commit", "-m", tag, "--", *files_to_commit])
+        else:
+            run("git", ["add", *files_to_commit])
+            run("git", ["commit", "-m", tag])
+        log(f"Committed: {tag}")
     else:
-        run("git", ["add", *files_to_commit])
-        run("git", ["commit", "-m", tag])
-    log(f"Committed: {tag}")
+        log("No version files to commit (version is the git tag)")
 
     # Create local git tag
     run("git", ["tag", tag])
