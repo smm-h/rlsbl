@@ -1,6 +1,6 @@
 # rlsbl
 
-Release orchestration and project scaffolding CLI for npm and PyPI.
+Release orchestration and project scaffolding CLI for npm, PyPI, and Go.
 
 ## Install
 
@@ -25,7 +25,7 @@ rlsbl release minor
 
 ## Commands
 
-All commands work at the top level -- registries are auto-detected from project files (`package.json`, `pyproject.toml`). Use `--registry <npm|pypi>` when you need to target a specific registry.
+All commands work at the top level -- registries are auto-detected from project files (`package.json`, `pyproject.toml`, `go.mod`). Use `--registry <npm|pypi|go>` when you need to target a specific registry.
 
 ### scaffold [--force] [--update]
 
@@ -35,6 +35,7 @@ Scaffolds CI/CD infrastructure and release tooling for all detected registries.
 rlsbl scaffold
 rlsbl scaffold --registry npm          # target npm only
 rlsbl scaffold --registry pypi --force # overwrite existing files
+rlsbl scaffold --registry go           # target Go only
 ```
 
 Context-aware behavior when files already exist (without `--force`):
@@ -55,7 +56,7 @@ rlsbl release minor
 rlsbl release major --dry-run --registry npm
 ```
 
-The version is synced across all detected project files (`package.json`, `pyproject.toml`) regardless of which registry is primary.
+The version is synced across all detected project files (`package.json`, `pyproject.toml`, `VERSION`) regardless of which registry is primary. Go projects use a plain `VERSION` file as the version source.
 
 If `scripts/pre-release.sh` exists, it runs before any changes are made. A non-zero exit aborts the release.
 
@@ -122,7 +123,7 @@ The scaffolded `scripts/pre-push-hook.sh` is installed as a git pre-push hook du
 
 How it works:
 
-1. Detects project type (`package.json` or `pyproject.toml`)
+1. Detects project type (`package.json`, `pyproject.toml`, or `VERSION`)
 2. Extracts the current version
 3. Checks that `CHANGELOG.md` contains a heading `## <version>`
 4. Blocks the push with an error if the entry is missing
@@ -141,8 +142,9 @@ The first version must be published manually before CI can take over:
 |---|---|---|
 | npm | Add an `NPM_TOKEN` secret to your GitHub repo (Settings > Secrets > Actions), then push a release | CI handles subsequent publishes |
 | PyPI | Run `uv publish` | Set up [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) on pypi.org |
+| Go | Push to GitHub and create a release -- Go modules are published by the tag itself | No secrets needed; `pkg.go.dev` indexes automatically |
 
-After configuration, all subsequent releases are handled by CI when `rlsbl release` creates a GitHub Release.
+After configuration, all subsequent releases are handled by CI when `rlsbl release` creates a GitHub Release. Go projects use GoReleaser in CI (via GitHub Actions) to build cross-platform binaries.
 
 ## Requirements
 
