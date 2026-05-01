@@ -61,7 +61,7 @@ NEXT_STEPS = {
         "Run rlsbl release [patch|minor|major]",
     ],
     "go": [
-        "Install GoReleaser (https://goreleaser.com/install/)",
+        "GoReleaser runs in CI via GitHub Actions (no local install needed)",
         "Push to GitHub to activate the CI workflow",
         "Run rlsbl release [patch|minor|major]",
     ],
