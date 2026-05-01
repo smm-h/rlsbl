@@ -174,23 +174,24 @@ def run_cmd(registry, args, flags):
             print("Aborted.")
             sys.exit(0)
 
-    # Write new version to the primary registry file
-    if version_file:
-        reg.write_version(".", new_version)
-        log(f"Updated version in {version_file}")
+    # Write new version to version files (skip if version didn't change, e.g. first release)
+    if new_version != current_version:
+        if version_file:
+            reg.write_version(".", new_version)
+            log(f"Updated version in {version_file}")
 
-    # Sync version to all other recognized version files
-    for name, other_reg in REGISTRIES.items():
-        if name == registry:
-            continue
-        if other_reg.check_project_exists("."):
-            other_file = other_reg.get_version_file()
-            if other_file:
-                other_reg.write_version(".", new_version)
-                log(f"Synced version to {other_file}")
+        # Sync version to all other recognized version files
+        for name, other_reg in REGISTRIES.items():
+            if name == registry:
+                continue
+            if other_reg.check_project_exists("."):
+                other_file = other_reg.get_version_file()
+                if other_file:
+                    other_reg.write_version(".", new_version)
+                    log(f"Synced version to {other_file}")
 
-    # Commit all bumped version files together
-    if files_to_commit:
+    # Commit version file changes (skip if version didn't change, e.g. first release)
+    if files_to_commit and new_version != current_version:
         commit_tool = find_commit_tool()
         if commit_tool == "safegit":
             run(commit_tool, ["commit", "-m", tag, "--", *files_to_commit])
@@ -199,7 +200,7 @@ def run_cmd(registry, args, flags):
             run("git", ["commit", "-m", tag])
         log(f"Committed: {tag}")
     else:
-        log("No version files to commit (version is the git tag)")
+        log("No version bump to commit")
 
     # Create local git tag
     run("git", ["tag", tag])
