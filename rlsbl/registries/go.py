@@ -1,8 +1,7 @@
 """Go registry adapter for rlsbl.
 
-Go modules are versioned by git tags, not version files. GoReleaser handles
-the build/publish step. rlsbl's role: changelog validation, tagging, GitHub
-Release creation.
+Go projects use a VERSION file as the source of truth for rlsbl. GoReleaser
+handles the build/publish step triggered by the GitHub Release that rlsbl creates.
 """
 
 import os
@@ -12,28 +11,30 @@ from ..utils import run
 
 NAME = "go"
 
+VERSION_FILE = "VERSION"
+
 
 def read_version(dir_path):
-    """Read version from the latest git tag.
-
-    Go modules have no version file -- the version IS the git tag.
-    Returns "0.0.0" if no tags exist yet.
-    """
-    try:
-        tag = run("git", ["describe", "--tags", "--abbrev=0"])
-        return tag.lstrip("v")
-    except Exception:
-        return "0.0.0"
+    """Read version from the VERSION file."""
+    version_path = os.path.join(dir_path, VERSION_FILE)
+    if not os.path.exists(version_path):
+        raise FileNotFoundError(f"No {VERSION_FILE} file found. Run 'rlsbl scaffold' first.")
+    with open(version_path, "r", encoding="utf-8") as f:
+        return f.read().strip()
 
 
 def write_version(dir_path, version):
-    """No-op: Go versions are git tags, not file fields."""
-    pass
+    """Write the new version to the VERSION file."""
+    version_path = os.path.join(dir_path, VERSION_FILE)
+    tmp_path = version_path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(version + "\n")
+    os.replace(tmp_path, version_path)
 
 
 def get_version_file():
-    """Go has no version file -- version is the git tag."""
-    return None
+    """Returns the filename that holds the version for this registry."""
+    return VERSION_FILE
 
 
 def get_template_dir():
@@ -73,7 +74,10 @@ def get_template_vars(dir_path):
     except Exception:
         pass
 
-    version = read_version(dir_path)
+    try:
+        version = read_version(dir_path)
+    except FileNotFoundError:
+        version = "0.0.0"
 
     return {
         "name": short_name,
@@ -88,6 +92,7 @@ def get_template_vars(dir_path):
 def get_template_mappings():
     """Returns go-specific template mappings (template file -> target path)."""
     return [
+        {"template": "VERSION.tpl", "target": "VERSION"},
         {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
         {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
         {"template": "goreleaser.yml.tpl", "target": ".goreleaser.yml"},
