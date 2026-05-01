@@ -12,3 +12,4 @@ coverage/
 .*-cache.json
 .env
 .env.local
+logo.png
