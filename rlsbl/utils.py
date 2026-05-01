@@ -14,14 +14,6 @@ def run(cmd, args=None, timeout=120):
     return result.stdout.strip()
 
 
-def run_silent(cmd, args=None, timeout=30):
-    """Run a command suppressing stderr. Return trimmed stdout. Raise on failure."""
-    full_cmd = [cmd] + (args or [])
-    result = subprocess.run(
-        full_cmd, capture_output=True, text=True, check=True, timeout=timeout,
-    )
-    return result.stdout.strip()
-
 
 def is_clean_tree():
     """Returns True if the git working tree is clean (no uncommitted changes)."""
