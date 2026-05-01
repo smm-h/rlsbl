@@ -2,7 +2,7 @@
 
 import sys
 
-from ..utils import run, run_silent, check_gh_installed, check_gh_auth
+from ..utils import run, check_gh_installed, check_gh_auth, get_push_timeout
 
 
 def run_cmd(registry, args, flags):
@@ -40,7 +40,7 @@ def run_cmd(registry, args, flags):
 
     # Delete remote tag
     try:
-        run("git", ["push", "origin", f":{tag}"])
+        run("git", ["push", "origin", f":{tag}"], timeout=get_push_timeout())
         print(f"Deleted remote tag: {tag}")
     except Exception as e:
         print(f"Warning: could not delete remote tag: {e}")

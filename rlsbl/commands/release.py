@@ -12,6 +12,7 @@ from ..utils import (
     extract_changelog_entry,
     find_commit_tool,
     get_current_branch,
+    get_push_timeout,
     is_clean_tree,
     push_if_needed,
     run,
@@ -207,8 +208,11 @@ def run_cmd(registry, args, flags):
     log(f"Tagged: {tag}")
 
     # Push commits and tag
+    push_timeout = get_push_timeout()
+    if push_timeout != 120:
+        log(f"Push timeout: {push_timeout}s (from RLSBL_PUSH_TIMEOUT)")
     push_if_needed(branch)
-    run("git", ["push", "origin", tag])
+    run("git", ["push", "origin", tag], timeout=push_timeout)
     log(f"Pushed to origin/{branch}")
 
     # Create GitHub Release using a temp notes file
