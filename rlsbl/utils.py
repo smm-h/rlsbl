@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 
-def run(cmd, args=None, timeout=30):
+def run(cmd, args=None, timeout=120):
     """Run a command with args, return trimmed stdout. Raise on failure."""
     full_cmd = [cmd] + (args or [])
     result = subprocess.run(full_cmd, capture_output=True, text=True, check=True, timeout=timeout)
@@ -34,18 +34,34 @@ def get_current_branch():
     return run("git", ["rev-parse", "--abbrev-ref", "HEAD"])
 
 
+def get_push_timeout():
+    """Return the push timeout in seconds, from RLSBL_PUSH_TIMEOUT or default 120."""
+    raw = os.environ.get("RLSBL_PUSH_TIMEOUT")
+    if raw is None:
+        return 120
+    try:
+        val = int(raw)
+        if val <= 0:
+            raise ValueError
+        return val
+    except ValueError:
+        print(f'Warning: invalid RLSBL_PUSH_TIMEOUT="{raw}", using default 120s', file=sys.stderr)
+        return 120
+
+
 def push_if_needed(branch):
     """Push the branch to origin if local is ahead of remote."""
+    timeout = get_push_timeout()
     local = run("git", ["rev-parse", branch])
     try:
         remote = run("git", ["rev-parse", f"origin/{branch}"])
     except subprocess.CalledProcessError:
         # Remote branch doesn't exist yet; push it
-        run("git", ["push", "-u", "origin", branch])
+        run("git", ["push", "-u", "origin", branch], timeout=timeout)
         return
 
     if local != remote:
-        run("git", ["push", "origin", branch])
+        run("git", ["push", "origin", branch], timeout=timeout)
 
 
 def extract_changelog_entry(changelog_path, version):
