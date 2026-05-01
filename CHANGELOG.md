@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1
+
+- Go adapter uses VERSION file as version source (not git tags)
+- First release bootstraps from VERSION without bumping
+- find_commit_tool returns "safegit" not full path
+- Pre-release.sh template auto-detects Go/npm/Python and runs appropriate checks
+- Pre-push hook template supports Go VERSION file
+- README documents Go support
+- GoReleaser NEXT_STEPS clarified (CI handles it, no local install needed)
+
 ## 0.4.0
 
 - Go project support: scaffold with GoReleaser, CI, and publish workflows
