@@ -55,19 +55,30 @@ def run_cmd(registry, args, flags):
     current_version = reg.read_version(".")
     log(f"Current version: {current_version}")
 
-    # Bump type
-    bump_type = args[0] if args else "patch"
-    if bump_type not in VALID_BUMP_TYPES:
-        print(
-            f'Error: invalid bump type "{bump_type}". Use: {", ".join(VALID_BUMP_TYPES)}',
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    # If the current version has never been tagged, release it as-is (bootstrap)
+    current_tag = f"v{current_version}"
+    current_tag_exists = len(run("git", ["tag", "-l", current_tag])) > 0
 
-    # Compute new version
-    new_version = bump_version(current_version, bump_type)
-    tag = f"v{new_version}"
-    log(f"New version: {new_version} ({bump_type})")
+    if not current_tag_exists:
+        new_version = current_version
+        bump_type = None
+        tag = current_tag
+        if args:
+            log(f"First release: releasing {new_version} as-is (bump type ignored)")
+        else:
+            log(f"First release: {new_version}")
+    else:
+        bump_type = args[0] if args else "patch"
+        if bump_type not in VALID_BUMP_TYPES:
+            print(
+                f'Error: invalid bump type "{bump_type}". Use: {", ".join(VALID_BUMP_TYPES)}',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        new_version = bump_version(current_version, bump_type)
+        tag = f"v{new_version}"
+        log(f"New version: {new_version} ({bump_type})")
 
     # Check tag doesn't already exist
     tag_output = run("git", ["tag", "-l", tag])
@@ -111,7 +122,10 @@ def run_cmd(registry, args, flags):
     if flags.get("dry-run", False):
         log("\n--- Dry run summary ---")
         log(f"Registry:  {registry}")
-        log(f"Bump:      {current_version} -> {new_version} ({bump_type})")
+        if bump_type:
+            log(f"Bump:      {current_version} -> {new_version} ({bump_type})")
+        else:
+            log(f"Version:   {new_version} (first release)")
         log(f"Tag:       {tag}")
         log(f"Branch:    {branch}")
         # Show other version files that would be synced
@@ -144,7 +158,8 @@ def run_cmd(registry, args, flags):
 
     # Confirmation prompt (skip with --yes)
     if not flags.get("yes"):
-        print(f"\nAbout to release {new_version} ({bump_type}) on {branch}")
+        bump_label = f" ({bump_type})" if bump_type else ""
+        print(f"\nAbout to release {new_version}{bump_label} on {branch}")
         print(f"  Tag: {tag}")
         if files_to_commit:
             print(f"  Files: {', '.join(files_to_commit)}")
