@@ -93,11 +93,10 @@ def check_gh_auth():
 def find_commit_tool():
     """Detect safegit or fall back to git for committing.
 
-    Returns the path/name of the commit tool.
+    Returns "safegit" if available on PATH, otherwise "git".
     """
-    safegit_path = shutil.which("safegit")
-    if safegit_path:
-        return safegit_path
+    if shutil.which("safegit"):
+        return "safegit"
     return "git"
 
 
