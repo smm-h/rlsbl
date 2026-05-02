@@ -159,23 +159,6 @@ def run_cmd(registry, args, flags):
             if other_file:
                 files_to_commit.append(other_file)
 
-    # Ecosystem tagging: add keyword to manifests if enabled
-    if should_tag(flags):
-        try:
-            if REGISTRIES["npm"].check_project_exists("."):
-                if ensure_npm_keyword("."):
-                    if "package.json" not in files_to_commit:
-                        files_to_commit.append("package.json")
-        except Exception:
-            pass
-        try:
-            if REGISTRIES["pypi"].check_project_exists("."):
-                if ensure_pypi_keyword("."):
-                    if "pyproject.toml" not in files_to_commit:
-                        files_to_commit.append("pyproject.toml")
-        except Exception:
-            pass
-
     # Confirmation prompt (skip with --yes)
     if not flags.get("yes"):
         bump_label = f" ({bump_type})" if bump_type else ""
@@ -209,6 +192,23 @@ def run_cmd(registry, args, flags):
                 if other_file:
                     other_reg.write_version(".", new_version)
                     log(f"Synced version to {other_file}")
+
+    # Ecosystem tagging: add keyword to manifests if enabled (after confirmation)
+    if should_tag(flags):
+        try:
+            if REGISTRIES["npm"].check_project_exists("."):
+                if ensure_npm_keyword("."):
+                    if "package.json" not in files_to_commit:
+                        files_to_commit.append("package.json")
+        except Exception:
+            pass
+        try:
+            if REGISTRIES["pypi"].check_project_exists("."):
+                if ensure_pypi_keyword("."):
+                    if "pyproject.toml" not in files_to_commit:
+                        files_to_commit.append("pyproject.toml")
+        except Exception:
+            pass
 
     # Commit if anything was actually modified (version bump or tagging)
     needs_commit = new_version != current_version or not is_clean_tree()
