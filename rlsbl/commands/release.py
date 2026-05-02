@@ -4,7 +4,9 @@ import os
 import sys
 import time
 
+from ..config import should_tag
 from ..registries import REGISTRIES
+from ..tagging import ensure_github_topic, ensure_npm_keyword, ensure_pypi_keyword
 from ..utils import (
     bump_version,
     check_gh_auth,
@@ -157,6 +159,23 @@ def run_cmd(registry, args, flags):
             if other_file:
                 files_to_commit.append(other_file)
 
+    # Ecosystem tagging: add keyword to manifests if enabled
+    if should_tag(flags):
+        try:
+            if REGISTRIES["npm"].check_project_exists("."):
+                if ensure_npm_keyword("."):
+                    if "package.json" not in files_to_commit:
+                        files_to_commit.append("package.json")
+        except Exception:
+            pass
+        try:
+            if REGISTRIES["pypi"].check_project_exists("."):
+                if ensure_pypi_keyword("."):
+                    if "pyproject.toml" not in files_to_commit:
+                        files_to_commit.append("pyproject.toml")
+        except Exception:
+            pass
+
     # Confirmation prompt (skip with --yes)
     if not flags.get("yes"):
         bump_label = f" ({bump_type})" if bump_type else ""
@@ -191,8 +210,9 @@ def run_cmd(registry, args, flags):
                     other_reg.write_version(".", new_version)
                     log(f"Synced version to {other_file}")
 
-    # Commit version file changes (skip if version didn't change, e.g. first release)
-    if files_to_commit and new_version != current_version:
+    # Commit if anything was actually modified (version bump or tagging)
+    needs_commit = new_version != current_version or not is_clean_tree()
+    if files_to_commit and needs_commit:
         commit_tool = find_commit_tool()
         if commit_tool == "safegit":
             run(commit_tool, ["commit", "-m", tag, "--", *files_to_commit])
@@ -200,8 +220,8 @@ def run_cmd(registry, args, flags):
             run("git", ["add", *files_to_commit])
             run("git", ["commit", "-m", tag])
         log(f"Committed: {tag}")
-    else:
-        log("No version bump to commit")
+    elif not needs_commit:
+        log("No changes to commit")
 
     # Create local git tag
     run("git", ["tag", tag])
@@ -229,5 +249,9 @@ def run_cmd(registry, args, flags):
         for tmp in (notes_file, writing_file):
             if os.path.exists(tmp):
                 os.unlink(tmp)
+
+    # Ecosystem tagging: add GitHub topic after release is created
+    if should_tag(flags):
+        ensure_github_topic()
 
     log(f"\nRelease {new_version} complete!")

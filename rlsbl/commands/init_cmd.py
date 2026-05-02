@@ -8,7 +8,9 @@ import shutil
 import stat
 import sys
 
+from ..config import should_tag
 from ..registries import REGISTRIES
+from ..tagging import ensure_tags
 
 HASHES_FILE = os.path.join(".rlsbl", "hashes.json")
 
@@ -214,11 +216,17 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
 
 
 def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnings,
-                       registry=None):
-    """Shared post-processing for scaffold: chmod, hooks, version marker, hashes, summary.
+                       registry=None, flags=None, registries=None):
+    """Shared post-processing for scaffold: chmod, hooks, version marker, hashes, tagging, summary.
 
     all_hash_dicts is a list of dicts to merge into existing_hashes.
+    flags is the CLI flags dict (used for tagging check).
+    registries is a list of registry names (used for tagging).
     """
+    if flags is None:
+        flags = {}
+    if registries is None:
+        registries = [registry] if registry else []
     # Make all shell scripts in scripts/ executable
     scripts_dir = os.path.join(".", "scripts")
     if os.path.isdir(scripts_dir):
@@ -251,6 +259,10 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
         all_new_hashes.update(h)
     existing_hashes.update(all_new_hashes)
     save_hashes(existing_hashes)
+
+    # Ecosystem tagging
+    if should_tag(flags):
+        ensure_tags(registries)
 
     # Print summary
     if created:
@@ -335,6 +347,7 @@ def run_cmd(registry, args, flags):
     _finalize_scaffold(
         existing_hashes, [reg_hashes, shared_hashes],
         created, skipped, warnings, registry=registry,
+        flags=flags, registries=[registry],
     )
 
 
@@ -402,6 +415,7 @@ def run_cmd_multi(registries_list, args, flags):
     _finalize_scaffold(
         existing_hashes, [ci_hashes, merged_hashes, shared_hashes],
         created, skipped, warnings,
+        flags=flags, registries=registries_list,
     )
 
     # Show combined next steps for dual-registry
