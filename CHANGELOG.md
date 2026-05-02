@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.2
+
+- Configurable push timeout via `RLSBL_PUSH_TIMEOUT` env var (default 120s), fixing timeouts on repos with slow pre-push hooks
+- Bump `run()` default subprocess timeout from 30s to 120s
+- All `git push` call sites (release, undo, push_if_needed) use the configurable push timeout
+- Print a note when `RLSBL_PUSH_TIMEOUT` overrides the default
+- Remove dead `run_silent` function (identical to `run`, zero callers)
+- Fix own pre-push hook missing VERSION file detection for Go projects
+- Document `RLSBL_PUSH_TIMEOUT` in README
+
 ## 0.4.1
 
 - Go adapter uses VERSION file as version source (not git tags)
