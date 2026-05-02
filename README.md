@@ -150,6 +150,12 @@ The first version must be published manually before CI can take over:
 
 After configuration, all subsequent releases are handled by CI when `rlsbl release` creates a GitHub Release. Go projects use GoReleaser in CI (via GitHub Actions) to build cross-platform binaries.
 
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RLSBL_PUSH_TIMEOUT` | `120` | Timeout in seconds for `git push` operations. Increase if your pre-push hooks (e.g. test suites) take longer than 2 minutes. |
+
 ## Requirements
 
 - Node 18+
