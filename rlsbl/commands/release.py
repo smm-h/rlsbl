@@ -197,14 +197,14 @@ def run_cmd(registry, args, flags):
     if should_tag(flags):
         try:
             if REGISTRIES["npm"].check_project_exists("."):
-                if ensure_npm_keyword("."):
+                if ensure_npm_keyword(".", quiet=quiet):
                     if "package.json" not in files_to_commit:
                         files_to_commit.append("package.json")
         except Exception:
             pass
         try:
             if REGISTRIES["pypi"].check_project_exists("."):
-                if ensure_pypi_keyword("."):
+                if ensure_pypi_keyword(".", quiet=quiet):
                     if "pyproject.toml" not in files_to_commit:
                         files_to_commit.append("pyproject.toml")
         except Exception:
@@ -252,6 +252,6 @@ def run_cmd(registry, args, flags):
 
     # Ecosystem tagging: add GitHub topic after release is created
     if should_tag(flags):
-        ensure_github_topic()
+        ensure_github_topic(quiet=quiet)
 
     log(f"\nRelease {new_version} complete!")
