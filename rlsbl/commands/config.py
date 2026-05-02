@@ -1,6 +1,7 @@
 """Config command: show resolved project configuration."""
 
 import os
+from ..config import PROJECT_CONFIG, USER_CONFIG, read_json_config, should_tag
 from ..registries import REGISTRIES
 
 
@@ -43,6 +44,21 @@ def run_cmd(registry, args, flags):
     print(f"  pre-release.sh: {'yes' if os.path.exists(pre_release) else 'no'}")
     pre_push = os.path.join(".git", "hooks", "pre-push")
     print(f"  pre-push hook: {'installed' if os.path.exists(pre_push) else 'not installed'}")
+
+    print("\nEcosystem tagging:")
+    enabled = should_tag(flags)
+    # Determine why it's enabled/disabled
+    project_cfg = read_json_config(PROJECT_CONFIG)
+    user_cfg = read_json_config(USER_CONFIG)
+    if flags.get("no-tag"):
+        source = "CLI flag"
+    elif "tag" in project_cfg:
+        source = f"project config ({PROJECT_CONFIG})"
+    elif "tag" in user_cfg:
+        source = f"user config ({USER_CONFIG})"
+    else:
+        source = "default"
+    print(f"  Status: {'enabled' if enabled else 'disabled'} ({source})")
 
     print("\nFiles:")
     for f in ["CHANGELOG.md", "LICENSE", ".gitignore", "CLAUDE.md"]:
