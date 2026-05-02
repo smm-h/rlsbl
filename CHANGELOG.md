@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+- Ecosystem discoverability: `rlsbl discover` command lists all rlsbl-tagged projects via GitHub topics
+- Auto-tagging: `scaffold` and `release` inject `"rlsbl"` keyword into package.json/pyproject.toml and add the `rlsbl` GitHub topic
+- Opt-out via `--no-tag` flag, project config (`.rlsbl/config.json`), or user config (`~/.rlsbl/config.json`)
+- `rlsbl config` shows ecosystem tagging status and source
+- `--quiet` flag is respected by all tagging output
+- `rlsbl discover --mine` filters to the authenticated user's repos
+
 ## 0.4.2
 
 - Configurable push timeout via `RLSBL_PUSH_TIMEOUT` env var (default 120s), fixing timeouts on repos with slow pre-push hooks
