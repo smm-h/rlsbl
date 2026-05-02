@@ -10,7 +10,7 @@ except Exception:
     __version__ = "unknown"
 
 REGISTRIES = ("npm", "pypi", "go")
-COMMANDS = ("release", "status", "scaffold", "check", "config", "undo")
+COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -23,9 +23,11 @@ Usage:
   rlsbl check <name>                                        Check name availability
   rlsbl config                                              Show project configuration
   rlsbl undo [--yes]                                        Revert the last release
+  rlsbl discover [--mine]                                   List rlsbl ecosystem projects
 
 Options:
   --registry <npm|pypi|go>  Target a specific registry (auto-detected if omitted)
+  --no-tag               Disable ecosystem tagging for this invocation
   --help, -h             Show this help
   --version, -v          Show version"""
 
@@ -86,6 +88,7 @@ def _get_command_module(command):
         "check": "check",
         "config": "config",
         "undo": "undo",
+        "discover": "discover",
     }
     module_name = module_map.get(command)
     if not module_name:
@@ -175,6 +178,9 @@ def main():
                     print("Error: no package.json, pyproject.toml, or go.mod found.", file=sys.stderr)
                     sys.exit(1)
                 registry = regs[0]
+            handler.run_cmd(registry, args, flags)
+        elif command == "discover":
+            # discover: global query, no registry needed
             handler.run_cmd(registry, args, flags)
         else:
             # release, status: use explicit registry or auto-detect primary
