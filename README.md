@@ -84,6 +84,31 @@ rlsbl check my-cool-lib --registry npm   # npm only
 
 npm checks variant spellings (hyphens, underscores, dots, no separator). PyPI normalizes per PEP 503 and checks common alternatives.
 
+### discover [--mine]
+
+Lists all projects in the rlsbl ecosystem by querying GitHub for repositories with the `rlsbl` topic.
+
+```
+rlsbl discover
+rlsbl discover --mine              # only your repos
+```
+
+Uses GitHub token if available (higher rate limit). Works unauthenticated for public repos.
+
+### Ecosystem tagging
+
+By default, `scaffold` and `release` add an `"rlsbl"` keyword to `package.json` and/or `pyproject.toml`, and set the `rlsbl` topic on the GitHub repository. This makes projects discoverable via `rlsbl discover`.
+
+To disable tagging:
+
+| Method | Scope |
+|---|---|
+| `--no-tag` flag | Single invocation |
+| `{"tag": false}` in `.rlsbl/config.json` | This project |
+| `{"tag": false}` in `~/.rlsbl/config.json` | All your projects |
+
+Precedence: CLI flag > project config > user config > default (enabled).
+
 Global flags: `--help`, `--version`.
 
 ## Release flow
