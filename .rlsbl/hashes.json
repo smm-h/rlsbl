@@ -1,0 +1,7 @@
+{
+  "CLAUDE.md": "9762eb79f34e799ce7c918e17479926f487e4a24221dd6fad52e505abe039c60",
+  ".rlsbl/hooks/pre-release.sh": "1b13062dda97df66792df382312263d704a6cc706d2dd3da921f4c470488276d",
+  ".rlsbl/hooks/post-release.sh": "b455f8511e0b2655509ecf5dcb0ab7da5bb7c961f47910ff8e00cab5bd51f833",
+  ".claude/settings.json": "78922a784ee78e9e50587e93628cd3b9d4dfbe49087adc4514e6781cea38cbb9",
+  ".github/workflows/publish.yml": "e1305b021a14e634413b90f55da3985a1d9a0b7c649a128867eb8a295c8b48b2"
+}
