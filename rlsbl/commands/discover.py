@@ -47,10 +47,12 @@ def _parse_next_link(headers):
         return None
     for part in link.split(","):
         if 'rel="next"' in part:
-            # Extract URL between < and >
             start = part.index("<") + 1
             end = part.index(">")
-            return part[start:end]
+            url = part[start:end]
+            if not url.startswith("https://api.github.com/"):
+                return None
+            return url
     return None
 
 
