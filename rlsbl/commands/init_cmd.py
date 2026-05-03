@@ -26,6 +26,7 @@ UPDATABLE = {
     ".github/workflows/ci.yml",
     ".github/workflows/publish.yml",
     "scripts/check-prs.sh",
+    "scripts/post-release.sh",
     "scripts/pre-push-hook.sh",
 }
 
