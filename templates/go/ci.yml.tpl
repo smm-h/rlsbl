@@ -13,8 +13,8 @@ jobs:
       matrix:
         go-version: ["1.22", "1.23", "1.24"]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go-version }}
       - run: go test ./...
