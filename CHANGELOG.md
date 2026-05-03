@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1
+
+- **CI watcher prints to stderr.** The background CI watcher now writes results to inherited stderr instead of attempting tty detection. AI agents and terminal users both see CI pass/fail in their output stream. On failure, the GitHub Actions run URL is printed.
+- **`*.local-only` gitignore pattern.** Scaffolded `.gitignore` now includes `*.local-only`. Use a `.local-only/` directory or `*.local-only` suffix to keep files out of version control without per-file gitignore entries.
+
 ## 0.5.0
 
 - **Post-release hooks.** `scripts/post-release.sh` runs after a successful release with `RLSBL_VERSION` env var set. Non-fatal (release is already complete). Scaffolded via `rlsbl scaffold`.
