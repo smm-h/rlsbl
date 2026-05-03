@@ -8,15 +8,19 @@ set -euo pipefail
 echo "Running pre-release checks..."
 
 if [ -f go.mod ]; then
-  echo "Detected Go project"
+  echo "  Go: vet + build + test"
   go vet ./...
   go build ./...
   go test ./... -race -short -count=1
-elif [ -f package.json ]; then
-  echo "Detected npm project"
+fi
+
+if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)" 2>/dev/null; then
+  echo "  npm: test"
   npm test
-elif [ -f pyproject.toml ]; then
-  echo "Detected Python project"
+fi
+
+if [ -f pyproject.toml ]; then
+  echo "  Python: pytest"
   if command -v uv &>/dev/null; then
     uv run pytest
   elif command -v pytest &>/dev/null; then
