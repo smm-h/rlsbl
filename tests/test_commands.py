@@ -240,25 +240,64 @@ class TestScaffold(unittest.TestCase):
 
     # -- --update tests --
 
-    def test_update_skips_customized_files(self):
-        """--update should skip files that have been modified (hash mismatch)."""
-        # First scaffold to create files and hashes
+    def test_yaml_merge_preserves_user_jobs(self):
+        """YAML merge should preserve user-added jobs while updating template jobs."""
+        from ruamel.yaml import YAML as RuamelYAML
+
         self._run_scaffold()
 
-        # Customize a managed file (ci.yml is in UPDATABLE)
         ci_path = ".github/workflows/ci.yml"
-        with open(ci_path, "a") as f:
-            f.write("\n# my customization\n")
+        # Add a user-defined job to ci.yml
+        yaml = RuamelYAML(typ="rt")
+        with open(ci_path) as f:
+            data = yaml.load(f)
+        data["jobs"]["lint"] = {
+            "runs-on": "ubuntu-latest",
+            "steps": [{"run": "npm run lint"}],
+        }
+        buf = StringIO()
+        yaml.dump(data, buf)
+        with open(ci_path, "w") as f:
+            f.write(buf.getvalue())
 
-        # Run with --update; the customized file should be skipped
-        self._run_scaffold(update=True)
+        # Re-scaffold; user job "lint" should be preserved, template job "test" updated
+        self._run_scaffold()
 
         with open(ci_path) as f:
-            content = f.read()
-        self.assertIn("# my customization", content)
+            result = yaml.load(f)
+        self.assertIn("test", result["jobs"], "Template job 'test' should exist")
+        self.assertIn("lint", result["jobs"], "User job 'lint' should be preserved")
+
+    def test_yaml_merge_template_jobs_overwrite_same_key(self):
+        """YAML merge should overwrite user modifications to template-owned jobs."""
+        from ruamel.yaml import YAML as RuamelYAML
+
+        self._run_scaffold()
+
+        ci_path = ".github/workflows/ci.yml"
+        # Modify the template-owned "test" job
+        yaml = RuamelYAML(typ="rt")
+        with open(ci_path) as f:
+            data = yaml.load(f)
+        data["jobs"]["test"]["runs-on"] = "self-hosted"
+        buf = StringIO()
+        yaml.dump(data, buf)
+        with open(ci_path, "w") as f:
+            f.write(buf.getvalue())
+
+        # Re-scaffold; template should overwrite the "test" job back
+        self._run_scaffold()
+
+        with open(ci_path) as f:
+            result = yaml.load(f)
+        self.assertEqual(
+            result["jobs"]["test"]["runs-on"],
+            "ubuntu-latest",
+            "Template job should overwrite user customization",
+        )
 
     def test_update_overwrites_files_with_matching_hash(self):
-        """--update should overwrite managed files whose hash still matches."""
+        """--update should still process CI files (now via YAML merge)."""
         # First scaffold to create files and hashes
         self._run_scaffold()
 
@@ -267,14 +306,12 @@ class TestScaffold(unittest.TestCase):
         hashes_before = load_hashes()
         self.assertIn(ci_path, hashes_before)
 
-        # Run with --update without modifying the file; it should be updated
-        # (overwritten with potentially same content, but the code path runs)
+        # Run with --update without modifying the file; it should be processed
         with patch("sys.stdout", new_callable=StringIO) as mock_out:
             run_cmd("npm", [], {"update": True})
             output = mock_out.getvalue()
 
-        # The file should have been processed (either updated or remained same)
-        # Check that CI file still exists and is valid
+        # The file should still exist and be valid
         self.assertTrue(os.path.exists(ci_path))
 
 
