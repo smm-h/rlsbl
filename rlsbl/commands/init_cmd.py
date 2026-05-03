@@ -153,7 +153,9 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
     Uses a universal three-way merge (via git merge-file) for existing files:
     base (last scaffolded version) + ours (user's current file) + theirs (new template).
     USER_OWNED files are never overwritten or merged (except LICENSE year update).
+
     Returns (created, skipped, warnings, new_hashes).
+    created/skipped are lists of (target, status) tuples for unified display.
     """
     if existing_hashes is None:
         existing_hashes = {}
@@ -175,8 +177,9 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
             raw = f.read()
         theirs, unreplaced = process_template(raw, vars_dict)
 
-        # --- New file: write and save base ---
+        # --- New file or force overwrite: write and save base ---
         if not os.path.exists(target) or force:
+            is_overwrite = os.path.exists(target) and force
             target_dir = os.path.dirname(target)
             if target_dir and target_dir != ".":
                 os.makedirs(target_dir, exist_ok=True)
@@ -184,7 +187,8 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                 f.write(theirs)
             _save_base(target, theirs)
             new_hashes[target] = file_hash(target)
-            created.append(target)
+            status = "overwritten" if is_overwrite else "created"
+            created.append((target, status))
             if unreplaced:
                 warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
             continue
@@ -200,32 +204,45 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                 with open(target, "r", encoding="utf-8") as f:
                     content = f.read()
                 # Match "Copyright (c) YYYY" or "Copyright (c) YYYY-YYYY"
+                # Capture the original end-year to report the range in the status
+                old_year = None
+                def _capture_range(m):
+                    nonlocal old_year
+                    if m.group(2) == current_year:
+                        return m.group(0)
+                    old_year = f"{m.group(1).split()[-1]}-{m.group(2)}"
+                    return f"{m.group(1)}-{current_year}"
                 updated = re.sub(
                     r"(Copyright\s+\(c\)\s+\d{4})-(\d{4})",
-                    lambda m: (
-                        m.group(0) if m.group(2) == current_year
-                        else f"{m.group(1)}-{current_year}"
-                    ),
+                    _capture_range,
                     content,
                 )
                 if updated == content:
                     # No range found or range already current -- try single year
+                    def _capture_single(m):
+                        nonlocal old_year
+                        if m.group(2) == current_year:
+                            return m.group(0)
+                        old_year = m.group(2)
+                        return f"{m.group(1)}{m.group(2)}-{current_year}"
                     updated = re.sub(
                         r"(Copyright\s+\(c\)\s+)(\d{4})(?![-\d])",
-                        lambda m: (
-                            m.group(0) if m.group(2) == current_year
-                            else f"{m.group(1)}{m.group(2)}-{current_year}"
-                        ),
+                        _capture_single,
                         content,
                     )
                 if updated != content:
                     with open(target, "w", encoding="utf-8") as f:
                         f.write(updated)
-                    created.append("LICENSE (year updated)")
+                    year_detail = (
+                        f"year updated ({old_year} -> {old_year.split('-')[0]}-{current_year})"
+                        if old_year and "-" in old_year
+                        else f"year updated ({old_year} -> {old_year}-{current_year})"
+                    ) if old_year else "year updated"
+                    created.append(("LICENSE", year_detail))
                 else:
-                    skipped.append(target)
+                    skipped.append((target, "user-owned"))
             else:
-                skipped.append(target)
+                skipped.append((target, "user-owned"))
             continue
 
         # --- Three-way merge for all other existing files ---
@@ -238,13 +255,13 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
             # Cannot do a three-way merge. Seed the base for next time.
             _save_base(target, theirs)
             if ours == theirs:
-                skipped.append(target)
+                skipped.append((target, "unchanged, base seeded"))
             else:
                 warnings.append(
                     f"{target}: no base stored, cannot merge; "
                     "run scaffold --force to reset"
                 )
-                skipped.append(target)
+                skipped.append((target, "no base -- run scaffold --force to enable merging"))
             continue
 
         if ours == base:
@@ -256,15 +273,15 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                 f.write(theirs)
             _save_base(target, theirs)
             new_hashes[target] = file_hash(target)
-            created.append(target + " (updated)")
+            created.append((target, "updated"))
             if unreplaced:
                 warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
         elif base == theirs:
             # Template did not change -- nothing to do.
-            skipped.append(target)
+            skipped.append((target, "unchanged"))
         elif ours == theirs:
             # User and template converged to same content -- nothing to do.
-            skipped.append(target)
+            skipped.append((target, "unchanged"))
         else:
             # Both user and template changed -- three-way merge.
             merged, has_conflicts = _three_way_merge(ours, base, theirs)
@@ -276,10 +293,10 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
             _save_base(target, theirs)
             new_hashes[target] = file_hash(target)
             if has_conflicts:
-                created.append(target + " (merged with CONFLICTS -- resolve manually)")
+                created.append((target, "CONFLICTS -- resolve manually"))
                 warnings.append(f"{target}: merge conflicts detected, resolve manually")
             else:
-                created.append(target + " (merged)")
+                created.append((target, "merged"))
             if unreplaced:
                 warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
 
@@ -336,16 +353,19 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
     if should_tag(flags):
         ensure_tags(registries)
 
-    # Print summary
-    if created:
-        print("Created:")
-        for f in created:
-            print(f"  {f}")
-
-    if skipped:
-        print("Skipped (already exist, use --update to refresh managed files or --force to overwrite all):")
-        for f in skipped:
-            print(f"  {f}")
+    # Print unified file list with dot-padded status column
+    all_files = [(t, s) for t, s in created] + [(t, s) for t, s in skipped]
+    if all_files:
+        # Sort by target path for stable output
+        all_files.sort(key=lambda item: item[0])
+        # Compute padding width: longest target path + minimum 4 dots
+        max_target_len = max(len(t) for t, _ in all_files)
+        pad_width = max_target_len + 4
+        print("Files:")
+        for target, status in all_files:
+            # Fill gap between target and status with dots
+            dots = " " + "." * (pad_width - len(target)) + " "
+            print(f"  {target}{dots}{status}")
 
     if warnings:
         print("Warnings:")
@@ -354,7 +374,7 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
 
     # Helpful note when existing CI workflow is preserved
     ci_path = ".github/workflows/ci.yml"
-    if any(s.startswith(ci_path) for s in skipped):
+    if any(t == ci_path for t, _ in skipped):
         print("\nNote: Existing CI workflow preserved. Review and merge manually if needed.")
 
     # Next steps

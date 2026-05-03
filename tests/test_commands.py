@@ -197,7 +197,7 @@ class TestScaffold(unittest.TestCase):
         created, skipped, warnings, hashes = process_mappings(
             tpl_dir, mappings, {"name": "test-pkg"}, force=False,
         )
-        self.assertIn("output.txt", created)
+        self.assertIn(("output.txt", "created"), created)
         self.assertTrue(
             any("planet" in w for w in warnings),
             f"Expected warning about 'planet', got: {warnings}",
@@ -265,7 +265,7 @@ class TestScaffold(unittest.TestCase):
         # Both changes should be present (clean merge)
         self.assertIn("line2 user edit", result)
         self.assertIn("line4 template update", result)
-        self.assertTrue(any("merged" in c for c in created))
+        self.assertTrue(any(s == "merged" for _, s in created))
 
     def test_three_way_merge_detects_conflicts(self):
         """Three-way merge should detect conflicts when both sides change the same line."""
@@ -293,7 +293,7 @@ class TestScaffold(unittest.TestCase):
             result = f.read()
 
         self.assertIn("<<<<<<<", result)
-        self.assertTrue(any("CONFLICTS" in c for c in created))
+        self.assertTrue(any("CONFLICTS" in s for _, s in created))
         self.assertTrue(any("conflict" in w.lower() for w in warnings))
 
     def test_no_base_skips_with_warning(self):
@@ -311,7 +311,7 @@ class TestScaffold(unittest.TestCase):
         mappings = [{"template": "test.tpl", "target": "output.txt"}]
         created, skipped, warnings, _ = process_mappings(tpl_dir, mappings, {}, force=False)
 
-        self.assertIn("output.txt", skipped)
+        self.assertTrue(any(t == "output.txt" for t, _ in skipped))
         self.assertTrue(
             any("no base stored" in w for w in warnings),
             f"Expected 'no base stored' warning, got: {warnings}",
@@ -331,7 +331,7 @@ class TestScaffold(unittest.TestCase):
         mappings = [{"template": "test.tpl", "target": "output.txt"}]
         created, skipped, warnings, _ = process_mappings(tpl_dir, mappings, {}, force=False)
 
-        self.assertIn("output.txt", skipped)
+        self.assertTrue(any(t == "output.txt" for t, _ in skipped))
         # No warning because content matches
         self.assertFalse(any("no base stored" in w for w in warnings))
 
@@ -353,7 +353,7 @@ class TestScaffold(unittest.TestCase):
 
         # Re-run with same template -- should skip (template unchanged)
         created, skipped, warnings, _ = process_mappings(tpl_dir, mappings, {}, force=False)
-        self.assertIn("output.txt", skipped)
+        self.assertTrue(any(t == "output.txt" for t, _ in skipped))
 
         # Verify user customization is preserved
         with open("output.txt") as f:
