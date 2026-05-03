@@ -166,6 +166,11 @@ def main():
     args = positional[1:]
     registry = flags.get("registry")
 
+    # --registry was the last arg with no value following it
+    if registry is True:
+        print("Error: --registry requires a value (npm, pypi, or go).", file=sys.stderr)
+        sys.exit(1)
+
     # Validate --registry if provided
     if registry and registry not in REGISTRIES:
         print(
