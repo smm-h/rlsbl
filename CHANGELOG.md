@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.2
+
+- Handle KeyboardInterrupt in watch command (clean exit, no stack trace)
+- Escape AppleScript strings in watch notifications (prevents injection via git tags)
+- Clear error when `--registry` is missing a value
+- Resolve project config path at call time (not module import time)
+- Refactor pre-push check to use registry adapters (DRY)
+- Add Go registry adapter tests
+- Add tests for release, undo, check, and pre_push_check commands (117 total)
+- Add `--width`, `--height`, `--font-size`, `--duration` flags to record-gif
+
 ## 0.8.1
 
 - **Templates included in wheel.** Moved `templates/` into the `rlsbl/` package so non-editable installs (pip, pipx) get them. Previously `rlsbl scaffold` crashed on PyPI installs.
