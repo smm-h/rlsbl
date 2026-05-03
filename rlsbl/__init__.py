@@ -56,7 +56,8 @@ Usage:
   rlsbl discover [--mine]                                   List rlsbl ecosystem projects
   rlsbl watch [<commit-sha>]                                Watch CI runs for a commit
   rlsbl pre-push-check                                     Verify CHANGELOG entry for current version
-  rlsbl record-gif                                         Record a demo GIF with vhs
+  rlsbl record-gif [--width N] [--height N] [--font-size N] [--duration N]
+                                                            Record a demo GIF with vhs
 
 Options:
   --registry <npm|pypi|go>  Target a specific registry (auto-detected if omitted)
@@ -86,7 +87,7 @@ def parse_args(argv):
     Flags listed in VALUE_FLAGS consume the next token as their value
     (e.g. --registry npm). All other --flags are boolean.
     """
-    VALUE_FLAGS = ("registry",)
+    VALUE_FLAGS = ("registry", "width", "height", "font-size", "duration")
     raw = argv[1:]
     positional = []
     flags = {}

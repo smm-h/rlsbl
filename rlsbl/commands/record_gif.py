@@ -43,19 +43,25 @@ def run_cmd(registry, args, flags):
         print("Ensure package.json, pyproject.toml, or go.mod exists with a CLI entry point.", file=sys.stderr)
         sys.exit(1)
 
+    # Parse configurable VHS parameters from flags
+    width = int(flags.get("width", 1200))
+    height = int(flags.get("height", 600))
+    font_size = int(flags.get("font-size", 24))
+    duration = int(flags.get("duration", 10))
+
     assets_dir = "assets"
     os.makedirs(assets_dir, exist_ok=True)
 
     # Create a temporary VHS tape file in the project directory
     tape_content = (
         'Set FontFamily "monospace"\n'
-        "Set FontSize 24\n"
-        "Set Width 1200\n"
-        "Set Height 600\n"
+        f"Set FontSize {font_size}\n"
+        f"Set Width {width}\n"
+        f"Set Height {height}\n"
         "Set TypingSpeed 50ms\n"
         f'Type "{bin_command} --help"\n'
         "Enter\n"
-        "Sleep 3s\n"
+        f"Sleep {duration}s\n"
     )
 
     tape_fd, tape_path = tempfile.mkstemp(suffix=".tape", dir=".")
