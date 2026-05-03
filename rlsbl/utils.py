@@ -108,6 +108,79 @@ def find_commit_tool():
     return "git"
 
 
+def spawn_ci_watcher(commit_sha, tag):
+    """Spawn a detached background process that watches CI and sends a desktop notification."""
+    repo_name = ""
+    try:
+        repo_name = run("gh", ["repo", "view", "--json", "name", "-q", ".name"])
+    except Exception:
+        pass
+
+    notify_cmd = _notify_command()
+    if not notify_cmd:
+        return
+
+    label = f"{repo_name} {tag}" if repo_name else tag
+
+    script = f"""
+import subprocess, sys, time
+
+run_id = None
+for _ in range(15):
+    try:
+        r = subprocess.run(
+            ["gh", "run", "list", "--commit", "{commit_sha}", "--limit", "1",
+             "--json", "databaseId", "-q", ".[0].databaseId"],
+            capture_output=True, text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            run_id = r.stdout.strip()
+            break
+    except Exception:
+        pass
+    time.sleep(2)
+
+if not run_id:
+    sys.exit(0)
+
+result = subprocess.run(
+    ["gh", "run", "watch", run_id, "--exit-status"],
+    capture_output=True, text=True, timeout=3600)
+
+summary = ""
+for line in reversed(result.stdout.strip().splitlines()):
+    if line.strip():
+        summary = line.strip()
+        break
+
+ok = result.returncode == 0
+title = "{label}: CI passed" if ok else "{label}: CI FAILED"
+{notify_cmd}
+"""
+    subprocess.Popen(
+        [sys.executable, "-c", script],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def _notify_command():
+    """Return a Python code snippet for sending a desktop notification, or None."""
+    if sys.platform == "darwin":
+        return (
+            'subprocess.run(["osascript", "-e",'
+            ' f\'display notification "{summary}" with title "{title}"\'],'
+            ' timeout=5)'
+        )
+    if shutil.which("notify-send"):
+        return (
+            'urgency = "normal" if ok else "critical"\n'
+            'subprocess.run(["notify-send", "-u", urgency, title, summary], timeout=5)'
+        )
+    return None
+
+
 def bump_version(version, bump_type):
     """Bump a semver version string by the given type (patch, minor, major).
 

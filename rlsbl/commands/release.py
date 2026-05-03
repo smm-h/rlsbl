@@ -18,6 +18,7 @@ from ..utils import (
     is_clean_tree,
     push_if_needed,
     run,
+    spawn_ci_watcher,
 )
 
 VALID_BUMP_TYPES = ("patch", "minor", "major")
@@ -264,5 +265,13 @@ def run_cmd(registry, args, flags):
             run("bash", [post_release_script], env=env)
         except Exception as e:
             print(f"Warning: post-release hook failed: {e}", file=sys.stderr)
+
+    # Watch CI in the background and notify on completion
+    try:
+        commit_sha = run("git", ["rev-parse", "HEAD"])
+        spawn_ci_watcher(commit_sha, tag)
+        log("Watching CI in background (will notify when done)")
+    except Exception:
+        pass
 
     log(f"\nRelease {new_version} complete!")
