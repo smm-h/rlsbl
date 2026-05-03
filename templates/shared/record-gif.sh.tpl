@@ -14,7 +14,7 @@ if ! command -v vhs &>/dev/null; then
   exit 1
 fi
 
-TAPE=$(mktemp /tmp/record-XXXX.tape)
+TAPE=$(mktemp)
 cat > "$TAPE" <<EOF
 Set FontFamily "monospace"
 Set FontSize 24
