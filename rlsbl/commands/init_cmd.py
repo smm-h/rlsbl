@@ -4,8 +4,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
-import stat
 import sys
 
 from ..config import should_tag
@@ -25,9 +23,6 @@ MERGEABLE = {".gitignore"}
 UPDATABLE = {
     ".github/workflows/ci.yml",
     ".github/workflows/publish.yml",
-    "scripts/check-prs.sh",
-    "scripts/post-release.sh",
-    "scripts/pre-push-hook.sh",
 }
 
 def file_hash(path):
@@ -234,20 +229,21 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
         flags = {}
     if registries is None:
         registries = [registry] if registry else []
-    # Make all shell scripts in scripts/ executable
-    scripts_dir = os.path.join(".", "scripts")
-    if os.path.isdir(scripts_dir):
-        for entry in os.listdir(scripts_dir):
+    # Make all shell scripts in .rlsbl/hooks/ executable
+    hooks_dir = os.path.join(".", ".rlsbl", "hooks")
+    if os.path.isdir(hooks_dir):
+        for entry in os.listdir(hooks_dir):
             if entry.endswith(".sh"):
-                os.chmod(os.path.join(scripts_dir, entry), 0o755)
+                os.chmod(os.path.join(hooks_dir, entry), 0o755)
 
-    # Auto-install pre-push hook if not already present
-    hook_source = os.path.join("scripts", "pre-push-hook.sh")
+    # Auto-install pre-push hook as a one-liner that delegates to the subcommand
     hook_target = os.path.join(".git", "hooks", "pre-push")
-    if os.path.exists(hook_source) and os.path.isdir(".git"):
+    if os.path.isdir(".git"):
         if not os.path.exists(hook_target):
+            hook_content = "#!/usr/bin/env bash\nexec rlsbl pre-push-check \"$@\"\n"
             os.makedirs(os.path.join(".git", "hooks"), exist_ok=True)
-            shutil.copy2(hook_source, hook_target)
+            with open(hook_target, "w", encoding="utf-8") as f:
+                f.write(hook_content)
             os.chmod(hook_target, 0o755)
             print("Installed pre-push hook (.git/hooks/pre-push)")
 

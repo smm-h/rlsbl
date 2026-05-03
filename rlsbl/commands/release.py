@@ -112,7 +112,7 @@ def run_cmd(registry, args, flags):
         )
 
     # Run pre-release hook if present
-    pre_release_script = os.path.join(".", "scripts", "pre-release.sh")
+    pre_release_script = os.path.join(".", ".rlsbl", "hooks", "pre-release.sh")
     if os.path.exists(pre_release_script):
         log("Running pre-release hook...")
         try:
@@ -255,7 +255,7 @@ def run_cmd(registry, args, flags):
         ensure_github_topic(quiet=quiet)
 
     # Run post-release hook if present (non-fatal: release is already complete)
-    post_release_script = os.path.join(".", "scripts", "post-release.sh")
+    post_release_script = os.path.join(".", ".rlsbl", "hooks", "post-release.sh")
     if os.path.exists(post_release_script):
         log("Running post-release hook...")
         try:
