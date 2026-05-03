@@ -4,30 +4,16 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
-from io import StringIO
-
-from ruamel.yaml import YAML
+import tempfile
 
 from ..config import should_tag
 from ..registries import REGISTRIES
 from ..tagging import ensure_tags
 
 HASHES_FILE = os.path.join(".rlsbl", "hashes.json")
-
-# Files where existing content is preserved and template sections are appended
-APPENDABLE = {"CLAUDE.md"}
-APPEND_MARKER = "rlsbl"
-
-# Files where missing entries from the template are merged into the existing file
-MERGEABLE = {".gitignore"}
-
-# JSON files where template keys are deep-merged into existing user content
-JSON_MERGEABLE = {".claude/settings.json"}
-
-# YAML workflow files with job-level merge: template jobs overwrite same-key user jobs,
-# user-added jobs are preserved. Top-level keys (name, on, permissions) come from template.
-YAML_MERGEABLE = {".github/workflows/ci.yml", ".github/workflows/publish.yml"}
+BASES_DIR = os.path.join(".rlsbl", "bases")
 
 # Files owned by the user after initial scaffold -- never overwrite or merge
 USER_OWNED = {
@@ -96,109 +82,77 @@ def process_template(template_content, vars_dict):
     return content, unreplaced
 
 
-def _deep_merge(base, override):
-    """Deep-merge two JSON-like structures. User values (base) take precedence.
+def _save_base(target, content):
+    """Save rendered template content as the merge base for future three-way merges."""
+    base_path = os.path.join(BASES_DIR, target)
+    os.makedirs(os.path.dirname(base_path), exist_ok=True)
+    with open(base_path, "w", encoding="utf-8") as f:
+        f.write(content)
 
-    - Dicts: recursively merge; keys only in override are added, base keys kept.
-    - Lists: union by value; base items first, then new override items (deduplicated).
-    - Scalars: base wins.
+
+def _load_base(target):
+    """Load the stored merge base for a target file. Returns None if not stored."""
+    base_path = os.path.join(BASES_DIR, target)
+    if not os.path.exists(base_path):
+        return None
+    with open(base_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def _three_way_merge(ours_text, base_text, theirs_text):
+    """Three-way merge using git merge-file.
+
+    Writes three temp files in the project dir (not /tmp), runs
+    `git merge-file -p ours base theirs`, and returns (merged_text, has_conflicts).
+    Exit code: 0 = clean merge, positive = number of conflicts, negative = error.
     """
-    if isinstance(base, dict) and isinstance(override, dict):
-        merged = {}
-        for key in base:
-            if key in override:
-                merged[key] = _deep_merge(base[key], override[key])
-            else:
-                merged[key] = base[key]
-        for key in override:
-            if key not in base:
-                merged[key] = override[key]
-        return merged
-    if isinstance(base, list) and isinstance(override, list):
-        # Deduplicate by value: keep base order, append new items from override
-        seen = set()
-        for item in base:
-            # Use JSON serialization for unhashable items (dicts, lists)
-            try:
-                seen.add(item)
-            except TypeError:
-                seen.add(json.dumps(item, sort_keys=True))
-        result = list(base)
-        for item in override:
-            if isinstance(item, (dict, list)):
-                key = json.dumps(item, sort_keys=True)
-            else:
-                key = item
-            if key not in seen:
-                seen.add(key)
-                result.append(item)
-        return result
-    # Scalars: base (user) wins
-    return base
-
-
-def _yaml_merge_workflow(existing_text, template_text):
-    """Merge a YAML workflow at the job level.
-
-    Template wins for top-level keys (name, on, permissions, etc.).
-    For the 'jobs' key: template jobs overwrite same-key user jobs,
-    user-added jobs not in the template are preserved at the end.
-
-    Returns (merged_text, error_msg). error_msg is None on success.
-    """
-    yaml = YAML(typ="rt")
-    yaml.preserve_quotes = True
+    ours_tmp = theirs_tmp = base_tmp = None
     try:
-        existing = yaml.load(existing_text)
-    except Exception as e:
-        return None, f"failed to parse existing YAML: {e}"
-    try:
-        template = yaml.load(template_text)
-    except Exception as e:
-        return None, f"failed to parse template YAML: {e}"
+        ours_tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".ours", dir=".", delete=False, encoding="utf-8",
+        )
+        ours_tmp.write(ours_text)
+        ours_tmp.close()
 
-    if not isinstance(existing, dict) or not isinstance(template, dict):
-        return None, "YAML root is not a mapping"
+        base_tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".base", dir=".", delete=False, encoding="utf-8",
+        )
+        base_tmp.write(base_text)
+        base_tmp.close()
 
-    # Start with template as the base (template wins for top-level keys)
-    merged = type(template)()
-    for key in template:
-        merged[key] = template[key]
+        theirs_tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".theirs", dir=".", delete=False, encoding="utf-8",
+        )
+        theirs_tmp.write(theirs_text)
+        theirs_tmp.close()
 
-    # Merge jobs: template jobs first (overwriting user jobs with same key),
-    # then append user-only jobs
-    template_jobs = template.get("jobs") or {}
-    existing_jobs = existing.get("jobs") or {}
-
-    merged_jobs = type(template_jobs)() if template_jobs else type(existing_jobs)()
-    # Template jobs in template order
-    for job_key in template_jobs:
-        merged_jobs[job_key] = template_jobs[job_key]
-    # User-added jobs not in template, preserved at the end
-    for job_key in existing_jobs:
-        if job_key not in template_jobs:
-            merged_jobs[job_key] = existing_jobs[job_key]
-    merged["jobs"] = merged_jobs
-
-    # Preserve any user top-level keys not in the template (rare, but safe)
-    for key in existing:
-        if key not in merged:
-            merged[key] = existing[key]
-
-    buf = StringIO()
-    yaml.dump(merged, buf)
-    return buf.getvalue(), None
+        result = subprocess.run(
+            ["git", "merge-file", "-p", ours_tmp.name, base_tmp.name, theirs_tmp.name],
+            capture_output=True, text=True,
+        )
+        merged_text = result.stdout
+        # Exit code 0 = clean, positive = number of conflicts, negative = error
+        has_conflicts = result.returncode > 0
+        if result.returncode < 0:
+            # Treat errors as conflicts so the caller knows something went wrong
+            has_conflicts = True
+        return merged_text, has_conflicts
+    finally:
+        for tmp in (ours_tmp, base_tmp, theirs_tmp):
+            if tmp is not None:
+                try:
+                    os.unlink(tmp.name)
+                except OSError:
+                    pass
 
 
 def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                      existing_hashes=None):
     """Process a list of template mappings: read each template, apply vars, write target files.
 
-    Skips existing files unless force is True, with special handling:
-    - APPENDABLE files: append template sections if the marker is not already present
-    - MERGEABLE files: merge missing entries from the template into the existing file
-    - JSON_MERGEABLE files: deep-merge template JSON into existing (user values preserved)
-    - YAML_MERGEABLE files: job-level merge for CI workflows (template jobs win, user jobs preserved)
+    Uses a universal three-way merge (via git merge-file) for existing files:
+    base (last scaffolded version) + ours (user's current file) + theirs (new template).
+    USER_OWNED files are never overwritten or merged (except LICENSE year update).
     Returns (created, skipped, warnings, new_hashes).
     """
     if existing_hashes is None:
@@ -217,166 +171,117 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
             warnings.append(f"Template not found: {template_path}")
             continue
 
-        # When file exists and force is not set, use context-aware handling
-        if os.path.exists(target) and not force:
-            basename = os.path.basename(target)
+        with open(template_path, "r", encoding="utf-8") as f:
+            raw = f.read()
+        theirs, unreplaced = process_template(raw, vars_dict)
 
-            # User-owned files are never touched after initial scaffold,
-            # except LICENSE gets its copyright year updated on --update.
-            if target in USER_OWNED:
-                if update and target == "LICENSE":
-                    from datetime import datetime
-                    current_year = str(datetime.now().year)
-                    with open(target, "r", encoding="utf-8") as f:
-                        content = f.read()
-                    # Match "Copyright (c) YYYY" or "Copyright (c) YYYY-YYYY"
+        # --- New file: write and save base ---
+        if not os.path.exists(target) or force:
+            target_dir = os.path.dirname(target)
+            if target_dir and target_dir != ".":
+                os.makedirs(target_dir, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(theirs)
+            _save_base(target, theirs)
+            new_hashes[target] = file_hash(target)
+            created.append(target)
+            if unreplaced:
+                warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
+            continue
+
+        # --- Existing file, not forced ---
+
+        # User-owned files: never touch after initial scaffold,
+        # except LICENSE gets its copyright year updated on --update.
+        if target in USER_OWNED:
+            if update and target == "LICENSE":
+                from datetime import datetime
+                current_year = str(datetime.now().year)
+                with open(target, "r", encoding="utf-8") as f:
+                    content = f.read()
+                # Match "Copyright (c) YYYY" or "Copyright (c) YYYY-YYYY"
+                updated = re.sub(
+                    r"(Copyright\s+\(c\)\s+\d{4})-(\d{4})",
+                    lambda m: (
+                        m.group(0) if m.group(2) == current_year
+                        else f"{m.group(1)}-{current_year}"
+                    ),
+                    content,
+                )
+                if updated == content:
+                    # No range found or range already current -- try single year
                     updated = re.sub(
-                        r"(Copyright\s+\(c\)\s+\d{4})-(\d{4})",
+                        r"(Copyright\s+\(c\)\s+)(\d{4})(?![-\d])",
                         lambda m: (
                             m.group(0) if m.group(2) == current_year
-                            else f"{m.group(1)}-{current_year}"
+                            else f"{m.group(1)}{m.group(2)}-{current_year}"
                         ),
                         content,
                     )
-                    if updated == content:
-                        # No range found or range already current -- try single year
-                        updated = re.sub(
-                            r"(Copyright\s+\(c\)\s+)(\d{4})(?![-\d])",
-                            lambda m: (
-                                m.group(0) if m.group(2) == current_year
-                                else f"{m.group(1)}{m.group(2)}-{current_year}"
-                            ),
-                            content,
-                        )
-                    if updated != content:
-                        with open(target, "w", encoding="utf-8") as f:
-                            f.write(updated)
-                        created.append("LICENSE (year updated)")
-                    else:
-                        skipped.append(target)
+                if updated != content:
+                    with open(target, "w", encoding="utf-8") as f:
+                        f.write(updated)
+                    created.append("LICENSE (year updated)")
                 else:
                     skipped.append(target)
-                continue
-
-            if target in JSON_MERGEABLE:
-                with open(target, "r", encoding="utf-8") as f:
-                    existing_text = f.read()
-                with open(template_path, "r", encoding="utf-8") as f:
-                    raw = f.read()
-                content, unreplaced = process_template(raw, vars_dict)
-                try:
-                    existing_data = json.loads(existing_text)
-                    template_data = json.loads(content)
-                except json.JSONDecodeError as e:
-                    warnings.append(f"{target}: JSON parse error during merge: {e}")
-                    skipped.append(target)
-                    continue
-                merged = _deep_merge(existing_data, template_data)
-                target_dir = os.path.dirname(target)
-                if target_dir and target_dir != ".":
-                    os.makedirs(target_dir, exist_ok=True)
-                with open(target, "w", encoding="utf-8") as f:
-                    f.write(json.dumps(merged, indent=2))
-                    f.write("\n")
-                created.append(target + " (merged)")
-                if unreplaced:
-                    warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
-                continue
-
-            if target in YAML_MERGEABLE:
-                with open(target, "r", encoding="utf-8") as f:
-                    existing_text = f.read()
-                with open(template_path, "r", encoding="utf-8") as f:
-                    raw = f.read()
-                content, unreplaced = process_template(raw, vars_dict)
-                merged_text, err = _yaml_merge_workflow(existing_text, content)
-                if err:
-                    warnings.append(f"{target}: YAML merge skipped: {err}")
-                    skipped.append(target)
-                    continue
-                target_dir = os.path.dirname(target)
-                if target_dir and target_dir != ".":
-                    os.makedirs(target_dir, exist_ok=True)
-                with open(target, "w", encoding="utf-8") as f:
-                    f.write(merged_text)
-                new_hashes[target] = file_hash(target)
-                created.append(target + " (merged)")
-                if unreplaced:
-                    warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
-                continue
-
-            if basename in APPENDABLE:
-                with open(target, "r", encoding="utf-8") as f:
-                    existing = f.read()
-                if APPEND_MARKER in existing:
-                    skipped.append(target + " (already has rlsbl section)")
-                    continue
-                # Append only the ## sections, stripping the top-level # heading
-                with open(template_path, "r", encoding="utf-8") as f:
-                    raw = f.read()
-                content, _ = process_template(raw, vars_dict)
-                lines = content.split("\n")
-                first_section_idx = None
-                for i, line in enumerate(lines):
-                    if i > 0 and line.startswith("## "):
-                        first_section_idx = i
-                        break
-                section = "\n".join(lines[first_section_idx:]) if first_section_idx is not None else content
-                with open(target, "a", encoding="utf-8") as f:
-                    f.write("\n\n" + section.strip() + "\n")
-                created.append(target + " (appended)")
-                continue
-
-            if basename in MERGEABLE:
-                with open(target, "r", encoding="utf-8") as f:
-                    existing = f.read()
-                with open(template_path, "r", encoding="utf-8") as f:
-                    raw = f.read()
-                content, _ = process_template(raw, vars_dict)
-                existing_lines = {
-                    line.strip() for line in existing.split("\n") if line.strip()
-                }
-                # Normalize by stripping trailing slashes so e.g.
-                # "*.egg-info/" matches "*.egg-info" and vice versa.
-                existing_normalized = {
-                    line.rstrip("/") for line in existing_lines
-                }
-                new_lines = [
-                    line.strip() for line in content.split("\n") if line.strip()
-                ]
-                # Only merge non-comment entries that are missing from the existing file
-                missing = [
-                    line for line in new_lines
-                    if line.rstrip("/") not in existing_normalized
-                    and not line.startswith("#")
-                ]
-                if missing:
-                    with open(target, "a", encoding="utf-8") as f:
-                        f.write("\n# Added by rlsbl\n" + "\n".join(missing) + "\n")
-                    created.append(f"{target} (merged {len(missing)} entries)")
-                else:
-                    skipped.append(target + " (all entries present)")
-                continue
-
-            skipped.append(target)
+            else:
+                skipped.append(target)
             continue
 
-        with open(template_path, "r", encoding="utf-8") as f:
-            raw = f.read()
-        content, unreplaced = process_template(raw, vars_dict)
+        # --- Three-way merge for all other existing files ---
+        with open(target, "r", encoding="utf-8") as f:
+            ours = f.read()
+        base = _load_base(target)
 
-        # Ensure parent directory exists
-        target_dir = os.path.dirname(target)
-        if target_dir and target_dir != ".":
-            os.makedirs(target_dir, exist_ok=True)
+        if base is None:
+            # No base stored (legacy project or first update after migration).
+            # Cannot do a three-way merge. Seed the base for next time.
+            _save_base(target, theirs)
+            if ours == theirs:
+                skipped.append(target)
+            else:
+                warnings.append(
+                    f"{target}: no base stored, cannot merge; "
+                    "run scaffold --force to reset"
+                )
+                skipped.append(target)
+            continue
 
-        with open(target, "w", encoding="utf-8") as f:
-            f.write(content)
-        new_hashes[target] = file_hash(target)
-        created.append(target)
-
-        if unreplaced:
-            warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
+        if ours == base:
+            # User did not customize -- clean update: write theirs.
+            target_dir = os.path.dirname(target)
+            if target_dir and target_dir != ".":
+                os.makedirs(target_dir, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(theirs)
+            _save_base(target, theirs)
+            new_hashes[target] = file_hash(target)
+            created.append(target + " (updated)")
+            if unreplaced:
+                warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
+        elif base == theirs:
+            # Template did not change -- nothing to do.
+            skipped.append(target)
+        elif ours == theirs:
+            # User and template converged to same content -- nothing to do.
+            skipped.append(target)
+        else:
+            # Both user and template changed -- three-way merge.
+            merged, has_conflicts = _three_way_merge(ours, base, theirs)
+            target_dir = os.path.dirname(target)
+            if target_dir and target_dir != ".":
+                os.makedirs(target_dir, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(merged)
+            _save_base(target, theirs)
+            new_hashes[target] = file_hash(target)
+            if has_conflicts:
+                created.append(target + " (merged with CONFLICTS -- resolve manually)")
+                warnings.append(f"{target}: merge conflicts detected, resolve manually")
+            else:
+                created.append(target + " (merged)")
+            if unreplaced:
+                warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
 
     return created, skipped, warnings, new_hashes
 

@@ -7,9 +7,7 @@ authors = [{ name = "smm-h" }]
 readme = "README.md"
 requires-python = ">=3.11"
 keywords = ["release", "npm", "pypi", "go", "goreleaser", "publish", "cli", "scaffold", "rlsbl"]
-dependencies = [
-    "ruamel-yaml>=0.19.1",
-]
+dependencies = []
 
 [project.urls]
 Repository = "https://github.com/smm-h/rlsbl"
