@@ -1,4 +1,4 @@
-"""Tests for rlsbl.registries — npm and pypi adapters."""
+"""Tests for rlsbl.registries — npm, pypi, and go adapters."""
 
 import json
 import os
@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from rlsbl.registries import npm, pypi
+from rlsbl.registries import go, npm, pypi
 
 
 class TestNpmReadVersion(unittest.TestCase):
@@ -322,6 +322,122 @@ class TestPypiGetTemplateVars(unittest.TestCase):
         )
         result = pypi.get_template_vars(self.tmp_dir)
         self.assertEqual(result["repoName"], "user/my-tool")
+
+
+# ---------------------------------------------------------------------------
+# Go adapter tests
+# ---------------------------------------------------------------------------
+
+
+class TestGoReadVersion(unittest.TestCase):
+    """Tests for go.read_version."""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir)
+
+    def _write_version(self, content):
+        path = os.path.join(self.tmp_dir, "VERSION")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    def test_read_version(self):
+        self._write_version("1.2.3\n")
+        self.assertEqual(go.read_version(self.tmp_dir), "1.2.3")
+
+    def test_read_version_missing(self):
+        with self.assertRaises(FileNotFoundError):
+            go.read_version(self.tmp_dir)
+
+
+class TestGoWriteVersion(unittest.TestCase):
+    """Tests for go.write_version."""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir)
+
+    def _read_version_file(self):
+        path = os.path.join(self.tmp_dir, "VERSION")
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    def test_write_version(self):
+        go.write_version(self.tmp_dir, "2.0.0")
+        content = self._read_version_file()
+        self.assertEqual(content, "2.0.0\n")
+
+    def test_write_version_atomic(self):
+        """Verify write_version uses tmp file + os.replace (atomic rename).
+
+        After write_version completes, the .tmp file should not exist --
+        it was renamed to VERSION atomically.
+        """
+        go.write_version(self.tmp_dir, "3.0.0")
+        tmp_path = os.path.join(self.tmp_dir, "VERSION.tmp")
+        self.assertFalse(os.path.exists(tmp_path))
+        # The final file should exist with the correct content
+        self.assertEqual(self._read_version_file(), "3.0.0\n")
+
+
+class TestGoCheckProjectExists(unittest.TestCase):
+    """Tests for go.check_project_exists."""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir)
+
+    def test_check_project_exists_true(self):
+        path = os.path.join(self.tmp_dir, "go.mod")
+        with open(path, "w") as f:
+            f.write("module github.com/user/myapp\n\ngo 1.22\n")
+        self.assertTrue(go.check_project_exists(self.tmp_dir))
+
+    def test_check_project_exists_false(self):
+        self.assertFalse(go.check_project_exists(self.tmp_dir))
+
+
+class TestGoGetTemplateVars(unittest.TestCase):
+    """Tests for go.get_template_vars."""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir)
+
+    def _write_go_mod(self, content):
+        path = os.path.join(self.tmp_dir, "go.mod")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    def _write_version(self, version):
+        path = os.path.join(self.tmp_dir, "VERSION")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(version + "\n")
+
+    @patch("rlsbl.registries.go.run", return_value="Test Author")
+    def test_get_template_vars(self, _mock_run):
+        self._write_go_mod("module github.com/user/myapp\n\ngo 1.22\n")
+        self._write_version("0.1.0")
+        result = go.get_template_vars(self.tmp_dir)
+        self.assertEqual(result["name"], "myapp")
+        self.assertEqual(result["modulePath"], "github.com/user/myapp")
+        self.assertEqual(result["version"], "0.1.0")
+        self.assertEqual(result["repoName"], "user/myapp")
+
+
+class TestGoGetVersionFile(unittest.TestCase):
+    """Tests for go.get_version_file."""
+
+    def test_get_version_file(self):
+        self.assertEqual(go.get_version_file(), "VERSION")
 
 
 if __name__ == "__main__":
