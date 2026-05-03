@@ -1,7 +1,7 @@
 """Config command: show resolved project configuration."""
 
 import os
-from ..config import PROJECT_CONFIG, USER_CONFIG, read_json_config, should_tag
+from ..config import _project_config, USER_CONFIG, read_json_config, should_tag
 from ..registries import REGISTRIES
 
 
@@ -50,12 +50,12 @@ def run_cmd(registry, args, flags):
     print("\nEcosystem tagging:")
     enabled = should_tag(flags)
     # Determine why it's enabled/disabled
-    project_cfg = read_json_config(PROJECT_CONFIG)
+    project_cfg = read_json_config(_project_config())
     user_cfg = read_json_config(USER_CONFIG)
     if flags.get("no-tag"):
         source = "CLI flag"
     elif "tag" in project_cfg:
-        source = f"project config ({PROJECT_CONFIG})"
+        source = f"project config ({_project_config()})"
     elif "tag" in user_cfg:
         source = f"user config ({USER_CONFIG})"
     else:
