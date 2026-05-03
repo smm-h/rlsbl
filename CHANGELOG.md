@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0
+
+- **Universal three-way merge for scaffold updates.** Replaced all format-specific merge strategies (YAML job-level, JSON deep-merge, line-based, section append) with `git merge-file`. Bases are stored in `.rlsbl/bases/` at scaffold time. On `--update`, user customizations and template updates merge cleanly; conflicts get git-style conflict markers.
+- **Removed `ruamel-yaml` dependency.** No longer needed since YAML-aware merging is replaced by three-way text merge.
+- **Detailed scaffold output.** Every file now shows its action: created, updated, merged, unchanged, user-owned, or CONFLICTS.
+
 ## 0.7.0
 
 - **Removed `check-prs` command.** Was a useless wrapper around `gh pr list`.
