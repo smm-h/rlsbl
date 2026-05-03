@@ -133,6 +133,8 @@ def run_cmd(registry, args, flags):
         repos = _fetch_all_repos(token)
     except urllib.error.HTTPError as e:
         print(f"Error: GitHub API returned {e.code}: {e.reason}", file=sys.stderr)
+        if e.code == 403:
+            print("Hint: run 'gh auth login' to increase API rate limits (60/hr unauthenticated → 5000/hr).", file=sys.stderr)
         sys.exit(1)
     except urllib.error.URLError as e:
         print(f"Error: could not reach GitHub API: {e.reason}", file=sys.stderr)
