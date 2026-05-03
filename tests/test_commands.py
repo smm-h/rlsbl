@@ -10,8 +10,11 @@ from io import StringIO
 from unittest.mock import patch
 
 from rlsbl.commands.init_cmd import (
-    APPEND_MARKER,
+    BASES_DIR,
     HASHES_FILE,
+    _load_base,
+    _save_base,
+    _three_way_merge,
     file_hash,
     load_hashes,
     process_mappings,
@@ -53,6 +56,83 @@ class TestProcessTemplate(unittest.TestCase):
         self.assertEqual(unreplaced, [])
 
 
+class TestBaseStorage(unittest.TestCase):
+    """Tests for _save_base / _load_base helpers."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    def test_save_and_load_roundtrip(self):
+        _save_base("foo/bar.txt", "hello world\n")
+        self.assertEqual(_load_base("foo/bar.txt"), "hello world\n")
+
+    def test_load_missing_returns_none(self):
+        self.assertIsNone(_load_base("nonexistent.txt"))
+
+    def test_save_creates_parent_dirs(self):
+        _save_base("a/b/c.txt", "content")
+        base_path = os.path.join(BASES_DIR, "a", "b", "c.txt")
+        self.assertTrue(os.path.exists(base_path))
+
+
+class TestThreeWayMerge(unittest.TestCase):
+    """Tests for _three_way_merge using git merge-file."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+        # git merge-file needs to be able to run; init a repo for safety
+        os.system("git init -q .")
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    def test_clean_merge_no_conflicts(self):
+        # Changes must be non-adjacent so git merge-file resolves them cleanly
+        base = "line1\nline2\nline3\nline4\nline5\n"
+        ours = "line1\nline2 modified by user\nline3\nline4\nline5\n"
+        theirs = "line1\nline2\nline3\nline4 modified by template\nline5\n"
+        merged, has_conflicts = _three_way_merge(ours, base, theirs)
+        self.assertFalse(has_conflicts)
+        self.assertIn("line2 modified by user", merged)
+        self.assertIn("line4 modified by template", merged)
+
+    def test_conflict_detected(self):
+        base = "line1\nline2\nline3\n"
+        ours = "line1\nline2 user version\nline3\n"
+        theirs = "line1\nline2 template version\nline3\n"
+        merged, has_conflicts = _three_way_merge(ours, base, theirs)
+        self.assertTrue(has_conflicts)
+        self.assertIn("<<<<<<<", merged)
+        self.assertIn("=======", merged)
+        self.assertIn(">>>>>>>", merged)
+
+    def test_identical_changes_no_conflict(self):
+        base = "line1\nline2\nline3\n"
+        ours = "line1\nline2 same change\nline3\n"
+        theirs = "line1\nline2 same change\nline3\n"
+        merged, has_conflicts = _three_way_merge(ours, base, theirs)
+        self.assertFalse(has_conflicts)
+        self.assertEqual(merged, "line1\nline2 same change\nline3\n")
+
+    def test_temp_files_cleaned_up(self):
+        base = "a\n"
+        ours = "a\n"
+        theirs = "a\n"
+        _three_way_merge(ours, base, theirs)
+        # No leftover .ours/.base/.theirs files
+        leftover = [f for f in os.listdir(".") if f.endswith((".ours", ".base", ".theirs"))]
+        self.assertEqual(leftover, [])
+
+
 class TestScaffold(unittest.TestCase):
     """Integration tests for the scaffold (init) command."""
 
@@ -60,6 +140,8 @@ class TestScaffold(unittest.TestCase):
         self.orig_dir = os.getcwd()
         self.tmp_dir = tempfile.mkdtemp()
         os.chdir(self.tmp_dir)
+        # git init so git merge-file works
+        os.system("git init -q .")
         # Create minimal package.json so npm registry is detected
         with open("package.json", "w") as f:
             json.dump({"name": "test-pkg", "version": "0.1.0"}, f)
@@ -101,14 +183,11 @@ class TestScaffold(unittest.TestCase):
         self._run_scaffold()
         with open("CHANGELOG.md") as f:
             content = f.read()
-        # The CHANGELOG template uses {{version}}; it should be replaced
         self.assertIn("0.1.0", content)
         self.assertNotIn("{{version}}", content)
 
     def test_unreplaced_variables_emit_warning(self):
         """Scaffold with a template containing unknown vars should warn."""
-        # We test process_mappings directly with a custom template containing
-        # an unknown variable, since the real templates may not have any.
         tpl_dir = os.path.join(self.tmp_dir, "_tpls")
         os.makedirs(tpl_dir)
         with open(os.path.join(tpl_dir, "test.tpl"), "w") as f:
@@ -119,92 +198,171 @@ class TestScaffold(unittest.TestCase):
             tpl_dir, mappings, {"name": "test-pkg"}, force=False,
         )
         self.assertIn("output.txt", created)
-        # Should warn about the unreplaced variable "planet"
         self.assertTrue(
             any("planet" in w for w in warnings),
             f"Expected warning about 'planet', got: {warnings}",
         )
 
-    # -- APPENDABLE tests (CLAUDE.md) --
+    # -- Base storage tests --
 
-    def test_appendable_appends_to_existing_claude_md(self):
-        """When CLAUDE.md already exists, scaffold appends rlsbl section."""
-        existing_content = "# My Project\n\nSome existing docs.\n"
-        with open("CLAUDE.md", "w") as f:
-            f.write(existing_content)
-
+    def test_initial_scaffold_saves_bases(self):
+        """After initial scaffold, base files should exist in .rlsbl/bases/."""
         self._run_scaffold()
+        # CI workflow should have a base stored
+        ci_base = _load_base(".github/workflows/ci.yml")
+        self.assertIsNotNone(ci_base)
+        self.assertGreater(len(ci_base), 0)
 
-        with open("CLAUDE.md") as f:
-            content = f.read()
-        # Original content is preserved
-        self.assertIn("My Project", content)
-        self.assertIn("Some existing docs.", content)
-        # rlsbl marker is present (appended section)
-        self.assertIn(APPEND_MARKER, content)
+    def test_bases_match_generated_files(self):
+        """Stored bases should match the rendered template content (identical to file on first scaffold)."""
+        self._run_scaffold()
+        ci_path = ".github/workflows/ci.yml"
+        with open(ci_path) as f:
+            file_content = f.read()
+        base_content = _load_base(ci_path)
+        self.assertEqual(file_content, base_content)
 
-    def test_appendable_skips_if_marker_already_present(self):
-        """When CLAUDE.md already contains the rlsbl marker, skip append."""
-        existing_content = (
-            "# My Project\n\n"
-            "## Release workflow\n\n"
-            f"This uses {APPEND_MARKER} for releases.\n"
+    # -- Three-way merge integration tests --
+
+    def test_update_clean_when_user_did_not_modify(self):
+        """When user hasn't modified a file, --update should cleanly overwrite."""
+        self._run_scaffold()
+        ci_path = ".github/workflows/ci.yml"
+        with open(ci_path) as f:
+            original = f.read()
+        # Re-scaffold (template hasn't changed, so file should be skipped as base==theirs)
+        self._run_scaffold()
+        with open(ci_path) as f:
+            after = f.read()
+        self.assertEqual(original, after)
+
+    def test_three_way_merge_preserves_user_additions(self):
+        """Three-way merge should preserve user additions when template changes elsewhere."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(tpl_dir)
+
+        # Initial template (5 lines so changes are non-adjacent for clean merge)
+        tpl_v1 = "line1\nline2\nline3\nline4\nline5\n"
+        with open(os.path.join(tpl_dir, "test.tpl"), "w") as f:
+            f.write(tpl_v1)
+
+        mappings = [{"template": "test.tpl", "target": "output.txt"}]
+        process_mappings(tpl_dir, mappings, {}, force=False)
+
+        # User modifies line2
+        with open("output.txt", "w") as f:
+            f.write("line1\nline2 user edit\nline3\nline4\nline5\n")
+
+        # Template changes line4 (non-adjacent to user's line2 change)
+        tpl_v2 = "line1\nline2\nline3\nline4 template update\nline5\n"
+        with open(os.path.join(tpl_dir, "test.tpl"), "w") as f:
+            f.write(tpl_v2)
+
+        created, skipped, warnings, _ = process_mappings(tpl_dir, mappings, {}, force=False)
+        with open("output.txt") as f:
+            result = f.read()
+
+        # Both changes should be present (clean merge)
+        self.assertIn("line2 user edit", result)
+        self.assertIn("line4 template update", result)
+        self.assertTrue(any("merged" in c for c in created))
+
+    def test_three_way_merge_detects_conflicts(self):
+        """Three-way merge should detect conflicts when both sides change the same line."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(tpl_dir)
+
+        tpl_v1 = "line1\nline2\nline3\n"
+        with open(os.path.join(tpl_dir, "test.tpl"), "w") as f:
+            f.write(tpl_v1)
+
+        mappings = [{"template": "test.tpl", "target": "output.txt"}]
+        process_mappings(tpl_dir, mappings, {}, force=False)
+
+        # User modifies line2
+        with open("output.txt", "w") as f:
+            f.write("line1\nline2 user version\nline3\n")
+
+        # Template also modifies line2
+        tpl_v2 = "line1\nline2 template version\nline3\n"
+        with open(os.path.join(tpl_dir, "test.tpl"), "w") as f:
+            f.write(tpl_v2)
+
+        created, skipped, warnings, _ = process_mappings(tpl_dir, mappings, {}, force=False)
+        with open("output.txt") as f:
+            result = f.read()
+
+        self.assertIn("<<<<<<<", result)
+        self.assertTrue(any("CONFLICTS" in c for c in created))
+        self.assertTrue(any("conflict" in w.lower() for w in warnings))
+
+    def test_no_base_skips_with_warning(self):
+        """When no base is stored (legacy project), skip with a warning."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(tpl_dir)
+
+        with open(os.path.join(tpl_dir, "test.tpl"), "w") as f:
+            f.write("template content v2\n")
+
+        # Create target file directly (no base stored)
+        with open("output.txt", "w") as f:
+            f.write("different content\n")
+
+        mappings = [{"template": "test.tpl", "target": "output.txt"}]
+        created, skipped, warnings, _ = process_mappings(tpl_dir, mappings, {}, force=False)
+
+        self.assertIn("output.txt", skipped)
+        self.assertTrue(
+            any("no base stored" in w for w in warnings),
+            f"Expected 'no base stored' warning, got: {warnings}",
         )
-        with open("CLAUDE.md", "w") as f:
-            f.write(existing_content)
 
-        self._run_scaffold()
+    def test_no_base_identical_content_skips_silently(self):
+        """When no base is stored but file matches template, skip without warning."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(tpl_dir)
 
-        with open("CLAUDE.md") as f:
-            content = f.read()
-        # Content should be unchanged (marker was already present)
-        self.assertEqual(content, existing_content)
+        content = "identical content\n"
+        with open(os.path.join(tpl_dir, "test.tpl"), "w") as f:
+            f.write(content)
+        with open("output.txt", "w") as f:
+            f.write(content)
 
-    # -- MERGEABLE tests (.gitignore) --
+        mappings = [{"template": "test.tpl", "target": "output.txt"}]
+        created, skipped, warnings, _ = process_mappings(tpl_dir, mappings, {}, force=False)
 
-    def test_mergeable_merges_missing_gitignore_entries(self):
-        """When .gitignore exists but is missing entries, scaffold merges them."""
-        with open(".gitignore", "w") as f:
-            f.write("node_modules/\n")
+        self.assertIn("output.txt", skipped)
+        # No warning because content matches
+        self.assertFalse(any("no base stored" in w for w in warnings))
 
-        self._run_scaffold()
+    def test_template_unchanged_skips(self):
+        """When template hasn't changed (base == theirs), skip even if user modified file."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(tpl_dir)
 
-        with open(".gitignore") as f:
-            content = f.read()
-        # Original entry preserved
-        self.assertIn("node_modules/", content)
-        # At least one new entry merged (e.g. __pycache__/ from the template)
-        self.assertIn("__pycache__/", content)
-
-    def test_mergeable_skips_if_all_entries_present(self):
-        """When .gitignore already has all template entries, nothing is added."""
-        # Read the gitignore template to get all non-comment entries
-        from rlsbl.registries import npm
-        tpl_path = os.path.join(npm.get_shared_template_dir(), "gitignore.tpl")
-        with open(tpl_path) as f:
-            tpl_content = f.read()
-
-        # Pre-populate .gitignore with all template entries
-        with open(".gitignore", "w") as f:
+        tpl_content = "line1\nline2\nline3\n"
+        with open(os.path.join(tpl_dir, "test.tpl"), "w") as f:
             f.write(tpl_content)
 
-        # Record content before scaffold
-        with open(".gitignore") as f:
-            before = f.read()
+        mappings = [{"template": "test.tpl", "target": "output.txt"}]
+        process_mappings(tpl_dir, mappings, {}, force=False)
 
-        self._run_scaffold()
+        # User modifies the file
+        with open("output.txt", "w") as f:
+            f.write("line1\nline2 customized\nline3\n")
 
-        with open(".gitignore") as f:
-            after = f.read()
+        # Re-run with same template -- should skip (template unchanged)
+        created, skipped, warnings, _ = process_mappings(tpl_dir, mappings, {}, force=False)
+        self.assertIn("output.txt", skipped)
 
-        # File should be unchanged since all entries were already present
-        self.assertEqual(before, after)
+        # Verify user customization is preserved
+        with open("output.txt") as f:
+            self.assertIn("customized", f.read())
 
     # -- --force tests --
 
     def test_force_overwrites_existing_files(self):
         """With --force, scaffold overwrites existing files."""
-        # Create a pre-existing CHANGELOG.md with custom content
         with open("CHANGELOG.md", "w") as f:
             f.write("# My custom changelog\n")
 
@@ -212,9 +370,19 @@ class TestScaffold(unittest.TestCase):
 
         with open("CHANGELOG.md") as f:
             content = f.read()
-        # Custom content replaced by template output
         self.assertNotIn("My custom changelog", content)
         self.assertIn("0.1.0", content)
+
+    def test_force_updates_base(self):
+        """With --force, the base should be updated to the new template content."""
+        self._run_scaffold()
+        ci_base_before = _load_base(".github/workflows/ci.yml")
+        self._run_scaffold(force=True)
+        ci_base_after = _load_base(".github/workflows/ci.yml")
+        # Base should exist after force
+        self.assertIsNotNone(ci_base_after)
+        # Content should match (template hasn't changed)
+        self.assertEqual(ci_base_before, ci_base_after)
 
     # -- Hash tests --
 
@@ -240,78 +408,17 @@ class TestScaffold(unittest.TestCase):
 
     # -- --update tests --
 
-    def test_yaml_merge_preserves_user_jobs(self):
-        """YAML merge should preserve user-added jobs while updating template jobs."""
-        from ruamel.yaml import YAML as RuamelYAML
-
+    def test_update_processes_managed_files(self):
+        """--update should still process CI files via three-way merge."""
         self._run_scaffold()
 
         ci_path = ".github/workflows/ci.yml"
-        # Add a user-defined job to ci.yml
-        yaml = RuamelYAML(typ="rt")
-        with open(ci_path) as f:
-            data = yaml.load(f)
-        data["jobs"]["lint"] = {
-            "runs-on": "ubuntu-latest",
-            "steps": [{"run": "npm run lint"}],
-        }
-        buf = StringIO()
-        yaml.dump(data, buf)
-        with open(ci_path, "w") as f:
-            f.write(buf.getvalue())
-
-        # Re-scaffold; user job "lint" should be preserved, template job "test" updated
-        self._run_scaffold()
-
-        with open(ci_path) as f:
-            result = yaml.load(f)
-        self.assertIn("test", result["jobs"], "Template job 'test' should exist")
-        self.assertIn("lint", result["jobs"], "User job 'lint' should be preserved")
-
-    def test_yaml_merge_template_jobs_overwrite_same_key(self):
-        """YAML merge should overwrite user modifications to template-owned jobs."""
-        from ruamel.yaml import YAML as RuamelYAML
-
-        self._run_scaffold()
-
-        ci_path = ".github/workflows/ci.yml"
-        # Modify the template-owned "test" job
-        yaml = RuamelYAML(typ="rt")
-        with open(ci_path) as f:
-            data = yaml.load(f)
-        data["jobs"]["test"]["runs-on"] = "self-hosted"
-        buf = StringIO()
-        yaml.dump(data, buf)
-        with open(ci_path, "w") as f:
-            f.write(buf.getvalue())
-
-        # Re-scaffold; template should overwrite the "test" job back
-        self._run_scaffold()
-
-        with open(ci_path) as f:
-            result = yaml.load(f)
-        self.assertEqual(
-            result["jobs"]["test"]["runs-on"],
-            "ubuntu-latest",
-            "Template job should overwrite user customization",
-        )
-
-    def test_update_overwrites_files_with_matching_hash(self):
-        """--update should still process CI files (now via YAML merge)."""
-        # First scaffold to create files and hashes
-        self._run_scaffold()
-
-        ci_path = ".github/workflows/ci.yml"
-        # Verify the file exists and note its hash
         hashes_before = load_hashes()
         self.assertIn(ci_path, hashes_before)
 
-        # Run with --update without modifying the file; it should be processed
         with patch("sys.stdout", new_callable=StringIO) as mock_out:
             run_cmd("npm", [], {"update": True})
-            output = mock_out.getvalue()
 
-        # The file should still exist and be valid
         self.assertTrue(os.path.exists(ci_path))
 
 
