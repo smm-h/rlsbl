@@ -210,6 +210,18 @@ def run_cmd(registry, args, flags):
         except Exception:
             pass
 
+    # Update .rlsbl/version marker so it's included in the release commit
+    rlsbl_version_marker = os.path.join(".rlsbl", "version")
+    if os.path.exists(os.path.dirname(rlsbl_version_marker)):
+        try:
+            from .. import __version__ as rlsbl_ver
+            with open(rlsbl_version_marker, "w") as f:
+                f.write(rlsbl_ver + "\n")
+            if rlsbl_version_marker not in files_to_commit:
+                files_to_commit.append(rlsbl_version_marker)
+        except Exception:
+            pass
+
     # Commit if anything was actually modified (version bump or tagging)
     needs_commit = new_version != current_version or not is_clean_tree()
     if files_to_commit and needs_commit:
