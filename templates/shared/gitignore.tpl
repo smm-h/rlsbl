@@ -11,3 +11,4 @@ dist/
 .*-cache.json
 .env
 .env.local
+*.local-only
