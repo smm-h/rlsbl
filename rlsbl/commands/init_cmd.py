@@ -25,6 +25,14 @@ UPDATABLE = {
     ".github/workflows/publish.yml",
 }
 
+# Files owned by the user after initial scaffold -- never overwrite or merge
+USER_OWNED = {
+    "CHANGELOG.md",
+    "LICENSE",
+    ".rlsbl/hooks/pre-release.sh",
+    ".rlsbl/hooks/post-release.sh",
+}
+
 def file_hash(path):
     """SHA-256 hash of a file's contents."""
     with open(path, "rb") as f:
@@ -115,6 +123,11 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
         # When file exists and force is not set, use context-aware handling
         if os.path.exists(target) and not force:
             basename = os.path.basename(target)
+
+            # User-owned files are never touched after initial scaffold
+            if target in USER_OWNED:
+                skipped.append(target)
+                continue
 
             # In --update mode, overwrite managed files only if not customized
             if update and target in UPDATABLE:
