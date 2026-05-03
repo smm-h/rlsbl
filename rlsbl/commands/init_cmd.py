@@ -5,6 +5,9 @@ import json
 import os
 import re
 import sys
+from io import StringIO
+
+from ruamel.yaml import YAML
 
 from ..config import should_tag
 from ..registries import REGISTRIES
@@ -22,11 +25,9 @@ MERGEABLE = {".gitignore"}
 # JSON files where template keys are deep-merged into existing user content
 JSON_MERGEABLE = {".claude/settings.json"}
 
-# Files that are safe to overwrite during --update (managed files users typically don't customize)
-UPDATABLE = {
-    ".github/workflows/ci.yml",
-    ".github/workflows/publish.yml",
-}
+# YAML workflow files with job-level merge: template jobs overwrite same-key user jobs,
+# user-added jobs are preserved. Top-level keys (name, on, permissions) come from template.
+YAML_MERGEABLE = {".github/workflows/ci.yml", ".github/workflows/publish.yml"}
 
 # Files owned by the user after initial scaffold -- never overwrite or merge
 USER_OWNED = {
@@ -136,6 +137,59 @@ def _deep_merge(base, override):
     return base
 
 
+def _yaml_merge_workflow(existing_text, template_text):
+    """Merge a YAML workflow at the job level.
+
+    Template wins for top-level keys (name, on, permissions, etc.).
+    For the 'jobs' key: template jobs overwrite same-key user jobs,
+    user-added jobs not in the template are preserved at the end.
+
+    Returns (merged_text, error_msg). error_msg is None on success.
+    """
+    yaml = YAML(typ="rt")
+    yaml.preserve_quotes = True
+    try:
+        existing = yaml.load(existing_text)
+    except Exception as e:
+        return None, f"failed to parse existing YAML: {e}"
+    try:
+        template = yaml.load(template_text)
+    except Exception as e:
+        return None, f"failed to parse template YAML: {e}"
+
+    if not isinstance(existing, dict) or not isinstance(template, dict):
+        return None, "YAML root is not a mapping"
+
+    # Start with template as the base (template wins for top-level keys)
+    merged = type(template)()
+    for key in template:
+        merged[key] = template[key]
+
+    # Merge jobs: template jobs first (overwriting user jobs with same key),
+    # then append user-only jobs
+    template_jobs = template.get("jobs") or {}
+    existing_jobs = existing.get("jobs") or {}
+
+    merged_jobs = type(template_jobs)() if template_jobs else type(existing_jobs)()
+    # Template jobs in template order
+    for job_key in template_jobs:
+        merged_jobs[job_key] = template_jobs[job_key]
+    # User-added jobs not in template, preserved at the end
+    for job_key in existing_jobs:
+        if job_key not in template_jobs:
+            merged_jobs[job_key] = existing_jobs[job_key]
+    merged["jobs"] = merged_jobs
+
+    # Preserve any user top-level keys not in the template (rare, but safe)
+    for key in existing:
+        if key not in merged:
+            merged[key] = existing[key]
+
+    buf = StringIO()
+    yaml.dump(merged, buf)
+    return buf.getvalue(), None
+
+
 def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                      existing_hashes=None):
     """Process a list of template mappings: read each template, apply vars, write target files.
@@ -144,9 +198,7 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
     - APPENDABLE files: append template sections if the marker is not already present
     - MERGEABLE files: merge missing entries from the template into the existing file
     - JSON_MERGEABLE files: deep-merge template JSON into existing (user values preserved)
-    - UPDATABLE files (with --update): overwrite only if the file hasn't been customized
-      (detected via SHA-256 hash comparison against stored hashes)
-
+    - YAML_MERGEABLE files: job-level merge for CI workflows (template jobs win, user jobs preserved)
     Returns (created, skipped, warnings, new_hashes).
     """
     if existing_hashes is None:
@@ -206,31 +258,6 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                     skipped.append(target)
                 continue
 
-            # In --update mode, overwrite managed files only if not customized
-            if update and target in UPDATABLE:
-                current_hash = file_hash(target)
-                stored_hash = existing_hashes.get(target)
-                if stored_hash and current_hash == stored_hash:
-                    # File matches stored hash -- not customized, safe to overwrite
-                    with open(template_path, "r", encoding="utf-8") as f:
-                        raw = f.read()
-                    content, unreplaced = process_template(raw, vars_dict)
-                    target_dir = os.path.dirname(target)
-                    if target_dir and target_dir != ".":
-                        os.makedirs(target_dir, exist_ok=True)
-                    with open(target, "w", encoding="utf-8") as f:
-                        f.write(content)
-                    new_hashes[target] = file_hash(target)
-                    created.append(target + " (updated)")
-                    if unreplaced:
-                        warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
-                else:
-                    # File was customized or no stored hash -- skip conservatively
-                    # Seed the hash so future --update can detect changes
-                    new_hashes[target] = current_hash
-                    skipped.append(f"{target} (customized, use --force to overwrite)")
-                continue
-
             if target in JSON_MERGEABLE:
                 with open(target, "r", encoding="utf-8") as f:
                     existing_text = f.read()
@@ -251,6 +278,28 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                 with open(target, "w", encoding="utf-8") as f:
                     f.write(json.dumps(merged, indent=2))
                     f.write("\n")
+                created.append(target + " (merged)")
+                if unreplaced:
+                    warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
+                continue
+
+            if target in YAML_MERGEABLE:
+                with open(target, "r", encoding="utf-8") as f:
+                    existing_text = f.read()
+                with open(template_path, "r", encoding="utf-8") as f:
+                    raw = f.read()
+                content, unreplaced = process_template(raw, vars_dict)
+                merged_text, err = _yaml_merge_workflow(existing_text, content)
+                if err:
+                    warnings.append(f"{target}: YAML merge skipped: {err}")
+                    skipped.append(target)
+                    continue
+                target_dir = os.path.dirname(target)
+                if target_dir and target_dir != ".":
+                    os.makedirs(target_dir, exist_ok=True)
+                with open(target, "w", encoding="utf-8") as f:
+                    f.write(merged_text)
+                new_hashes[target] = file_hash(target)
                 created.append(target + " (merged)")
                 if unreplaced:
                     warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
