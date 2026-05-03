@@ -4,6 +4,9 @@ Findings from two independent audits (correctness + security) on v0.7.0, filtere
 
 ## Quick wins (effort 5 each)
 
+### Auto-commit after scaffold
+`rlsbl/commands/init_cmd.py` — scaffold leaves modified/untracked files that the user must manually commit. Consider auto-committing when scaffold completes without conflicts. On conflict-free runs: stage all scaffold-touched files and commit with a message like `"rlsbl scaffold v{version}"`. On runs WITH conflicts: still auto-commit — git allows committing files with conflict markers, and having them tracked is better than leaving them untracked. The user resolves conflicts and commits again. The key question is whether to use safegit or git (detect via `find_commit_tool`). Could also add `--no-commit` flag to opt out.
+
 ### Pagination URL validation in discover
 `rlsbl/commands/discover.py` — `_fetch_all_repos` follows `Link` header URLs without validating they start with `https://api.github.com/`. A MITM'd response could redirect the auth token to an arbitrary host. Fix: check URL prefix before following.
 
