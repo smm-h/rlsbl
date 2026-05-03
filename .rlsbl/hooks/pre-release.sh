@@ -7,15 +7,7 @@ set -euo pipefail
 
 echo "Running pre-release checks..."
 
-if [ -f go.mod ]; then
-  echo "Detected Go project"
-  go vet ./...
-  go build ./...
-  go test ./... -race -short -count=1
-elif [ -f package.json ]; then
-  echo "Detected npm project"
-  npm test
-elif [ -f pyproject.toml ]; then
+if [ -f pyproject.toml ]; then
   echo "Detected Python project"
   if command -v uv &>/dev/null; then
     uv run pytest
