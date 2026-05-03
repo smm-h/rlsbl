@@ -14,11 +14,6 @@ if [ -f go.mod ]; then
   go test ./... -race -short -count=1
 fi
 
-if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)" 2>/dev/null; then
-  echo "  npm: test"
-  npm test
-fi
-
 if [ -f pyproject.toml ]; then
   echo "  Python: pytest"
   if command -v uv &>/dev/null; then
@@ -26,6 +21,11 @@ if [ -f pyproject.toml ]; then
   elif command -v pytest &>/dev/null; then
     pytest
   fi
+fi
+
+if [ -f package.json ] && node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)" 2>/dev/null; then
+  echo "  npm: test"
+  npm test
 fi
 
 echo "Pre-release checks passed."
