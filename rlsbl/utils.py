@@ -117,10 +117,15 @@ def spawn_ci_watcher(commit_sha, tag):
         pass
 
     notify_cmd = _notify_command()
-    if not notify_cmd:
-        return
 
     label = f"{repo_name} {tag}" if repo_name else tag
+
+    # Capture the parent's tty so the background process can print to it
+    tty_path = ""
+    try:
+        tty_path = os.ttyname(sys.stderr.fileno())
+    except Exception:
+        pass
 
     script = f"""
 import subprocess, sys, time
@@ -154,7 +159,18 @@ for line in reversed(result.stdout.strip().splitlines()):
 
 ok = result.returncode == 0
 title = "{label}: CI passed" if ok else "{label}: CI FAILED"
-{notify_cmd}
+
+# Print to the original terminal
+tty_path = "{tty_path}"
+if tty_path:
+    try:
+        with open(tty_path, "w") as tty:
+            tty.write(f"\\nrlsbl: {{title}}\\n")
+    except Exception:
+        pass
+
+# Desktop notification
+{notify_cmd if notify_cmd else "pass"}
 """
     subprocess.Popen(
         [sys.executable, "-c", script],
