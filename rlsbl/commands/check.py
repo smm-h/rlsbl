@@ -168,35 +168,44 @@ def _check_name_pypi(name):
 def check_go_availability(name):
     """Check if a Go module path exists on pkg.go.dev.
 
-    Returns {"status": "available"|"taken"|"error", "message"?: str}.
+    Returns {"status": "not_found"|"exists"|"error", "message"?: str, "note"?: str}.
+
+    Go modules use repository paths (e.g. github.com/user/repo), not a flat
+    claimable namespace, so we report "not found" / "exists" rather than the
+    "available" / "taken" language used for npm and PyPI.
     """
     url = f"https://pkg.go.dev/{name}"
     try:
         req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=5) as resp:
             if resp.status == 200:
-                return {"status": "taken"}
+                return {"status": "exists"}
             return {"status": "error", "message": f"Unexpected status {resp.status}"}
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return {"status": "available"}
+            return {
+                "status": "not_found",
+                "note": "Go modules use repository paths, not a central registry.",
+            }
         return {"status": "error", "message": f"Unexpected status {e.code}"}
     except Exception as e:
         return {"status": "error", "message": str(e) or "Network error"}
 
 
 def _check_name_go(name):
-    """Check Go module path availability on pkg.go.dev."""
+    """Check Go module path on pkg.go.dev."""
     print(f'Checking pkg.go.dev for "{name}"...')
 
     result = check_go_availability(name)
     if result["status"] == "error":
         print(f"Error checking pkg.go.dev: {result['message']}", file=sys.stderr)
         sys.exit(1)
-    if result["status"] == "available":
-        print(f'"{name}" is available on pkg.go.dev.')
+    if result["status"] == "not_found":
+        print(f'"{name}" not found on pkg.go.dev.')
     else:
-        print(f'"{name}" already exists on pkg.go.dev.')
+        print(f'"{name}" exists on pkg.go.dev.')
+    if result.get("note"):
+        print(f"  Note: {result['note']}")
 
 
 def run_cmd(registry, args, flags):
