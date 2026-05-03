@@ -3,6 +3,9 @@
 ## 0.8.3
 
 - Fix watch: resolve short SHAs to full 40-char (`gh run list --commit` requires it)
+- Pre-release hook runs Python checks before npm (faster failure)
+- Node.js 24 in all CI/publish templates (dropped Node 18 EOL)
+- Go CI template uses `go-version-file: go.mod` instead of hardcoded versions; adds `-race` flag
 
 ## 0.8.2
 
