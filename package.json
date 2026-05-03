@@ -24,7 +24,8 @@
     "pypi",
     "publish",
     "cli",
-    "scaffold"
+    "scaffold",
+    "rlsbl"
   ],
   "author": "smm-h"
 }
