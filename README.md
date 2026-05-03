@@ -62,7 +62,7 @@ rlsbl release major --dry-run --registry npm
 
 The version is synced across all detected project files (`package.json`, `pyproject.toml`, `VERSION`) regardless of which registry is primary. Go projects use a plain `VERSION` file as the version source.
 
-If `scripts/pre-release.sh` exists, it runs before any changes are made. A non-zero exit aborts the release.
+If `scripts/pre-release.sh` exists, it runs before any changes are made. A non-zero exit aborts the release. If `scripts/post-release.sh` exists, it runs after the release completes (non-fatal). See [Release flow](#release-flow) for details.
 
 ### status
 
@@ -127,6 +127,8 @@ When you run `release`, the following happens in order:
 10. Pushes the branch to `origin`
 11. Creates a GitHub Release tagged `v<new-version>` with the changelog entry as notes
 12. The GitHub Release triggers `publish.yml`, which publishes to the registry
+13. Runs `scripts/post-release.sh` if present (non-fatal -- the release is already complete). The `RLSBL_VERSION` env var is set to the released version. Useful for local install (`go install ./cmd/myapp/`), deploy, or notifications.
+14. Spawns a background process that watches CI via `gh run watch`. When CI finishes, it prints the result to stderr (so AI agents can read it) and sends a desktop notification (`notify-send` on Linux, `osascript` on macOS). On CI failure, it also prints the GitHub Actions run URL. This happens automatically -- no configuration needed.
 
 ## What scaffold creates
 
@@ -141,10 +143,13 @@ When you run `release`, the following happens in order:
 | `.claude/settings.json` | Shared | Claude Code settings |
 | `scripts/check-prs.sh` | Shared | PR review helper |
 | `scripts/pre-release.sh` | Shared | Pre-release hook (runs before each release) |
+| `scripts/post-release.sh` | Shared | Post-release hook (runs after each release, non-fatal) |
 | `scripts/record-gif.sh` | Shared | Terminal recording helper |
 | `scripts/pre-push-hook.sh` | Shared | Pre-push changelog enforcement |
 
 All `.sh` files in `scripts/` are made executable automatically. The pre-push hook is installed into `.git/hooks/pre-push` during scaffold.
+
+The scaffolded `.gitignore` includes a `*.local-only` pattern. Create a `.local-only/` directory or rename files with a `.local-only` suffix to keep them out of version control -- useful for local-only assets, experiments, and keeping the working tree clean for tools that check `git status`.
 
 ## Pre-push hook
 
@@ -180,6 +185,7 @@ After configuration, all subsequent releases are handled by CI when `rlsbl relea
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RLSBL_PUSH_TIMEOUT` | `120` | Timeout in seconds for `git push` operations. Increase if your pre-push hooks (e.g. test suites) take longer than 2 minutes. |
+| `RLSBL_VERSION` | -- | Set automatically when running `scripts/post-release.sh`. Contains the just-released version string. |
 
 ## Requirements
 
