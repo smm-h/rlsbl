@@ -2,6 +2,9 @@
 
 ## 0.5.0
 
+- **Post-release hooks.** `scripts/post-release.sh` runs after a successful release with `RLSBL_VERSION` env var set. Non-fatal (release is already complete). Scaffolded via `rlsbl scaffold`.
+- **CI watcher.** After pushing, rlsbl spawns a background process that watches CI via `gh run watch` and sends a desktop notification (notify-send on Linux, osascript on macOS) when CI passes or fails.
+- `run()` utility accepts optional `env` parameter for subprocess environment
 - Ecosystem discoverability: `rlsbl discover` command lists all rlsbl-tagged projects via GitHub topics
 - Auto-tagging: `scaffold` and `release` inject `"rlsbl"` keyword into package.json/pyproject.toml and add the `rlsbl` GitHub topic
 - Opt-out via `--no-tag` flag, project config (`.rlsbl/config.json`), or user config (`~/.rlsbl/config.json`)
