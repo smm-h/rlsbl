@@ -37,9 +37,12 @@ def run_cmd(registry, args, flags):
     Defaults to HEAD if no commit SHA is provided.
     """
     try:
-        # Get commit SHA
+        # Get commit SHA (resolve short SHAs -- gh requires full 40-char)
         if args:
-            commit_sha = args[0]
+            try:
+                commit_sha = run("git", ["rev-parse", args[0]])
+            except Exception:
+                commit_sha = args[0]
         else:
             try:
                 commit_sha = run("git", ["rev-parse", "HEAD"])
