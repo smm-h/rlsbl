@@ -6,7 +6,7 @@ license = "MIT"
 authors = [{ name = "smm-h" }]
 readme = "README.md"
 requires-python = ">=3.11"
-keywords = ["release", "npm", "pypi", "go", "goreleaser", "publish", "cli", "scaffold"]
+keywords = ["release", "npm", "pypi", "go", "goreleaser", "publish", "cli", "scaffold", "rlsbl"]
 
 [project.urls]
 Repository = "https://github.com/smm-h/rlsbl"
