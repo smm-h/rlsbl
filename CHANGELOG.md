@@ -1,17 +1,20 @@
 # Changelog
 
+## 0.7.0
+
+- **Removed `check-prs` command.** Was a useless wrapper around `gh pr list`.
+- **JSON deep-merge for `.claude/settings.json`.** Scaffold now merges new template keys into existing user settings instead of skipping the file. User values are preserved.
+- **YAML job-level merge for CI workflows.** `ci.yml` and `publish.yml` are now merged at the job level: rlsbl-managed jobs are updated, user-added jobs are preserved. Uses `ruamel.yaml` for comment-preserving round-trip parsing.
+- **Explicit USER_OWNED category.** `CHANGELOG.md`, `LICENSE`, and hooks are formally marked as user-owned and never overwritten.
+- **LICENSE year update.** `scaffold --update` extends the copyright year range to the current year.
+
 ## 0.6.0
 
-- **Scripts moved to subcommands.** `check-prs.sh`, `record-gif.sh`, and `pre-push-hook.sh` are no longer scaffolded into `scripts/`. They are now built-in subcommands: `rlsbl check-prs`, `rlsbl record-gif`, `rlsbl pre-push-check`.
+- **Scripts moved to subcommands.** `check-prs.sh`, `record-gif.sh`, and `pre-push-hook.sh` are no longer scaffolded into `scripts/`. They are now built-in subcommands: `rlsbl record-gif`, `rlsbl pre-push-check`.
 - **Hooks moved to `.rlsbl/hooks/`.** `pre-release.sh` and `post-release.sh` moved from `scripts/` to `.rlsbl/hooks/`. `rlsbl release` looks for hooks there.
 - **`rlsbl watch` command.** Monitors all CI runs for a commit, prints results to stderr, sends desktop notification, exits 1 on failure. `rlsbl release` prints `Watch CI: rlsbl watch <sha>` for easy invocation.
 - **Pre-push hook is a one-liner.** `.git/hooks/pre-push` now calls `exec rlsbl pre-push-check "$@"` instead of being a full script copy. Updates happen via `uv tool upgrade rlsbl`, not re-scaffolding.
 - **Removed built-in background CI watcher** from `rlsbl release`. Use `rlsbl watch` explicitly instead.
-- **Removed `check-prs` command.** Was a useless wrapper around `gh pr list`.
-- **JSON deep-merge for `.claude/settings.json`.** Scaffold now merges new template keys into existing user settings instead of skipping the file. User values are preserved.
-- **YAML job-level merge for CI workflows.** `ci.yml` and `publish.yml` are now merged at the job level: rlsbl-managed jobs are updated, user-added jobs are preserved.
-- **Explicit USER_OWNED category.** `CHANGELOG.md`, `LICENSE`, and hooks are formally marked as user-owned and never overwritten.
-- **LICENSE year update.** `scaffold --update` extends the copyright year range to the current year.
 
 ## 0.5.2
 
