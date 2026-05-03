@@ -145,7 +145,7 @@ When you run `release`, the following happens in order:
 | `.rlsbl/hooks/post-release.sh` | Shared | User-customizable post-release actions |
 | `.git/hooks/pre-push` | Shared | One-liner that calls `rlsbl pre-push-check` |
 
-Hook files are made executable automatically. The `check-prs`, `record-gif`, and `pre-push-check` functionality is provided as built-in subcommands (`rlsbl check-prs`, `rlsbl record-gif`, `rlsbl pre-push-check`) rather than scaffolded scripts.
+Hook files are made executable automatically. The `record-gif` and `pre-push-check` functionality is provided as built-in subcommands (`rlsbl record-gif`, `rlsbl pre-push-check`) rather than scaffolded scripts.
 
 The scaffolded `.gitignore` includes a `*.local-only` pattern. Create a `.local-only/` directory or rename files with a `.local-only` suffix to keep them out of version control -- useful for local-only assets, experiments, and keeping the working tree clean for tools that check `git status`.
 
