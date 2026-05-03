@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.1
+
+- **Templates included in wheel.** Moved `templates/` into the `rlsbl/` package so non-editable installs (pip, pipx) get them. Previously `rlsbl scaffold` crashed on PyPI installs.
+- **`undo` checks prerequisites.** Now verifies gh CLI auth and clean working tree before proceeding.
+- **Non-ASCII preserved in package.json.** `json.dumps` now uses `ensure_ascii=False`.
+- **TOML trailing comma fix.** Adding the rlsbl keyword no longer produces a double comma.
+- **Pagination URL validation in `discover`.** Only follows `Link` header URLs pointing to `api.github.com`.
+- **`.rlsbl/version` included in release commit.** No more orphaned version marker changes.
+
 ## 0.8.0
 
 - **Universal three-way merge for scaffold updates.** Replaced all format-specific merge strategies (YAML job-level, JSON deep-merge, line-based, section append) with `git merge-file`. Bases are stored in `.rlsbl/bases/` at scaffold time. On `--update`, user customizations and template updates merge cleanly; conflicts get git-style conflict markers.
