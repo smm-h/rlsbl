@@ -136,6 +136,7 @@ def get_template_vars(dir_path):
         "author": author,
         "repoName": repo_name,
         "importName": import_name,
+        "publishSetup": "Configure Trusted Publishing on pypi.org for automated PyPI releases",
     }
 
 

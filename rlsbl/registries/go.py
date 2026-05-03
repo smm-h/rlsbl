@@ -86,6 +86,7 @@ def get_template_vars(dir_path):
         "author": author,
         "repoName": repo_name,
         "binCommand": short_name,
+        "publishSetup": "GoReleaser handles binary publishing via GitHub Actions (no secrets needed)",
     }
 
 
