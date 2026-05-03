@@ -109,32 +109,42 @@ def find_commit_tool():
 
 
 def spawn_ci_watcher(commit_sha, tag):
-    """Spawn a detached background process that watches CI and sends a desktop notification."""
+    """Spawn a detached background process that watches CI and prints results to stderr.
+
+    The spawned process inherits the parent's stderr so output appears in the
+    same terminal/stream -- important for AI agents that read stderr.
+    Desktop notifications are sent as a secondary channel when available.
+    """
+    repo_slug = ""
+    try:
+        repo_slug = run("gh", ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+    except Exception:
+        pass
+
     repo_name = ""
     try:
         repo_name = run("gh", ["repo", "view", "--json", "name", "-q", ".name"])
     except Exception:
         pass
 
-    notify_cmd = _notify_command()
-
     label = f"{repo_name} {tag}" if repo_name else tag
 
-    # Capture the parent's tty so the background process can print to it
-    tty_path = ""
-    try:
-        tty_path = os.ttyname(sys.stderr.fileno())
-    except Exception:
-        pass
+    # Build the notification snippet based on what's available on this platform
+    notify_snippet = _notify_snippet()
 
     script = f"""
 import subprocess, sys, time
 
+commit_sha = {commit_sha!r}
+label = {label!r}
+repo_slug = {repo_slug!r}
+
+# Find the CI run by commit SHA (retry up to 30s)
 run_id = None
 for _ in range(15):
     try:
         r = subprocess.run(
-            ["gh", "run", "list", "--commit", "{commit_sha}", "--limit", "1",
+            ["gh", "run", "list", "--commit", commit_sha, "--limit", "1",
              "--json", "databaseId", "-q", ".[0].databaseId"],
             capture_output=True, text=True, timeout=10)
         if r.returncode == 0 and r.stdout.strip():
@@ -147,54 +157,61 @@ for _ in range(15):
 if not run_id:
     sys.exit(0)
 
+# Watch the run until it completes
 result = subprocess.run(
     ["gh", "run", "watch", run_id, "--exit-status"],
     capture_output=True, text=True, timeout=3600)
 
+ok = result.returncode == 0
+
+# Extract last non-empty line as summary for desktop notification
 summary = ""
 for line in reversed(result.stdout.strip().splitlines()):
     if line.strip():
         summary = line.strip()
         break
 
-ok = result.returncode == 0
-title = "{label}: CI passed" if ok else "{label}: CI FAILED"
+# Print result to stderr so AI agents and terminal users can see it
+if ok:
+    print(f"rlsbl: {{label}}: CI passed", file=sys.stderr)
+else:
+    print(f"rlsbl: {{label}}: CI FAILED", file=sys.stderr)
+    if repo_slug and run_id:
+        print(f"rlsbl: https://github.com/{{repo_slug}}/actions/runs/{{run_id}}", file=sys.stderr)
 
-# Print to the original terminal
-tty_path = "{tty_path}"
-if tty_path:
-    try:
-        with open(tty_path, "w") as tty:
-            tty.write(f"\\nrlsbl: {{title}}\\n")
-    except Exception:
-        pass
-
-# Desktop notification
-{notify_cmd if notify_cmd else "pass"}
+# Desktop notification (optional, non-fatal)
+title = f"{{label}}: CI passed" if ok else f"{{label}}: CI FAILED"
+try:
+{notify_snippet}
+except Exception:
+    pass
 """
     subprocess.Popen(
         [sys.executable, "-c", script],
         start_new_session=True,
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
     )
 
 
-def _notify_command():
-    """Return a Python code snippet for sending a desktop notification, or None."""
+def _notify_snippet():
+    """Return an indented Python code snippet for sending a desktop notification.
+
+    Returns a pass statement if no notification tool is available.
+    The snippet is intended to be embedded inside a try/except block.
+    """
+    indent = "    "
     if sys.platform == "darwin":
         return (
-            'subprocess.run(["osascript", "-e",'
-            ' f\'display notification "{summary}" with title "{title}"\'],'
-            ' timeout=5)'
+            f'{indent}subprocess.run(["osascript", "-e",\n'
+            f'{indent}    f\'display notification "{{summary}}" with title "{{title}}"\'],\n'
+            f'{indent}    timeout=5)'
         )
     if shutil.which("notify-send"):
         return (
-            'urgency = "normal" if ok else "critical"\n'
-            'subprocess.run(["notify-send", "-u", urgency, title, summary], timeout=5)'
+            f'{indent}urgency = "normal" if ok else "critical"\n'
+            f'{indent}subprocess.run(["notify-send", "-u", urgency, title, summary], timeout=5)'
         )
-    return None
+    return f"{indent}pass"
 
 
 def bump_version(version, bump_type):
