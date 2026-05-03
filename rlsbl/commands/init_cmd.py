@@ -177,13 +177,19 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                 existing_lines = {
                     line.strip() for line in existing.split("\n") if line.strip()
                 }
+                # Normalize by stripping trailing slashes so e.g.
+                # "*.egg-info/" matches "*.egg-info" and vice versa.
+                existing_normalized = {
+                    line.rstrip("/") for line in existing_lines
+                }
                 new_lines = [
                     line.strip() for line in content.split("\n") if line.strip()
                 ]
                 # Only merge non-comment entries that are missing from the existing file
                 missing = [
                     line for line in new_lines
-                    if line not in existing_lines and not line.startswith("#")
+                    if line.rstrip("/") not in existing_normalized
+                    and not line.startswith("#")
                 ]
                 if missing:
                     with open(target, "a", encoding="utf-8") as f:
