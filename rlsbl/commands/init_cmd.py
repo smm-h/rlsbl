@@ -124,9 +124,41 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
         if os.path.exists(target) and not force:
             basename = os.path.basename(target)
 
-            # User-owned files are never touched after initial scaffold
+            # User-owned files are never touched after initial scaffold,
+            # except LICENSE gets its copyright year updated on --update.
             if target in USER_OWNED:
-                skipped.append(target)
+                if update and target == "LICENSE":
+                    from datetime import datetime
+                    current_year = str(datetime.now().year)
+                    with open(target, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    # Match "Copyright (c) YYYY" or "Copyright (c) YYYY-YYYY"
+                    updated = re.sub(
+                        r"(Copyright\s+\(c\)\s+\d{4})-(\d{4})",
+                        lambda m: (
+                            m.group(0) if m.group(2) == current_year
+                            else f"{m.group(1)}-{current_year}"
+                        ),
+                        content,
+                    )
+                    if updated == content:
+                        # No range found or range already current -- try single year
+                        updated = re.sub(
+                            r"(Copyright\s+\(c\)\s+)(\d{4})(?![-\d])",
+                            lambda m: (
+                                m.group(0) if m.group(2) == current_year
+                                else f"{m.group(1)}{m.group(2)}-{current_year}"
+                            ),
+                            content,
+                        )
+                    if updated != content:
+                        with open(target, "w", encoding="utf-8") as f:
+                            f.write(updated)
+                        created.append("LICENSE (year updated)")
+                    else:
+                        skipped.append(target)
+                else:
+                    skipped.append(target)
                 continue
 
             # In --update mode, overwrite managed files only if not customized
