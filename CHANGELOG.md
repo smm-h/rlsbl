@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2
+
+- **Version detection reads source tree first.** `__version__` now reads `pyproject.toml` directly when running from source, fixing stale metadata from editable installs.
+- **CLAUDE.md template is registry-specific.** Publish setup instructions (NPM_TOKEN, Trusted Publishing, GoReleaser) now match the project's registry instead of always showing NPM_TOKEN.
+- **Gitignore merge normalizes trailing slashes.** `*.egg-info/` and `*.egg-info` are now recognized as duplicates during scaffold merge.
+- **`record-gif.sh` no longer hardcodes `/tmp/`.** Uses bare `mktemp` for portability.
+- **Go check hidden by default in `rlsbl check`.** Only shown with `--registry go`. Labels changed from "available"/"taken" to "not found"/"exists" since Go modules use repository paths.
+- **Auth hint on 403 in `rlsbl discover`.** Suggests `gh auth login` when rate-limited.
+
 ## 0.5.1
 
 - **CI watcher prints to stderr.** The background CI watcher now writes results to inherited stderr instead of attempting tty detection. AI agents and terminal users both see CI pass/fail in their output stream. On failure, the GitHub Actions run URL is printed.
