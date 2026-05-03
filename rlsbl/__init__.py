@@ -3,11 +3,40 @@
 import os
 import sys
 
-try:
-    from importlib.metadata import version as _get_version
-    __version__ = _get_version("rlsbl")
-except Exception:
-    __version__ = "unknown"
+
+def _detect_version():
+    """Detect package version, preferring pyproject.toml over installed metadata.
+
+    Order: pyproject.toml in the source tree (accurate during editable installs)
+    -> importlib.metadata (works for regular installs) -> "unknown".
+    """
+    # Try reading version from pyproject.toml next to the package source
+    try:
+        pyproject_path = os.path.realpath(
+            os.path.join(os.path.dirname(__file__), "..", "pyproject.toml")
+        )
+        if os.path.isfile(pyproject_path):
+            try:
+                import tomllib
+            except ModuleNotFoundError:
+                import tomli as tomllib  # type: ignore[no-redef]
+            with open(pyproject_path, "rb") as f:
+                data = tomllib.load(f)
+            return data["project"]["version"]
+    except Exception:
+        pass
+
+    # Fall back to installed dist-info metadata
+    try:
+        from importlib.metadata import version as _get_version
+        return _get_version("rlsbl")
+    except Exception:
+        pass
+
+    return "unknown"
+
+
+__version__ = _detect_version()
 
 REGISTRIES = ("npm", "pypi", "go")
 COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover")
@@ -145,14 +174,17 @@ def main():
             sys.exit(1)
 
         if command == "check":
-            # check: if registry given, check that one; otherwise check all
+            # check: if registry given, check that one; otherwise check npm and pypi.
+            # Go is excluded from the default set because Go modules use repository
+            # paths (e.g. github.com/user/repo), not a flat claimable namespace, so
+            # "available" would be misleading.  Pass --registry go explicitly to check.
             if registry:
                 handler.run_cmd(registry, args, flags)
             else:
-                all_registries = ["npm", "pypi", "go"]
-                for i, r in enumerate(all_registries):
+                default_registries = ["npm", "pypi"]
+                for i, r in enumerate(default_registries):
                     handler.run_cmd(r, args, flags)
-                    if i < len(all_registries) - 1:
+                    if i < len(default_registries) - 1:
                         print("")
         elif command == "scaffold":
             if registry:
