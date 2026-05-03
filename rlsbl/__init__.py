@@ -39,7 +39,8 @@ def _detect_version():
 __version__ = _detect_version()
 
 REGISTRIES = ("npm", "pypi", "go")
-COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover", "watch")
+COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover", "watch",
+            "check-prs", "pre-push-check", "record-gif")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -54,6 +55,9 @@ Usage:
   rlsbl undo [--yes]                                        Revert the last release
   rlsbl discover [--mine]                                   List rlsbl ecosystem projects
   rlsbl watch [<commit-sha>]                                Watch CI runs for a commit
+  rlsbl check-prs                                          List open PRs (informational)
+  rlsbl pre-push-check                                     Verify CHANGELOG entry for current version
+  rlsbl record-gif                                         Record a demo GIF with vhs
 
 Options:
   --registry <npm|pypi|go>  Target a specific registry (auto-detected if omitted)
@@ -120,6 +124,9 @@ def _get_command_module(command):
         "undo": "undo",
         "discover": "discover",
         "watch": "watch",
+        "check-prs": "check_prs",
+        "pre-push-check": "pre_push_check",
+        "record-gif": "record_gif",
     }
     module_name = module_map.get(command)
     if not module_name:
@@ -218,6 +225,9 @@ def main():
             handler.run_cmd(registry, args, flags)
         elif command == "watch":
             # watch: monitors CI runs, no registry needed
+            handler.run_cmd(registry, args, flags)
+        elif command in ("check-prs", "pre-push-check", "record-gif"):
+            # Standalone commands, no registry needed
             handler.run_cmd(registry, args, flags)
         else:
             # release, status: use explicit registry or auto-detect primary
