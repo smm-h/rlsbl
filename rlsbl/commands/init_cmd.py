@@ -480,7 +480,7 @@ def run_cmd_multi(registries_list, args, flags):
 
     # Process merged publish workflow template
     merged_tpl_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                  "..", "templates", "merged")
+                                  "templates", "merged")
     merged_created, merged_skipped, merged_warnings, merged_hashes = process_mappings(
         merged_tpl_dir,
         [{"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"}],

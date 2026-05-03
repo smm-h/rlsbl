@@ -67,12 +67,12 @@ def get_version_file():
 
 def get_template_dir():
     """Returns path to the pypi-specific template directory."""
-    return os.path.join(os.path.dirname(__file__), "..", "..", "templates", "pypi")
+    return os.path.join(os.path.dirname(__file__), "..", "templates", "pypi")
 
 
 def get_shared_template_dir():
     """Returns path to the shared template directory."""
-    return os.path.join(os.path.dirname(__file__), "..", "..", "templates", "shared")
+    return os.path.join(os.path.dirname(__file__), "..", "templates", "shared")
 
 
 def get_template_vars(dir_path):
