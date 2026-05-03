@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- **Scripts moved to subcommands.** `check-prs.sh`, `record-gif.sh`, and `pre-push-hook.sh` are no longer scaffolded into `scripts/`. They are now built-in subcommands: `rlsbl check-prs`, `rlsbl record-gif`, `rlsbl pre-push-check`.
+- **Hooks moved to `.rlsbl/hooks/`.** `pre-release.sh` and `post-release.sh` moved from `scripts/` to `.rlsbl/hooks/`. `rlsbl release` looks for hooks there.
+- **`rlsbl watch` command.** Monitors all CI runs for a commit, prints results to stderr, sends desktop notification, exits 1 on failure. `rlsbl release` prints `Watch CI: rlsbl watch <sha>` for easy invocation.
+- **Pre-push hook is a one-liner.** `.git/hooks/pre-push` now calls `exec rlsbl pre-push-check "$@"` instead of being a full script copy. Updates happen via `uv tool upgrade rlsbl`, not re-scaffolding.
+- **Removed built-in background CI watcher** from `rlsbl release`. Use `rlsbl watch` explicitly instead.
+
 ## 0.5.2
 
 - **Version detection reads source tree first.** `__version__` now reads `pyproject.toml` directly when running from source, fixing stale metadata from editable installs.
