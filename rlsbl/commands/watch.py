@@ -13,9 +13,12 @@ def _notify(title, body):
     """Send a desktop notification. Non-fatal if unavailable."""
     try:
         if sys.platform == "darwin":
+            # Escape double quotes to prevent AppleScript injection
+            escaped_title = title.replace('"', '\\"')
+            escaped_body = body.replace('"', '\\"')
             subprocess.run(
                 ["osascript", "-e",
-                 f'display notification "{body}" with title "{title}"'],
+                 f'display notification "{escaped_body}" with title "{escaped_title}"'],
                 timeout=5, capture_output=True,
             )
         elif shutil.which("notify-send"):
