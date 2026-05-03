@@ -2,12 +2,20 @@
 
 import sys
 
-from ..utils import run, check_gh_installed, check_gh_auth, get_push_timeout
+from ..utils import run, check_gh_installed, check_gh_auth, get_push_timeout, is_clean_tree
 
 
 def run_cmd(registry, args, flags):
-    check_gh_installed()
-    check_gh_auth()
+    if not check_gh_installed():
+        print("Error: gh CLI is not installed.", file=sys.stderr)
+        sys.exit(1)
+    if not check_gh_auth():
+        print("Error: gh CLI is not authenticated.", file=sys.stderr)
+        sys.exit(1)
+
+    if not is_clean_tree():
+        print("Error: working tree is not clean. Commit your changes first.", file=sys.stderr)
+        sys.exit(1)
 
     # Find the latest tag
     try:
