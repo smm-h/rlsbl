@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3
+
+- Fix watch: resolve short SHAs to full 40-char (`gh run list --commit` requires it)
+
 ## 0.8.2
 
 - Handle KeyboardInterrupt in watch command (clean exit, no stack trace)
