@@ -19,6 +19,9 @@ APPEND_MARKER = "rlsbl"
 # Files where missing entries from the template are merged into the existing file
 MERGEABLE = {".gitignore"}
 
+# JSON files where template keys are deep-merged into existing user content
+JSON_MERGEABLE = {".claude/settings.json"}
+
 # Files that are safe to overwrite during --update (managed files users typically don't customize)
 UPDATABLE = {
     ".github/workflows/ci.yml",
@@ -92,6 +95,47 @@ def process_template(template_content, vars_dict):
     return content, unreplaced
 
 
+def _deep_merge(base, override):
+    """Deep-merge two JSON-like structures. User values (base) take precedence.
+
+    - Dicts: recursively merge; keys only in override are added, base keys kept.
+    - Lists: union by value; base items first, then new override items (deduplicated).
+    - Scalars: base wins.
+    """
+    if isinstance(base, dict) and isinstance(override, dict):
+        merged = {}
+        for key in base:
+            if key in override:
+                merged[key] = _deep_merge(base[key], override[key])
+            else:
+                merged[key] = base[key]
+        for key in override:
+            if key not in base:
+                merged[key] = override[key]
+        return merged
+    if isinstance(base, list) and isinstance(override, list):
+        # Deduplicate by value: keep base order, append new items from override
+        seen = set()
+        for item in base:
+            # Use JSON serialization for unhashable items (dicts, lists)
+            try:
+                seen.add(item)
+            except TypeError:
+                seen.add(json.dumps(item, sort_keys=True))
+        result = list(base)
+        for item in override:
+            if isinstance(item, (dict, list)):
+                key = json.dumps(item, sort_keys=True)
+            else:
+                key = item
+            if key not in seen:
+                seen.add(key)
+                result.append(item)
+        return result
+    # Scalars: base (user) wins
+    return base
+
+
 def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                      existing_hashes=None):
     """Process a list of template mappings: read each template, apply vars, write target files.
@@ -99,6 +143,7 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
     Skips existing files unless force is True, with special handling:
     - APPENDABLE files: append template sections if the marker is not already present
     - MERGEABLE files: merge missing entries from the template into the existing file
+    - JSON_MERGEABLE files: deep-merge template JSON into existing (user values preserved)
     - UPDATABLE files (with --update): overwrite only if the file hasn't been customized
       (detected via SHA-256 hash comparison against stored hashes)
 
@@ -184,6 +229,31 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                     # Seed the hash so future --update can detect changes
                     new_hashes[target] = current_hash
                     skipped.append(f"{target} (customized, use --force to overwrite)")
+                continue
+
+            if target in JSON_MERGEABLE:
+                with open(target, "r", encoding="utf-8") as f:
+                    existing_text = f.read()
+                with open(template_path, "r", encoding="utf-8") as f:
+                    raw = f.read()
+                content, unreplaced = process_template(raw, vars_dict)
+                try:
+                    existing_data = json.loads(existing_text)
+                    template_data = json.loads(content)
+                except json.JSONDecodeError as e:
+                    warnings.append(f"{target}: JSON parse error during merge: {e}")
+                    skipped.append(target)
+                    continue
+                merged = _deep_merge(existing_data, template_data)
+                target_dir = os.path.dirname(target)
+                if target_dir and target_dir != ".":
+                    os.makedirs(target_dir, exist_ok=True)
+                with open(target, "w", encoding="utf-8") as f:
+                    f.write(json.dumps(merged, indent=2))
+                    f.write("\n")
+                created.append(target + " (merged)")
+                if unreplaced:
+                    warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
                 continue
 
             if basename in APPENDABLE:
