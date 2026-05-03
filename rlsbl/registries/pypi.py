@@ -155,11 +155,8 @@ def get_shared_template_mappings():
         {"template": "gitignore.tpl", "target": ".gitignore"},
         {"template": "LICENSE.tpl", "target": "LICENSE"},
         {"template": "CLAUDE.md.tpl", "target": "CLAUDE.md"},
-        {"template": "check-prs.sh.tpl", "target": "scripts/check-prs.sh"},
-        {"template": "record-gif.sh.tpl", "target": "scripts/record-gif.sh"},
-        {"template": "pre-release.sh.tpl", "target": "scripts/pre-release.sh"},
-        {"template": "post-release.sh.tpl", "target": "scripts/post-release.sh"},
-        {"template": "pre-push-hook.sh.tpl", "target": "scripts/pre-push-hook.sh"},
+        {"template": "hooks/pre-release.sh.tpl", "target": ".rlsbl/hooks/pre-release.sh"},
+        {"template": "hooks/post-release.sh.tpl", "target": ".rlsbl/hooks/post-release.sh"},
         {"template": "claude-settings.json.tpl", "target": ".claude/settings.json"},
     ]
 
