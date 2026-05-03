@@ -84,6 +84,7 @@ def get_template_vars(dir_path):
         "binCommand": bin_command,
         "author": pkg.get("author", ""),
         "repoName": repo_name,
+        "publishSetup": "Requires NPM_TOKEN secret on GitHub (Settings > Secrets > Actions)",
     }
 
 
