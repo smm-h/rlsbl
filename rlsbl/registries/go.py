@@ -39,12 +39,12 @@ def get_version_file():
 
 def get_template_dir():
     """Returns path to the go-specific template directory."""
-    return os.path.join(os.path.dirname(__file__), "..", "..", "templates", "go")
+    return os.path.join(os.path.dirname(__file__), "..", "templates", "go")
 
 
 def get_shared_template_dir():
     """Returns path to the shared template directory."""
-    return os.path.join(os.path.dirname(__file__), "..", "..", "templates", "shared")
+    return os.path.join(os.path.dirname(__file__), "..", "templates", "shared")
 
 
 def get_template_vars(dir_path):

@@ -32,7 +32,7 @@ def write_version(dir_path, version):
 
     # Preserve trailing newline if present
     trailing_newline = "\n" if raw.endswith("\n") else ""
-    output = json.dumps(pkg, indent=indent) + trailing_newline
+    output = json.dumps(pkg, indent=indent, ensure_ascii=False) + trailing_newline
     # Atomic write: write to temp file, then rename
     tmp_path = pkg_path + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as f:
@@ -47,12 +47,12 @@ def get_version_file():
 
 def get_template_dir():
     """Returns path to the npm-specific template directory."""
-    return os.path.join(os.path.dirname(__file__), "..", "..", "templates", "npm")
+    return os.path.join(os.path.dirname(__file__), "..", "templates", "npm")
 
 
 def get_shared_template_dir():
     """Returns path to the shared template directory."""
-    return os.path.join(os.path.dirname(__file__), "..", "..", "templates", "shared")
+    return os.path.join(os.path.dirname(__file__), "..", "templates", "shared")
 
 
 def get_template_vars(dir_path):
