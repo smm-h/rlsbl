@@ -32,7 +32,7 @@ def ensure_npm_keyword(dir_path=".", quiet=False):
 
     # Preserve trailing newline if present
     trailing_newline = "\n" if raw.endswith("\n") else ""
-    output = json.dumps(pkg, indent=indent) + trailing_newline
+    output = json.dumps(pkg, indent=indent, ensure_ascii=False) + trailing_newline
 
     # Atomic write: write to temp file, then rename
     tmp_path = pkg_path + ".tmp"
@@ -82,11 +82,16 @@ def ensure_pypi_keyword(dir_path=".", quiet=False):
             # Find the indent used for existing items
             item_indent_match = re.search(r'\n( +)"', array_content)
             item_indent = item_indent_match.group(1) if item_indent_match else "    "
-            new_array_content = array_content.rstrip() + f',\n{item_indent}"rlsbl"\n'
+            # Strip trailing comma to avoid double comma when the list
+            # already has a trailing comma before the closing bracket
+            stripped = array_content.rstrip()
+            stripped = stripped.rstrip(",")
+            new_array_content = stripped + f',\n{item_indent}"rlsbl"\n'
         else:
             # Single-line
             if array_content.strip():
-                new_array_content = array_content.rstrip() + ', "rlsbl"'
+                stripped_sl = array_content.rstrip().rstrip(",")
+                new_array_content = stripped_sl + ', "rlsbl"'
             else:
                 new_array_content = '"rlsbl"'
         new_field = prefix + new_array_content + "]"
