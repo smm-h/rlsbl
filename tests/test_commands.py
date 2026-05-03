@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from io import StringIO
@@ -448,6 +449,212 @@ class TestHashFunctions(unittest.TestCase):
 
     def test_load_hashes_returns_empty_dict_when_no_file(self):
         self.assertEqual(load_hashes(), {})
+
+
+# ---------------------------------------------------------------------------
+# Release command tests
+# ---------------------------------------------------------------------------
+
+
+class TestRelease(unittest.TestCase):
+    """Tests for rlsbl.commands.release."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+        # Create package.json so npm registry is detected
+        with open("package.json", "w") as f:
+            json.dump({"name": "test-pkg", "version": "1.0.0"}, f, indent=2)
+            f.write("\n")
+        # Create CHANGELOG.md with entry for the bumped version
+        with open("CHANGELOG.md", "w") as f:
+            f.write("# Changelog\n\n## 1.0.1\n\nPatch release with bugfixes and improvements.\n")
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_release_dry_run(self, _gh_inst, _gh_auth, _clean, _branch,
+                             _commit_tool, mock_run, _push):
+        """Dry run should not modify any files."""
+        # First tag -l call checks if current version tag exists (return
+        # non-empty so it treats this as an existing release and bumps).
+        # Second tag -l call checks if the bumped tag exists (return empty).
+        mock_run.side_effect = ["v1.0.0", ""]
+
+        from rlsbl.commands.release import run_cmd
+
+        # Read original file contents
+        with open("package.json") as f:
+            orig_pkg = f.read()
+        with open("CHANGELOG.md") as f:
+            orig_cl = f.read()
+
+        with patch("sys.stdout", new_callable=StringIO):
+            run_cmd("npm", ["patch"], {"dry-run": True, "quiet": False})
+
+        # Files should be unchanged
+        with open("package.json") as f:
+            self.assertEqual(f.read(), orig_pkg)
+        with open("CHANGELOG.md") as f:
+            self.assertEqual(f.read(), orig_cl)
+
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=False)
+    def test_release_dirty_tree(self, _clean, _gh_auth, _gh_inst):
+        """Dirty working tree should cause SystemExit."""
+        from rlsbl.commands.release import run_cmd
+
+        with self.assertRaises(SystemExit) as ctx:
+            run_cmd("npm", ["patch"], {"quiet": True})
+        self.assertEqual(ctx.exception.code, 1)
+
+
+# ---------------------------------------------------------------------------
+# Undo command tests
+# ---------------------------------------------------------------------------
+
+
+class TestUndo(unittest.TestCase):
+    """Tests for rlsbl.commands.undo."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    @patch("rlsbl.commands.undo.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.undo.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.undo.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.undo.run")
+    def test_undo_no_tags(self, mock_run, _gh_inst, _gh_auth, _clean):
+        """When git describe raises, undo should exit with 'no tags found'."""
+        mock_run.side_effect = Exception("no tags")
+
+        from rlsbl.commands.undo import run_cmd
+
+        with self.assertRaises(SystemExit) as ctx:
+            run_cmd("npm", [], {"yes": True})
+        self.assertEqual(ctx.exception.code, 1)
+
+    @patch("rlsbl.commands.undo.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.undo.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.undo.is_clean_tree", return_value=False)
+    def test_undo_dirty_tree(self, _clean, _gh_auth, _gh_inst):
+        """Dirty working tree should cause SystemExit."""
+        from rlsbl.commands.undo import run_cmd
+
+        with self.assertRaises(SystemExit) as ctx:
+            run_cmd("npm", [], {"yes": True})
+        self.assertEqual(ctx.exception.code, 1)
+
+
+# ---------------------------------------------------------------------------
+# Check command tests
+# ---------------------------------------------------------------------------
+
+
+class TestCheck(unittest.TestCase):
+    """Tests for rlsbl.commands.check — npm availability checks."""
+
+    @patch("rlsbl.commands.check.subprocess.run")
+    def test_check_npm_available(self, mock_subprocess_run):
+        """When npm view raises CalledProcessError with 404, name is available."""
+        from rlsbl.commands.check import check_npm_availability
+
+        mock_subprocess_run.side_effect = subprocess.CalledProcessError(
+            1, "npm", stderr="E404 Not Found"
+        )
+        result = check_npm_availability("nonexistent-pkg-xyz")
+        self.assertEqual(result["status"], "available")
+
+    @patch("rlsbl.commands.check.subprocess.run")
+    def test_check_npm_taken(self, mock_subprocess_run):
+        """When npm view succeeds, name is taken."""
+        from rlsbl.commands.check import check_npm_availability
+
+        mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=["npm", "view", "express", "name"],
+            returncode=0,
+            stdout="express",
+            stderr="",
+        )
+        result = check_npm_availability("express")
+        self.assertEqual(result["status"], "taken")
+
+
+# ---------------------------------------------------------------------------
+# Pre-push check command tests
+# ---------------------------------------------------------------------------
+
+
+class TestPrePushCheck(unittest.TestCase):
+    """Tests for rlsbl.commands.pre_push_check — version detection."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    def test_detects_npm_version(self):
+        """Detects version from package.json."""
+        with open("package.json", "w") as f:
+            json.dump({"name": "my-pkg", "version": "2.3.4"}, f)
+
+        from rlsbl.commands.pre_push_check import _detect_version
+
+        version, reg_name = _detect_version()
+        self.assertEqual(version, "2.3.4")
+        self.assertEqual(reg_name, "npm")
+
+    def test_detects_pypi_version(self):
+        """Detects version from pyproject.toml."""
+        with open("pyproject.toml", "w") as f:
+            f.write('[project]\nname = "my-pkg"\nversion = "0.5.0"\n')
+
+        from rlsbl.commands.pre_push_check import _detect_version
+
+        version, reg_name = _detect_version()
+        self.assertEqual(version, "0.5.0")
+        self.assertEqual(reg_name, "pypi")
+
+    def test_detects_go_version(self):
+        """Detects version from go.mod + VERSION file."""
+        with open("go.mod", "w") as f:
+            f.write("module github.com/user/myapp\n\ngo 1.22\n")
+        with open("VERSION", "w") as f:
+            f.write("1.4.0\n")
+
+        from rlsbl.commands.pre_push_check import _detect_version
+
+        version, reg_name = _detect_version()
+        self.assertEqual(version, "1.4.0")
+        self.assertEqual(reg_name, "go")
+
+    def test_no_project(self):
+        """Empty directory should return (None, None)."""
+        from rlsbl.commands.pre_push_check import _detect_version
+
+        version, reg_name = _detect_version()
+        self.assertIsNone(version)
+        self.assertIsNone(reg_name)
 
 
 if __name__ == "__main__":
