@@ -254,4 +254,15 @@ def run_cmd(registry, args, flags):
     if should_tag(flags):
         ensure_github_topic(quiet=quiet)
 
+    # Run post-release hook if present (non-fatal: release is already complete)
+    post_release_script = os.path.join(".", "scripts", "post-release.sh")
+    if os.path.exists(post_release_script):
+        log("Running post-release hook...")
+        try:
+            env = os.environ.copy()
+            env["RLSBL_VERSION"] = new_version
+            run("bash", [post_release_script], env=env)
+        except Exception as e:
+            print(f"Warning: post-release hook failed: {e}", file=sys.stderr)
+
     log(f"\nRelease {new_version} complete!")

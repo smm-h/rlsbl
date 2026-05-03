@@ -7,10 +7,10 @@ import subprocess
 import sys
 
 
-def run(cmd, args=None, timeout=120):
+def run(cmd, args=None, timeout=120, env=None):
     """Run a command with args, return trimmed stdout. Raise on failure."""
     full_cmd = [cmd] + (args or [])
-    result = subprocess.run(full_cmd, capture_output=True, text=True, check=True, timeout=timeout)
+    result = subprocess.run(full_cmd, capture_output=True, text=True, check=True, timeout=timeout, env=env)
     return result.stdout.strip()
 
 

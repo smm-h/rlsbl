@@ -42,6 +42,8 @@ def run_cmd(registry, args, flags):
     print("\nHooks:")
     pre_release = os.path.join("scripts", "pre-release.sh")
     print(f"  pre-release.sh: {'yes' if os.path.exists(pre_release) else 'no'}")
+    post_release = os.path.join("scripts", "post-release.sh")
+    print(f"  post-release.sh: {'yes' if os.path.exists(post_release) else 'no'}")
     pre_push = os.path.join(".git", "hooks", "pre-push")
     print(f"  pre-push hook: {'installed' if os.path.exists(pre_push) else 'not installed'}")
 
