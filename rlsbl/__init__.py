@@ -40,7 +40,7 @@ __version__ = _detect_version()
 
 REGISTRIES = ("npm", "pypi", "go")
 COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover", "watch",
-            "pre-push-check", "record-gif")
+            "pre-push-check", "prs", "record-gif")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -55,6 +55,7 @@ Usage:
   rlsbl undo [--yes]                                        Revert the last release
   rlsbl discover [--mine]                                   List rlsbl ecosystem projects
   rlsbl watch [<commit-sha>]                                Watch CI runs for a commit
+  rlsbl prs                                                 List open pull requests
   rlsbl pre-push-check                                     Verify CHANGELOG entry for current version
   rlsbl record-gif [--width N] [--height N] [--font-size N] [--duration N]
                                                             Record a demo GIF with vhs
@@ -125,6 +126,7 @@ def _get_command_module(command):
         "discover": "discover",
         "watch": "watch",
         "pre-push-check": "pre_push_check",
+        "prs": "prs",
         "record-gif": "record_gif",
     }
     module_name = module_map.get(command)
@@ -230,7 +232,7 @@ def main():
         elif command == "watch":
             # watch: monitors CI runs, no registry needed
             handler.run_cmd(registry, args, flags)
-        elif command in ("pre-push-check", "record-gif"):
+        elif command in ("pre-push-check", "record-gif", "prs"):
             # Standalone commands, no registry needed
             handler.run_cmd(registry, args, flags)
         else:
