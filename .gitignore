@@ -13,4 +13,4 @@ coverage/
 .env
 .env.local
 *.local-only
-
+.rlsbl/lock
