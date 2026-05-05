@@ -7,9 +7,7 @@
     "rlsbl": "bin/cli.js"
   },
   "files": [
-    "bin/",
-    "rlsbl/",
-    "templates/"
+    "bin/"
   ],
   "repository": {
     "type": "git",
