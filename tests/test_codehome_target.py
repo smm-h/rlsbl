@@ -2,12 +2,16 @@
 
 import json
 import os
+import subprocess
 import tempfile
 
 import pytest
 
 from rlsbl.targets.protocol import ReleaseTarget
-from rlsbl.targets.codehome import CodehomeTarget, PluginValidationError, validate_plugin_json
+from rlsbl.targets.codehome import (
+    CodehomeTarget, PluginValidationError, validate_plugin_json,
+    generate_registry_entry,
+)
 from rlsbl.targets import TARGETS
 
 
@@ -214,3 +218,144 @@ class TestCodehomeRegistry:
         target = CodehomeTarget()
         hint = target.get_project_init_hint()
         assert "plugin.json" in hint
+
+
+class TestGenerateRegistryEntry:
+    """Tests for generate_registry_entry() utility function."""
+
+    def test_basic_entry_with_git_remote(self):
+        """Generates correct entry when plugin.json and git remote exist."""
+        with tempfile.TemporaryDirectory() as d:
+            # Set up a git repo with a remote
+            subprocess.run(["git", "init"], cwd=d, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "git@github.com:smm-h/supervisor.git"],
+                cwd=d, capture_output=True, check=True,
+            )
+            plugin_data = {
+                "name": "supervisor",
+                "version": "1.0.0",
+                "description": "Worktree, branch, and git management",
+                "plugins_provided": ["supervisor", "worktree"],
+            }
+            with open(os.path.join(d, "plugin.json"), "w") as f:
+                json.dump(plugin_data, f)
+
+            entry = generate_registry_entry(d)
+
+            assert entry["name"] == "supervisor"
+            assert entry["description"] == "Worktree, branch, and git management"
+            assert entry["plugins_provided"] == ["supervisor", "worktree"]
+            assert entry["repo"] == "https://github.com/smm-h/supervisor"
+
+    def test_entry_without_git_remote(self):
+        """Works without git remote -- repo field omitted."""
+        with tempfile.TemporaryDirectory() as d:
+            # No git init, so no remote
+            plugin_data = {
+                "name": "my-plugin",
+                "version": "0.1.0",
+                "description": "A test plugin",
+            }
+            with open(os.path.join(d, "plugin.json"), "w") as f:
+                json.dump(plugin_data, f)
+
+            entry = generate_registry_entry(d)
+
+            assert entry["name"] == "my-plugin"
+            assert entry["description"] == "A test plugin"
+            # Falls back to [name] when plugins_provided is absent
+            assert entry["plugins_provided"] == ["my-plugin"]
+            assert "repo" not in entry
+
+    def test_entry_no_plugin_json_raises(self):
+        """Raises FileNotFoundError when plugin.json is missing."""
+        with tempfile.TemporaryDirectory() as d:
+            with pytest.raises(FileNotFoundError):
+                generate_registry_entry(d)
+
+    def test_ssh_url_normalized_to_https(self):
+        """SSH remote URLs are converted to HTTPS."""
+        with tempfile.TemporaryDirectory() as d:
+            subprocess.run(["git", "init"], cwd=d, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "git@github.com:user/repo.git"],
+                cwd=d, capture_output=True, check=True,
+            )
+            plugin_data = {
+                "name": "repo",
+                "version": "1.0.0",
+                "description": "Test",
+            }
+            with open(os.path.join(d, "plugin.json"), "w") as f:
+                json.dump(plugin_data, f)
+
+            entry = generate_registry_entry(d)
+            assert entry["repo"] == "https://github.com/user/repo"
+
+    def test_https_url_preserved(self):
+        """HTTPS remote URLs are used as-is (minus .git suffix)."""
+        with tempfile.TemporaryDirectory() as d:
+            subprocess.run(["git", "init"], cwd=d, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "https://github.com/user/repo.git"],
+                cwd=d, capture_output=True, check=True,
+            )
+            plugin_data = {
+                "name": "repo",
+                "version": "1.0.0",
+                "description": "Test",
+            }
+            with open(os.path.join(d, "plugin.json"), "w") as f:
+                json.dump(plugin_data, f)
+
+            entry = generate_registry_entry(d)
+            assert entry["repo"] == "https://github.com/user/repo"
+
+
+class TestRegisterCommand:
+    """Tests for the `rlsbl register` CLI command."""
+
+    def test_register_prints_valid_json(self):
+        """rlsbl register prints valid JSON to stdout."""
+        with tempfile.TemporaryDirectory() as d:
+            subprocess.run(["git", "init"], cwd=d, capture_output=True, check=True)
+            subprocess.run(
+                ["git", "remote", "add", "origin", "https://github.com/test/plugin.git"],
+                cwd=d, capture_output=True, check=True,
+            )
+            plugin_data = {
+                "name": "test-plugin",
+                "version": "0.2.0",
+                "description": "A test plugin for CI",
+                "plugins_provided": ["test-plugin", "helper"],
+            }
+            with open(os.path.join(d, "plugin.json"), "w") as f:
+                json.dump(plugin_data, f)
+
+            from rlsbl.commands.register_cmd import run_cmd
+            import io
+            import sys
+
+            captured = io.StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = captured
+            try:
+                run_cmd(None, [], {"scope": d})
+            finally:
+                sys.stdout = old_stdout
+
+            output = captured.getvalue()
+            parsed = json.loads(output)
+            assert parsed["name"] == "test-plugin"
+            assert parsed["repo"] == "https://github.com/test/plugin"
+            assert parsed["plugins_provided"] == ["test-plugin", "helper"]
+
+    def test_register_no_plugin_json_exits(self):
+        """rlsbl register exits with error when no plugin.json exists."""
+        with tempfile.TemporaryDirectory() as d:
+            from rlsbl.commands.register_cmd import run_cmd
+
+            with pytest.raises(SystemExit) as exc_info:
+                run_cmd(None, [], {"scope": d})
+            assert exc_info.value.code == 1
