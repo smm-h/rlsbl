@@ -1,6 +1,7 @@
 """Watch command: monitor CI runs for a commit and report results."""
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -90,6 +91,54 @@ def _watch_runs(runs, label, repo_slug):
     return results
 
 
+# Keywords that indicate a publish/deploy workflow (case-insensitive match)
+_PUBLISH_KEYWORDS = ("publish", "deploy", "release")
+
+
+def _has_publish_workflow_on_disk():
+    """Check if any .github/workflows file looks like a publish workflow."""
+    workflow_dir = os.path.join(".github", "workflows")
+    if not os.path.isdir(workflow_dir):
+        return False
+    for filename in os.listdir(workflow_dir):
+        name_lower = filename.lower()
+        if any(kw in name_lower for kw in _PUBLISH_KEYWORDS):
+            return True
+    return False
+
+
+def _is_publish_workflow(name):
+    """Return True if the workflow name matches a publish/deploy/release pattern."""
+    return any(kw in name.lower() for kw in _PUBLISH_KEYWORDS)
+
+
+def _print_workflow_audit(results):
+    """Print a summary of which workflows ran and flag missing publish workflows.
+
+    Returns True if a missing-publish warning was printed (for testability).
+    """
+    ran_names = [r["name"] for r in results]
+    has_publish_run = any(_is_publish_workflow(name) for name in ran_names)
+    publish_expected = _has_publish_workflow_on_disk()
+    missing_publish = publish_expected and not has_publish_run
+
+    # Print summary table
+    print("\nWorkflows:", file=sys.stderr)
+    for r in results:
+        status = "passed" if r["passed"] else "FAILED"
+        print(f"  {r['name']:<20s} {status}", file=sys.stderr)
+
+    if missing_publish:
+        print("  (!) Publish workflow exists but did not run", file=sys.stderr)
+        print(
+            "\nWarning: publish workflow exists but did not trigger for this "
+            "commit. The package may not have been published.",
+            file=sys.stderr,
+        )
+
+    return missing_publish
+
+
 def run_cmd(registry, args, flags):
     """Watch all CI runs for a commit until they complete.
 
@@ -150,6 +199,9 @@ def run_cmd(registry, args, flags):
 
         # Watch runs in parallel (or directly if only one)
         results = _watch_runs(runs, label, repo_slug)
+
+        # Workflow audit: list what ran and flag missing publish workflows
+        _print_workflow_audit(results)
 
         # Desktop notification with aggregated results
         passed = sum(1 for r in results if r["passed"])
