@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.2
+
+- **Watch re-polls for late-starting workflows.** After initial runs complete, waits 5 seconds and re-polls for workflows that started late (e.g., Publish triggered by GitHub Release creation). Fixes missing Publish detection.
+
 ## 0.11.1
 
 - **Release aborts if behind remote.** Fetches origin before releasing and exits if local branch is behind. Use `--skip-remote-check` for offline releases.
