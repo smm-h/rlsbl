@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-from ..config import should_tag
+from ..config import read_json_config, should_tag
 from ..lock import acquire_lock, release_lock
 from ..registries import REGISTRIES
 from ..tagging import ensure_github_topic, ensure_npm_keyword, ensure_pypi_keyword
@@ -42,6 +42,55 @@ def parse_porcelain_paths(porcelain_output):
         file_path = parts[1].split(" -> ")[-1]
         dirty_files.add(file_path)
     return dirty_files
+
+
+def resolve_release_targets(primary, flags):
+    """Compute the effective set of secondary target names for this release.
+
+    Precedence:
+      1. Start with the baseline from .rlsbl/config.json "release_targets" list.
+         If absent, fall back to auto-detect (all root-scoped targets that detect(".")).
+      2. Apply --include to add targets, --exclude to remove targets.
+      3. The primary target is always excluded from the secondary set
+         (it's handled separately by the main release flow).
+
+    Returns a set of target name strings.
+    """
+    from ..targets import TARGETS as ALL_TARGETS
+
+    config = read_json_config(os.path.join(".rlsbl", "config.json"))
+    configured = config.get("release_targets")
+
+    if configured is not None:
+        # Baseline from config -- only include targets that actually exist
+        baseline = {t for t in configured if t in ALL_TARGETS}
+    else:
+        # Auto-detect: all root-scoped targets that are present
+        baseline = {
+            name for name, t in ALL_TARGETS.items()
+            if t.scope == "root" and t.detect(".")
+        }
+
+    # Apply --include (comma-separated or repeated)
+    include_raw = flags.get("include")
+    if include_raw:
+        for name in include_raw.split(","):
+            name = name.strip()
+            if name:
+                baseline.add(name)
+
+    # Apply --exclude (comma-separated or repeated)
+    exclude_raw = flags.get("exclude")
+    if exclude_raw:
+        for name in exclude_raw.split(","):
+            name = name.strip()
+            if name:
+                baseline.discard(name)
+
+    # Never include the primary target in the secondary set
+    baseline.discard(primary)
+
+    return baseline
 
 
 def run_cmd(registry, args, flags):
@@ -231,6 +280,9 @@ def run_cmd(registry, args, flags):
         log("--- No changes made ---")
         return
 
+    # Resolve which secondary targets participate in this release
+    secondary_targets = resolve_release_targets(registry, flags) if not is_scoped else set()
+
     # Acquire advisory lock to prevent concurrent rlsbl operations
     acquire_lock()
 
@@ -239,6 +291,7 @@ def run_cmd(registry, args, flags):
             registry, reg, flags, quiet, log, new_version, current_version,
             bump_type, tag, branch, changelog_entry, target,
             is_scoped=is_scoped, version_dir=version_dir, scope=scope,
+            secondary_targets=secondary_targets,
         )
     finally:
         release_lock()
@@ -246,7 +299,8 @@ def run_cmd(registry, args, flags):
 
 def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current_version,
                           bump_type, tag, branch, changelog_entry, target,
-                          is_scoped=False, version_dir=".", scope=None):
+                          is_scoped=False, version_dir=".", scope=None,
+                          secondary_targets=None):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     # Pre-compute which files will be modified
     version_file = reg.get_version_file()
@@ -409,22 +463,21 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     except Exception as e:
         print(f"Warning: target publish step failed: {e}", file=sys.stderr)
 
-    # Multi-target: run build/publish for secondary root-scoped targets
-    # (e.g. docs target piggybacks on the primary release)
-    if not is_scoped and not flags.get("skip-docs"):
+    # Multi-target: run build/publish for secondary targets resolved earlier
+    if not is_scoped and secondary_targets:
         from ..targets import TARGETS as ALL_TARGETS
-        for sec_name, sec_target in ALL_TARGETS.items():
-            if sec_name == registry:
+        for sec_name in sorted(secondary_targets):
+            sec_target = ALL_TARGETS.get(sec_name)
+            if sec_target is None:
                 continue
-            if sec_target.scope == "root" and sec_target.detect("."):
-                try:
-                    sec_target.build(".", new_version)
-                except Exception as e:
-                    print(f"Warning: {sec_name} target build failed: {e}", file=sys.stderr)
-                try:
-                    sec_target.publish(".", new_version)
-                except Exception as e:
-                    print(f"Warning: {sec_name} target publish failed: {e}", file=sys.stderr)
+            try:
+                sec_target.build(".", new_version)
+            except Exception as e:
+                print(f"Warning: {sec_name} target build failed: {e}", file=sys.stderr)
+            try:
+                sec_target.publish(".", new_version)
+            except Exception as e:
+                print(f"Warning: {sec_name} target publish failed: {e}", file=sys.stderr)
 
     # Ecosystem tagging: add GitHub topic after release is created (skip for scoped)
     if should_tag(flags) and not is_scoped:

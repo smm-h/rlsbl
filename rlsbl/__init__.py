@@ -68,6 +68,8 @@ Options:
   --target <npm|pypi|go>    Target a specific registry (auto-detected if omitted)
   --registry <npm|pypi|go>  Deprecated alias for --target
   --scope <subdir>          Subdirectory scope for subdir-scoped targets
+  --include <target>        Add a target to the release (comma-separated)
+  --exclude <target>        Remove a target from the release (comma-separated)
   --no-tag               Disable ecosystem tagging for this invocation
   --help, -h             Show this help
   --version, -v          Show version"""
@@ -94,7 +96,8 @@ def parse_args(argv):
     Flags listed in VALUE_FLAGS consume the next token as their value
     (e.g. --registry npm). All other --flags are boolean.
     """
-    VALUE_FLAGS = ("registry", "target", "scope", "width", "height", "font-size", "duration")
+    VALUE_FLAGS = ("registry", "target", "scope", "width", "height", "font-size", "duration",
+                   "include", "exclude")
     raw = argv[1:]
     positional = []
     flags = {}

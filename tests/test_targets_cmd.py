@@ -180,10 +180,10 @@ class TestMultiTargetRelease:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
-    def test_skip_docs_flag_suppresses_secondary(
+    def test_exclude_docs_flag_suppresses_secondary(
         self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
     ):
-        """--skip-docs prevents secondary target build/publish from running."""
+        """--exclude docs prevents secondary target build/publish from running."""
         # Create selfdoc.json so docs target is detected
         with open("selfdoc.json", "w") as f:
             f.write("{}")
@@ -203,7 +203,7 @@ class TestMultiTargetRelease:
             from rlsbl.commands.release import run_cmd
 
             with patch("sys.stdout", StringIO()):
-                run_cmd("npm", ["patch"], {"yes": True, "quiet": False, "skip-docs": True})
+                run_cmd("npm", ["patch"], {"yes": True, "quiet": False, "exclude": "docs"})
 
             # Verify docs target build/publish were NOT called
             build_mock.assert_not_called()
