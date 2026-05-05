@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -29,16 +30,39 @@ def _get_github_token():
 
 
 def _make_request(url, token):
-    """Make a GET request to the GitHub API, return parsed JSON and response headers."""
+    """Make a GET request to the GitHub API, return parsed JSON and response headers.
+
+    On a 403 with a Retry-After header, waits (capped at 10s) and retries once.
+    """
     req = urllib.request.Request(url, method="GET")
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("User-Agent", "rlsbl-cli")
     if token:
         req.add_header("Authorization", f"token {token}")
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-        headers = dict(resp.headers)
-        return data, headers
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            headers = dict(resp.headers)
+            return data, headers
+    except urllib.error.HTTPError as e:
+        if e.code != 403:
+            raise
+        retry_after = e.headers.get("Retry-After")
+        if retry_after is None:
+            raise
+        # Sleep for the indicated duration, capped at 10s, then retry once
+        wait = min(int(retry_after), 10)
+        time.sleep(wait)
+        # Build a fresh request for the retry
+        retry_req = urllib.request.Request(url, method="GET")
+        retry_req.add_header("Accept", "application/vnd.github+json")
+        retry_req.add_header("User-Agent", "rlsbl-cli")
+        if token:
+            retry_req.add_header("Authorization", f"token {token}")
+        with urllib.request.urlopen(retry_req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            headers = dict(resp.headers)
+            return data, headers
 
 
 def _parse_next_link(headers):
