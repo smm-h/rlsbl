@@ -41,7 +41,7 @@ __version__ = _detect_version()
 
 REGISTRIES = ("npm", "pypi", "go")
 COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover", "watch",
-            "pre-push-check", "prs", "record-gif", "unreleased")
+            "pre-push-check", "prs", "record-gif", "unreleased", "docs")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -59,6 +59,7 @@ Usage:
   rlsbl prs                                                 List open pull requests
   rlsbl pre-push-check                                     Verify CHANGELOG entry for current version
   rlsbl unreleased [--json]                                 Audit changelog coverage for unreleased commits
+  rlsbl docs [init|build|serve|deploy]                      Generate and deploy documentation
   rlsbl record-gif [--width N] [--height N] [--font-size N] [--duration N]
                                                             Record a demo GIF with vhs
 
@@ -92,7 +93,7 @@ def parse_args(argv):
     Flags listed in VALUE_FLAGS consume the next token as their value
     (e.g. --registry npm). All other --flags are boolean.
     """
-    VALUE_FLAGS = ("registry", "target", "scope", "width", "height", "font-size", "duration")
+    VALUE_FLAGS = ("registry", "target", "scope", "width", "height", "font-size", "duration", "port")
     raw = argv[1:]
     positional = []
     flags = {}
@@ -133,6 +134,7 @@ def _get_command_module(command):
         "prs": "prs",
         "record-gif": "record_gif",
         "unreleased": "unreleased",
+        "docs": "docs_cmd",
     }
     module_name = module_map.get(command)
     if not module_name:
@@ -263,7 +265,7 @@ def main():
         elif command == "watch":
             # watch: monitors CI runs, no registry needed
             handler.run_cmd(registry, args, flags)
-        elif command in ("pre-push-check", "record-gif", "prs", "unreleased"):
+        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "docs"):
             # Standalone commands, no registry needed
             handler.run_cmd(registry, args, flags)
         else:
