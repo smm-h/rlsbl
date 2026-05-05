@@ -24,6 +24,26 @@ from ..utils import (
 VALID_BUMP_TYPES = ("patch", "minor", "major")
 
 
+def parse_porcelain_paths(porcelain_output):
+    """Parse file paths from `git status --porcelain` output.
+
+    Handles the case where run() strips stdout, potentially removing a
+    leading space from the first line. Uses lstrip().split(None, 1) to
+    robustly extract the status code and path regardless.
+
+    Returns a set of file paths found in the output.
+    """
+    dirty_files = set()
+    for line in porcelain_output.splitlines():
+        parts = line.lstrip().split(None, 1)
+        if len(parts) < 2:
+            continue
+        # Handle rename notation: "R old -> new"
+        file_path = parts[1].split(" -> ")[-1]
+        dirty_files.add(file_path)
+    return dirty_files
+
+
 def run_cmd(registry, args, flags):
     """Release command handler.
 
@@ -246,15 +266,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     # (guards against concurrent processes dirtying the tree after our initial check)
     dirty_output = run("git", ["status", "--porcelain"])
     if dirty_output:
-        dirty_files = set()
-        for line in dirty_output.splitlines():
-            # git status --porcelain format: XY <path> or XY <path> -> <path>
-            # run() strips stdout so leading space may be lost on first line
-            parts = line.lstrip().split(None, 1)
-            if len(parts) < 2:
-                continue
-            file_path = parts[1].split(" -> ")[-1]
-            dirty_files.add(file_path)
+        dirty_files = parse_porcelain_paths(dirty_output)
         expected_files = set(files_to_commit)
         expected_files.add(os.path.join(".rlsbl", "lock"))
         unexpected = dirty_files - expected_files
