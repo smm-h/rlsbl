@@ -79,8 +79,16 @@ def run_cmd(registry, args, flags):
     current_version = reg.read_version(".")
     log(f"Current version: {current_version}")
 
+    # Derive scope_name from --scope flag for tag_format
+    scope = flags.get("scope")
+    scope_name = os.path.basename(scope.rstrip("/")) if scope else None
+
+    # Get target instance for tag_format/build/publish
+    from ..targets import TARGETS
+    target = TARGETS[registry]
+
     # If the current version has never been tagged, release it as-is (bootstrap)
-    current_tag = f"v{current_version}"
+    current_tag = target.tag_format(scope_name, current_version)
     current_tag_exists = len(run("git", ["tag", "-l", current_tag])) > 0
 
     if not current_tag_exists:
@@ -101,7 +109,7 @@ def run_cmd(registry, args, flags):
             sys.exit(1)
 
         new_version = bump_version(current_version, bump_type)
-        tag = f"v{new_version}"
+        tag = target.tag_format(scope_name, new_version)
         log(f"New version: {new_version} ({bump_type})")
 
     # Check tag doesn't already exist
@@ -175,14 +183,14 @@ def run_cmd(registry, args, flags):
     try:
         _run_release_mutating(
             registry, reg, flags, quiet, log, new_version, current_version,
-            bump_type, tag, branch, changelog_entry,
+            bump_type, tag, branch, changelog_entry, target,
         )
     finally:
         release_lock()
 
 
 def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current_version,
-                          bump_type, tag, branch, changelog_entry):
+                          bump_type, tag, branch, changelog_entry, target):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     # Pre-compute which files will be modified
     version_file = reg.get_version_file()
@@ -262,6 +270,12 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         except Exception:
             pass
 
+    # Build step (no-op for npm/pypi/go targets)
+    try:
+        target.build(".", new_version)
+    except Exception as e:
+        print(f"Warning: target build step failed: {e}", file=sys.stderr)
+
     # Re-check working tree: abort if files outside our expected set were modified
     # (guards against concurrent processes dirtying the tree after our initial check)
     dirty_output = run("git", ["status", "--porcelain"])
@@ -317,6 +331,12 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         for tmp in (notes_file, writing_file):
             if os.path.exists(tmp):
                 os.unlink(tmp)
+
+    # Publish step (no-op for npm/pypi/go targets)
+    try:
+        target.publish(".", new_version)
+    except Exception as e:
+        print(f"Warning: target publish step failed: {e}", file=sys.stderr)
 
     # Ecosystem tagging: add GitHub topic after release is created
     if should_tag(flags):
