@@ -52,7 +52,7 @@ Usage:
   rlsbl status                                              Show project status
   rlsbl scaffold [--force] [--update]                       Scaffold release infrastructure
   rlsbl check <name>                                        Check name availability
-  rlsbl config                                              Show project configuration
+  rlsbl config [show|init|migrate|status]                    Manage project configuration
   rlsbl undo [--yes]                                        Revert the last release
   rlsbl discover [--mine]                                   List rlsbl ecosystem projects
   rlsbl watch [<commit-sha>]                                Watch CI runs for a commit
