@@ -516,6 +516,35 @@ def apply(configs):
         with pytest.raises(SchemaLoadError, match="'version' must be an int"):
             load_schema(tmp_path)
 
+    def test_version_mismatch_with_filename_prefix_raises(self, tmp_path):
+        """SchemaLoadError when version attribute doesn't match filename prefix."""
+        schema_json = {
+            "files": [
+                {
+                    "path": "config.json",
+                    "defaults_path": "defaults/config.json",
+                    "merge_strategy": "flat_dict",
+                },
+            ],
+        }
+        _setup_schema(tmp_path, schema_json, defaults={
+            "defaults/config.json": {},
+        })
+
+        _create_migration(tmp_path, "001_foo.py", '''
+version = 5
+description = "Version does not match filename prefix"
+
+def apply(configs):
+    pass
+''')
+
+        with pytest.raises(
+            SchemaLoadError,
+            match=r"Migration file 001_foo\.py has version=5, expected version=1 \(must match filename prefix\)",
+        ):
+            load_schema(tmp_path)
+
 
 # ---------------------------------------------------------------------------
 # Integration: loaded schema works with ConfigMigrator
