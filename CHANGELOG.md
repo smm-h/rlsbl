@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.1
+
+- **Codehome target rewrite.** Now root-scoped: each plugin (or plugin group) lives in its own repo with `plugin.json`. Standard `v1.2.3` tags, no namespacing. Push is delivery.
+- **Plugin validation.** Release validates `plugin.json` has required fields (name, version, description) and valid semver.
+- **`rlsbl register` command.** Prints the JSON registry entry for the current plugin repo (name, repo URL, description, plugins provided).
+- **Scaffold template for codehome.** `rlsbl scaffold --target codehome` creates CI workflow that validates plugin.json.
+- **Batch detection generalized.** Uses `target.version_file()` instead of hardcoded filename.
+
 ## 0.10.0
 
 - **Release target abstraction.** Registries refactored into a formal `ReleaseTarget` Protocol with `BaseTarget` class. Targets support optional build/publish lifecycle steps and subdirectory scoping.
