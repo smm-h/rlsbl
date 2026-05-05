@@ -1,14 +1,16 @@
 """Tests for rlsbl.commands.watch — workflow audit reporting."""
 
+import json
 import os
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock, call
 
 from rlsbl.commands.watch import (
     _has_publish_workflow_on_disk,
     _is_publish_workflow,
     _print_workflow_audit,
+    run_cmd,
 )
 
 
@@ -138,6 +140,99 @@ class TestPrintWorkflowAudit:
         assert missing is False
         err = capsys.readouterr().err
         assert "Warning:" not in err
+
+
+class TestRePoll:
+    """Tests for the re-poll logic that catches late-starting workflows."""
+
+    @patch("rlsbl.commands.watch._notify")
+    @patch("rlsbl.commands.watch._print_workflow_audit")
+    @patch("rlsbl.commands.watch._watch_runs")
+    @patch("rlsbl.commands.watch._poll_runs")
+    @patch("rlsbl.commands.watch.time")
+    @patch("rlsbl.commands.watch.run")
+    def test_late_run_discovered_on_repoll(
+        self, mock_run, mock_time, mock_poll, mock_watch, mock_audit, mock_notify
+    ):
+        """A run that appears only on the re-poll (not initial discovery) is still watched."""
+        ci_run = {"databaseId": 100, "name": "CI", "status": "in_progress"}
+        publish_run = {"databaseId": 200, "name": "Publish", "status": "in_progress"}
+
+        # First call: initial poll returns only CI
+        # Second call: re-poll returns both CI and Publish
+        mock_poll.side_effect = [
+            [ci_run],
+            [ci_run, publish_run],
+        ]
+
+        mock_run.side_effect = [
+            "abc123full",  # git rev-parse
+            json.dumps({"nameWithOwner": "user/repo", "name": "repo"}),  # gh repo view
+            "v1.0.0",  # git describe
+        ]
+
+        mock_watch.side_effect = [
+            [{"name": "CI", "passed": True}],       # initial watch
+            [{"name": "Publish", "passed": True}],   # late watch
+        ]
+        mock_audit.return_value = False
+
+        with pytest.raises(SystemExit) as exc_info:
+            run_cmd(None, ["abc123"], {})
+
+        assert exc_info.value.code == 0
+
+        # _poll_runs called twice: initial discovery + re-poll
+        assert mock_poll.call_count == 2
+        # Re-poll uses max_attempts=1, interval=0
+        mock_poll.assert_called_with("abc123full", max_attempts=1, interval=0)
+
+        # _watch_runs called twice: once for CI, once for late Publish
+        assert mock_watch.call_count == 2
+        # Second call should only contain the late run (Publish)
+        late_runs_arg = mock_watch.call_args_list[1][0][0]
+        assert len(late_runs_arg) == 1
+        assert late_runs_arg[0]["name"] == "Publish"
+
+        # Audit sees all results (CI + Publish)
+        audit_arg = mock_audit.call_args[0][0]
+        assert len(audit_arg) == 2
+        names = {r["name"] for r in audit_arg}
+        assert names == {"CI", "Publish"}
+
+    @patch("rlsbl.commands.watch._notify")
+    @patch("rlsbl.commands.watch._print_workflow_audit")
+    @patch("rlsbl.commands.watch._watch_runs")
+    @patch("rlsbl.commands.watch._poll_runs")
+    @patch("rlsbl.commands.watch.time")
+    @patch("rlsbl.commands.watch.run")
+    def test_no_late_runs_skips_second_watch(
+        self, mock_run, mock_time, mock_poll, mock_watch, mock_audit, mock_notify
+    ):
+        """When the re-poll finds no new runs, _watch_runs is called only once."""
+        ci_run = {"databaseId": 100, "name": "CI", "status": "in_progress"}
+
+        # Both polls return the same single run
+        mock_poll.side_effect = [
+            [ci_run],
+            [ci_run],
+        ]
+
+        mock_run.side_effect = [
+            "abc123full",
+            json.dumps({"nameWithOwner": "user/repo", "name": "repo"}),
+            "v1.0.0",
+        ]
+
+        mock_watch.return_value = [{"name": "CI", "passed": True}]
+        mock_audit.return_value = False
+
+        with pytest.raises(SystemExit) as exc_info:
+            run_cmd(None, ["abc123"], {})
+
+        assert exc_info.value.code == 0
+        # _watch_runs called only once (no late runs)
+        assert mock_watch.call_count == 1
 
 
 if __name__ == "__main__":
