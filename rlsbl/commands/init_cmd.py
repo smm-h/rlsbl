@@ -385,6 +385,25 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
             for i, step in enumerate(steps, 1):
                 print(f"  {i}. {step}")
 
+    # Run config migrations when a schema exists (useful during --update,
+    # but also on fresh scaffolds where defaults need to be seeded).
+    migrated_files = []
+    try:
+        from ..lib.schema_loader import load_schema
+        from ..lib.config_migrator import ConfigMigrator
+
+        schema = load_schema(".")
+        if schema is not None:
+            migrator = ConfigMigrator(schema)
+            changes = migrator.run(".")
+            for filename, was_changed in changes.items():
+                if was_changed:
+                    migrated_files.append(filename)
+                    print(f"  config migration: {filename} ... updated")
+    except Exception as e:
+        # Config migration failures must not crash the scaffold
+        print(f"Warning: config migration skipped: {e}")
+
     # Auto-commit scaffold changes unless --no-commit is set
     if flags.get("no-commit"):
         print("Skipping commit (--no-commit).")
@@ -393,6 +412,10 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
     # Collect all files that were created/modified (not "unchanged" or "skipped")
     files_to_commit = [t for t, s in created
                        if s not in ("unchanged", "skipped", "user-owned")]
+    # Include files written by config migration
+    for mf in migrated_files:
+        if mf not in files_to_commit:
+            files_to_commit.append(mf)
     # Include .rlsbl/ internal files written during scaffold
     for rlsbl_file in [HASHES_FILE, os.path.join(".rlsbl", "version")]:
         if os.path.exists(rlsbl_file) and rlsbl_file not in files_to_commit:
