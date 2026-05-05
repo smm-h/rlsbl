@@ -38,17 +38,18 @@ All commands auto-detect registries from project files (`package.json`, `pyproje
 | `release [patch\|minor\|major]` | Bump version, commit, tag, push, create GitHub Release |
 | `scaffold [--force] [--update]` | Scaffold CI/CD, hooks, and release infrastructure |
 | `status` | Show version, branch, last tag, changelog coverage, CI presence |
-| `check <name>` | Check name availability on npm/PyPI (parallel variant queries) |
+| `check <name>` | Check name availability on npm/PyPI/GitHub (parallel variant queries) |
 | `config [show\|init\|migrate\|status]` | Manage project configuration and schema migrations |
 | `undo [--yes]` | Revert the last release (tag, commit, GitHub Release) |
 | `discover [--mine]` | List rlsbl ecosystem projects via GitHub topic search |
-| `watch [<sha>]` | Monitor CI runs for a commit (parallel polling), notify on completion |
+| `watch [<sha>]` | Monitor CI runs for a commit (parallel polling), print workflow audit summary, notify on completion |
 | `unreleased [--json]` | List commits since last tag, report changelog coverage |
 | `prs` | List open pull requests for the current repo |
+| `targets` | List available release targets with detection status |
 | `record-gif` | Record a demo GIF with vhs |
 | `pre-push-check` | Verify CHANGELOG entry exists for the current version |
 
-Global flags: `--help`, `--version`, `--registry <npm|pypi|go>`, `--no-tag`.
+Global flags: `--help`, `--version`, `--target <npm|pypi|go>`, `--registry <npm|pypi|go>` (deprecated alias for `--target`), `--no-tag`.
 
 ## Release flow
 
@@ -56,22 +57,28 @@ When you run `rlsbl release [patch|minor|major]`:
 
 1. Verifies `gh` CLI is installed and authenticated
 2. Checks working tree is clean
-3. Reads the current version from the primary project file
-4. Computes the new version; confirms the tag does not already exist
-5. Validates `CHANGELOG.md` contains a `## <new-version>` section
-6. Runs `.rlsbl/hooks/pre-release.sh` if present (non-zero exit aborts; receives `RLSBL_VERSION`)
-7. Acquires advisory lockfile (`.rlsbl/lock`) to prevent concurrent operations
-8. Writes the new version to all detected project files and `.rlsbl/version`
-9. Adds `rlsbl` keyword to manifests if ecosystem tagging is enabled
-10. Verifies no unexpected files were modified (race condition guard)
-11. Commits the version bump (uses `safegit` if available)
-12. Tags and pushes to `origin`
-13. Creates a GitHub Release with the changelog entry as notes
-14. Adds `rlsbl` topic to the GitHub repo (if tagging enabled)
-15. Runs `.rlsbl/hooks/post-release.sh` if present (non-fatal; receives `RLSBL_VERSION`)
-16. Prints `Watch CI: rlsbl watch <sha>`
+3. Fetches origin and verifies local branch is not behind remote (use `--skip-remote-check` for offline releases)
+4. Reads the current version from the primary project file
+5. Computes the new version; confirms the tag does not already exist
+6. Validates `CHANGELOG.md` contains a `## <new-version>` section
+7. Runs `.rlsbl/hooks/pre-release.sh` if present (non-zero exit aborts; receives `RLSBL_VERSION`)
+8. Acquires advisory lockfile (`.rlsbl/lock`) to prevent concurrent operations
+9. Writes the new version to all detected project files and `.rlsbl/version`
+10. Adds `rlsbl` keyword to manifests if ecosystem tagging is enabled
+11. Verifies no unexpected files were modified (race condition guard)
+12. Commits the version bump (uses `safegit` if available)
+13. Tags and pushes to `origin`
+14. Creates a GitHub Release with the changelog entry as notes
+15. Adds `rlsbl` topic to the GitHub repo (if tagging enabled)
+16. Runs secondary release targets (e.g., docs via selfdoc); use `--include`/`--exclude` to control
+17. Runs `.rlsbl/hooks/post-release.sh` if present (non-fatal; receives `RLSBL_VERSION`)
+18. Prints `Watch CI: rlsbl watch <sha>`
 
-Use `--dry-run` to preview without changes. Use `--yes` for non-interactive mode (CI, AI agents).
+Use `--dry-run` to preview without changes. Use `--yes` for non-interactive mode (CI, AI agents). Use `--skip-remote-check` for offline releases.
+
+**Multi-target releases:** Secondary targets (e.g., docs) run automatically during release. Control which targets run with `--include <target>` and `--exclude <target>` (comma-separated). Configure defaults in `.rlsbl/config.json` via the `release_targets` list. Use `rlsbl targets` to see all available targets.
+
+**Documentation:** Use [selfdoc](https://github.com/smm-h/selfdoc) for documentation generation. rlsbl auto-triggers selfdoc during releases when `selfdoc.json` is detected.
 
 First release: if the current version has never been tagged, `release` publishes it as-is (bump type is ignored).
 
