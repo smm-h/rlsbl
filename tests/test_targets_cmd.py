@@ -137,16 +137,18 @@ class TestMultiTargetRelease:
             f.write("{}")
 
         # Mock run() responses:
-        # 1. tag -l (current tag exists) -> "v1.0.0"
-        # 2. tag -l (new tag doesn't exist) -> ""
-        # 3. git status --porcelain -> ""
-        # 4. git add -> ""
-        # 5. git commit -> ""
-        # 6. git tag -> ""
-        # 7. git push origin tag -> ""
-        # 8. gh release create -> ""
-        # 9. git rev-parse HEAD -> "abc123"
-        mock_run.side_effect = ["v1.0.0", "", "", "", "", "", "", "", "abc123"]
+        # 1. git fetch origin --quiet (remote-ahead check)
+        # 2. git rev-list --count HEAD..origin/main (0 commits behind)
+        # 3. tag -l (current tag exists) -> "v1.0.0"
+        # 4. tag -l (new tag doesn't exist) -> ""
+        # 5. git status --porcelain -> ""
+        # 6. git add -> ""
+        # 7. git commit -> ""
+        # 8. git tag -> ""
+        # 9. git push origin tag -> ""
+        # 10. gh release create -> ""
+        # 11. git rev-parse HEAD -> "abc123"
+        mock_run.side_effect = ["", "0", "v1.0.0", "", "", "", "", "", "", "", "abc123"]
 
         # Mock the docs target's build and publish to track calls
         from rlsbl.targets import TARGETS
@@ -186,7 +188,8 @@ class TestMultiTargetRelease:
         with open("selfdoc.json", "w") as f:
             f.write("{}")
 
-        mock_run.side_effect = ["v1.0.0", "", "", "", "", "", "", "", "abc123"]
+        # fetch + rev-list (remote-ahead check) + original mock sequence
+        mock_run.side_effect = ["", "0", "v1.0.0", "", "", "", "", "", "", "", "abc123"]
 
         from rlsbl.targets import TARGETS
         original_build = TARGETS["docs"].build
@@ -224,7 +227,8 @@ class TestMultiTargetRelease:
         with open("selfdoc.json", "w") as f:
             f.write("{}")
 
-        mock_run.side_effect = ["v1.0.0", "", "", "", "", "", "", "", "abc123"]
+        # fetch + rev-list (remote-ahead check) + original mock sequence
+        mock_run.side_effect = ["", "0", "v1.0.0", "", "", "", "", "", "", "", "abc123"]
 
         from rlsbl.targets import TARGETS
         original_build = TARGETS["docs"].build
