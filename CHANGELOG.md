@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.3
+
+- **`--include`/`--exclude` release flags.** Control which targets run during release. Replaces `--skip-docs`.
+- **`release_targets` config.** Declare baseline targets in `.rlsbl/config.json` to avoid auto-detect surprises.
+- **README updated** for v0.11.x changes.
+- Removed stale `docs/_build/` build artifacts from repo.
+
 ## 0.11.2
 
 - **Watch re-polls for late-starting workflows.** After initial runs complete, waits 5 seconds and re-polls for workflows that started late (e.g., Publish triggered by GitHub Release creation). Fixes missing Publish detection.
