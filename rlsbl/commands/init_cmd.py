@@ -11,6 +11,7 @@ import tempfile
 from ..config import should_tag
 from ..registries import REGISTRIES
 from ..tagging import ensure_tags
+from ..utils import find_commit_tool
 
 HASHES_FILE = os.path.join(".rlsbl", "hashes.json")
 BASES_DIR = os.path.join(".rlsbl", "bases")
@@ -382,6 +383,52 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
             print("\nNext steps:")
             for i, step in enumerate(steps, 1):
                 print(f"  {i}. {step}")
+
+    # Auto-commit scaffold changes unless --no-commit is set
+    if flags.get("no-commit"):
+        print("Skipping commit (--no-commit).")
+        return
+
+    # Collect all files that were created/modified (not "unchanged" or "skipped")
+    files_to_commit = [t for t, s in created
+                       if s not in ("unchanged", "skipped", "user-owned")]
+    # Include .rlsbl/ internal files written during scaffold
+    for rlsbl_file in [HASHES_FILE, os.path.join(".rlsbl", "version")]:
+        if os.path.exists(rlsbl_file) and rlsbl_file not in files_to_commit:
+            files_to_commit.append(rlsbl_file)
+    # Include any base files that were saved for the created targets
+    if os.path.isdir(BASES_DIR):
+        for target, _ in created:
+            base_path = os.path.join(BASES_DIR, target)
+            if os.path.exists(base_path) and base_path not in files_to_commit:
+                files_to_commit.append(base_path)
+
+    if not files_to_commit:
+        return
+
+    # Only attempt commit if we're in a git repo
+    if not os.path.isdir(".git"):
+        return
+
+    tool = find_commit_tool()
+    try:
+        if tool == "safegit":
+            subprocess.run(
+                ["safegit", "commit", "-m", "rlsbl scaffold", "--"] + files_to_commit,
+                check=True, capture_output=True, text=True,
+            )
+        else:
+            subprocess.run(
+                ["git", "add"] + files_to_commit,
+                check=True, capture_output=True, text=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-m", "rlsbl scaffold"],
+                check=True, capture_output=True, text=True,
+            )
+        print("Committed scaffold changes.")
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"Warning: could not commit scaffold changes: {e}")
 
 
 def run_cmd(registry, args, flags):
