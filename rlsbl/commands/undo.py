@@ -4,6 +4,24 @@ import sys
 
 from ..utils import run, check_gh_installed, check_gh_auth, get_push_timeout, get_current_branch, push_if_needed, is_clean_tree
 
+# Status constants for step results
+OK = "OK"
+FAILED = "FAILED"
+SKIPPED = "SKIPPED"
+
+
+def _print_summary(results):
+    """Print a summary table of step results. Only called when at least one step failed."""
+    # Calculate column widths
+    step_width = max(len(r[0]) for r in results)
+    status_width = max(len(r[1]) for r in results)
+
+    header = f"{'Step':<{step_width}}  {'Status':<{status_width}}  Remediation"
+    print(f"\n{header}")
+    print("-" * len(header))
+    for step_name, status, remediation in results:
+        print(f"{step_name:<{step_width}}  {status:<{status_width}}  {remediation}")
+
 
 def run_cmd(registry, args, flags):
     if not check_gh_installed():
@@ -39,26 +57,29 @@ def run_cmd(registry, args, flags):
             print("Aborted.")
             sys.exit(0)
 
+    # Collect (step_name, status, remediation) for each step
+    results = []
+
     # Delete GitHub Release
     try:
         run("gh", ["release", "delete", tag, "--yes"])
-        print(f"Deleted GitHub Release: {tag}")
-    except Exception as e:
-        print(f"Warning: could not delete GitHub Release: {e}")
+        results.append(("Delete GitHub Release", OK, "-"))
+    except Exception:
+        results.append(("Delete GitHub Release", FAILED, f"gh release delete {tag} --yes"))
 
     # Delete remote tag
     try:
         run("git", ["push", "origin", f":{tag}"], timeout=get_push_timeout())
-        print(f"Deleted remote tag: {tag}")
-    except Exception as e:
-        print(f"Warning: could not delete remote tag: {e}")
+        results.append(("Delete remote tag", OK, "-"))
+    except Exception:
+        results.append(("Delete remote tag", FAILED, f"git push origin :{tag}"))
 
     # Delete local tag
     try:
         run("git", ["tag", "-d", tag])
-        print(f"Deleted local tag: {tag}")
-    except Exception as e:
-        print(f"Warning: could not delete local tag: {e}")
+        results.append(("Delete local tag", OK, "-"))
+    except Exception:
+        results.append(("Delete local tag", FAILED, f"git tag -d {tag}"))
 
     # Revert the version bump commit (should be HEAD)
     reverted = False
@@ -66,12 +87,12 @@ def run_cmd(registry, args, flags):
         head_msg = run("git", ["log", "-1", "--format=%s"])
         if head_msg == tag:
             run("git", ["revert", "--no-edit", "HEAD"])
-            print(f"Reverted commit: {head_msg}")
             reverted = True
+            results.append(("Revert commit", OK, "-"))
         else:
-            print(f"Warning: HEAD commit ({head_msg}) doesn't match tag ({tag}). Skipping revert.")
-    except Exception as e:
-        print(f"Warning: could not revert commit: {e}")
+            results.append(("Revert commit", SKIPPED, f"HEAD ({head_msg}) does not match tag ({tag})"))
+    except Exception:
+        results.append(("Revert commit", FAILED, "git revert --no-edit HEAD"))
 
     # Push the revert commit to remote
     if reverted:
@@ -87,9 +108,13 @@ def run_cmd(registry, args, flags):
             try:
                 branch = get_current_branch()
                 push_if_needed(branch)
-                print("Pushed revert to remote.")
-            except Exception as e:
-                print(f"Warning: could not push revert: {e}")
-                print("Run 'git push' manually to sync the revert.")
+                results.append(("Push", OK, "-"))
+            except Exception:
+                results.append(("Push", FAILED, "git push"))
 
-    print("\nUndo complete.")
+    # Print summary: table only if something failed, otherwise a simple success message
+    has_failure = any(status == FAILED for _, status, _ in results)
+    if has_failure:
+        _print_summary(results)
+    else:
+        print("\nUndo complete.")
