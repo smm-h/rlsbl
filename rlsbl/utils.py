@@ -111,9 +111,15 @@ def find_commit_tool():
 def bump_version(version, bump_type):
     """Bump a semver version string by the given type (patch, minor, major).
 
-    Returns the new version string.
+    Handles pre-release suffixes (e.g. "1.0.0-beta.1"): the suffix is stripped
+    and the bump is applied to the base version.
+
+    Returns the new version string (always clean, no pre-release suffix).
     """
-    parts = version.split(".")
+    # Strip pre-release suffix (everything after the first hyphen)
+    base_version = version.split("-", 1)[0]
+
+    parts = base_version.split(".")
     if len(parts) != 3:
         raise ValueError(f'Invalid semver version: "{version}"')
     try:
