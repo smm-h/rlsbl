@@ -9,14 +9,26 @@ from ..config import _project_config, USER_CONFIG, read_json_config, should_tag
 from ..registries import REGISTRIES
 
 
+CONFIG_HELP = """\
+Usage: rlsbl config <subcommand>
+
+Subcommands:
+  show      Show resolved project configuration
+  init      Scaffold config migration infrastructure
+  migrate   Run pending config migrations
+  status    Show config migration status"""
+
+
 def run_cmd(registry, args, flags):
-    """Dispatch to subcommand or show config if no subcommand given."""
+    """Dispatch to subcommand or print help if no subcommand given."""
     if not args:
-        _show_config(registry, flags)
+        print(CONFIG_HELP)
         return
 
     subcommand = args[0]
-    if subcommand == "init":
+    if subcommand == "show":
+        _show_config(registry, flags)
+    elif subcommand == "init":
         _cmd_init(flags)
     elif subcommand == "migrate":
         _cmd_migrate(flags)
@@ -24,7 +36,7 @@ def run_cmd(registry, args, flags):
         _cmd_status(flags)
     else:
         print(f"Error: unknown config subcommand '{subcommand}'.", file=sys.stderr)
-        print("Available: init, migrate, status", file=sys.stderr)
+        print("Available: show, init, migrate, status", file=sys.stderr)
         sys.exit(1)
 
 
