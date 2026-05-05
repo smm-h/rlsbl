@@ -86,8 +86,8 @@ class TestTargetsCommand:
         for line in lines:
             assert "no" in line
 
-    def test_scope_column_shows_subdir_for_codehome(self):
-        """Codehome target shows 'subdir' in the Scope column."""
+    def test_scope_column_shows_root_for_codehome(self):
+        """Codehome target shows 'root' in the Scope column."""
         from rlsbl.commands.targets_cmd import run_cmd
 
         buf = StringIO()
@@ -97,7 +97,7 @@ class TestTargetsCommand:
         output = buf.getvalue()
         for line in output.splitlines():
             if line.startswith("codehome"):
-                assert "subdir" in line
+                assert "root" in line
                 break
         else:
             pytest.fail("codehome line not found in output")
