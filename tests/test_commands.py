@@ -520,6 +520,54 @@ class TestRelease(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Porcelain parsing tests
+# ---------------------------------------------------------------------------
+
+
+class TestPorcelainParsing(unittest.TestCase):
+    """Tests for parse_porcelain_paths in rlsbl.commands.release."""
+
+    def test_stripped_leading_space_on_first_line(self):
+        """run() strips stdout, which can remove a leading space from the first line.
+
+        Porcelain format is "XY path" where X/Y are status codes.
+        A line like " M pyproject.toml" becomes "M pyproject.toml" after strip.
+        The parser must still extract the correct path using lstrip().split(None, 1).
+        """
+        from rlsbl.commands.release import parse_porcelain_paths
+
+        # Simulate output where run() has stripped leading whitespace from first line
+        # Original porcelain: "M  package.json\n M pyproject.toml\n?? .rlsbl/lock"
+        # After run().strip(): "M package.json\n M pyproject.toml\n?? .rlsbl/lock"
+        porcelain = "M package.json\n M pyproject.toml\n?? .rlsbl/lock"
+        result = parse_porcelain_paths(porcelain)
+        self.assertEqual(result, {"package.json", "pyproject.toml", ".rlsbl/lock"})
+
+    def test_rename_entry(self):
+        """Rename entries use 'R old -> new' format; parser should extract new path."""
+        from rlsbl.commands.release import parse_porcelain_paths
+
+        porcelain = "R  old.txt -> new.txt\nM  other.txt"
+        result = parse_porcelain_paths(porcelain)
+        self.assertIn("new.txt", result)
+        self.assertIn("other.txt", result)
+
+    def test_empty_output(self):
+        """Empty porcelain output returns empty set."""
+        from rlsbl.commands.release import parse_porcelain_paths
+
+        self.assertEqual(parse_porcelain_paths(""), set())
+
+    def test_blank_lines_ignored(self):
+        """Blank lines in output are safely ignored."""
+        from rlsbl.commands.release import parse_porcelain_paths
+
+        porcelain = "M  file.txt\n\n?? untracked.txt"
+        result = parse_porcelain_paths(porcelain)
+        self.assertEqual(result, {"file.txt", "untracked.txt"})
+
+
+# ---------------------------------------------------------------------------
 # Undo command tests
 # ---------------------------------------------------------------------------
 
