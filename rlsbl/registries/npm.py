@@ -1,4 +1,10 @@
-"""npm registry adapter for rlsbl."""
+"""npm registry adapter for rlsbl.
+
+DEPRECATED: This module is retained for backward compatibility with code that
+imports bare functions (e.g. npm.read_version()) or patches module-level symbols
+(e.g. rlsbl.registries.npm.run). New code should use rlsbl.targets.NpmTarget instead.
+Scheduled for removal in the next major version.
+"""
 
 import json
 import os

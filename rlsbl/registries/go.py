@@ -1,5 +1,10 @@
 """Go registry adapter for rlsbl.
 
+DEPRECATED: This module is retained for backward compatibility with code that
+imports bare functions (e.g. go.read_version()) or patches module-level symbols
+(e.g. rlsbl.registries.go.run). New code should use rlsbl.targets.GoTarget instead.
+Scheduled for removal in the next major version.
+
 Go projects use a VERSION file as the source of truth for rlsbl. GoReleaser
 handles the build/publish step triggered by the GitHub Release that rlsbl creates.
 """

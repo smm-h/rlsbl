@@ -65,8 +65,8 @@ Usage:
                                                             Record a demo GIF with vhs
 
 Options:
-  --registry <npm|pypi|go>  Target a specific registry (auto-detected if omitted)
-  --target <npm|pypi|go>    Alias for --registry
+  --target <npm|pypi|go>    Target a specific registry (auto-detected if omitted)
+  --registry <npm|pypi|go>  Deprecated alias for --target
   --scope <subdir>          Subdirectory scope for subdir-scoped targets
   --no-tag               Disable ecosystem tagging for this invocation
   --help, -h             Show this help
@@ -179,6 +179,10 @@ def main():
     registry = flags.get("registry")
     target = flags.get("target")
     scope = flags.get("scope")
+
+    # Emit deprecation warning when --registry is used directly
+    if registry and registry is not True:
+        print("Warning: --registry is deprecated, use --target instead", file=sys.stderr)
 
     # --registry was the last arg with no value following it
     if registry is True:
