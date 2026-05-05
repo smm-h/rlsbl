@@ -236,14 +236,28 @@ class TestConfigUnknownSubcommand:
 
 
 class TestConfigNoSubcommand:
-    """Test that no subcommand falls through to show config."""
+    """Test that no subcommand prints help listing available subcommands."""
 
-    def test_no_args_shows_config(self, tmp_project, capsys):
-        """config with no args shows project configuration output."""
+    def test_no_args_shows_help(self, tmp_project, capsys):
+        """config with no args prints help with available subcommands."""
+        run_cmd("npm", [], {})
+        captured = capsys.readouterr()
+        assert "Usage: rlsbl config <subcommand>" in captured.out
+        assert "show" in captured.out
+        assert "init" in captured.out
+        assert "migrate" in captured.out
+        assert "status" in captured.out
+
+
+class TestConfigShow:
+    """Test that 'rlsbl config show' displays project configuration."""
+
+    def test_show_displays_config(self, tmp_project, capsys):
+        """config show displays resolved project configuration output."""
         # Create a minimal pyproject.toml so registries detect something
         (tmp_project / "pyproject.toml").write_text(
             '[project]\nname = "test"\nversion = "0.1.0"\n'
         )
-        run_cmd("pypi", [], {})
+        run_cmd("pypi", ["show"], {})
         captured = capsys.readouterr()
         assert "Detected registries:" in captured.out
