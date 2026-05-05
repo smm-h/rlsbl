@@ -6,6 +6,12 @@ import sys
 import urllib.request
 import urllib.error
 
+try:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    _HAS_THREADS = True
+except ImportError:
+    _HAS_THREADS = False
+
 
 def normalize_npm(name):
     """Normalize an npm package name for similarity comparison.
@@ -32,9 +38,11 @@ def check_npm_availability(name):
     try:
         subprocess.run(
             ["npm", "view", name, "name"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, timeout=10,
         )
         return {"status": "taken"}
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "message": "npm view timed out"}
     except subprocess.CalledProcessError as e:
         stderr = e.stderr or ""
         if "E404" in stderr or "404" in stderr:
@@ -111,13 +119,37 @@ def _check_name_npm(name):
     else:
         print(f'"{name}" is taken on npm.')
 
-    # Check variants for similarity; skip variants that error
+    # Check variants for similarity in parallel; skip variants that error
     variants = get_npm_variants(name)
     similar = []
-    for variant in variants:
-        var_result = check_npm_availability(variant)
-        if var_result["status"] == "taken":
-            similar.append(variant)
+
+    if _HAS_THREADS and variants:
+        try:
+            with ThreadPoolExecutor(max_workers=len(variants)) as executor:
+                future_to_variant = {
+                    executor.submit(check_npm_availability, v): v
+                    for v in variants
+                }
+                for future in as_completed(future_to_variant):
+                    variant = future_to_variant[future]
+                    try:
+                        var_result = future.result()
+                        if var_result["status"] == "taken":
+                            similar.append(variant)
+                    except Exception:
+                        pass  # Skip variants that error
+        except Exception:
+            # Fall back to sequential on any thread pool error
+            similar = []
+            for variant in variants:
+                var_result = check_npm_availability(variant)
+                if var_result["status"] == "taken":
+                    similar.append(variant)
+    else:
+        for variant in variants:
+            var_result = check_npm_availability(variant)
+            if var_result["status"] == "taken":
+                similar.append(variant)
 
     if similar:
         print("\nSimilar names already taken:")
@@ -144,15 +176,37 @@ def _check_name_pypi(name):
     else:
         print(f'"{name}" is taken on PyPI.')
 
-    # Check variants for similarity (PEP 503 normalization); skip variants that error
-    variants = get_pypi_variants(name)
+    # Check variants for similarity (PEP 503 normalization) in parallel; skip variants that error
+    variants = [v for v in get_pypi_variants(name) if v != name]
     similar = []
-    for variant in variants:
-        if variant == name:
-            continue
-        var_result = check_pypi_availability(variant)
-        if var_result["status"] == "taken":
-            similar.append(variant)
+
+    if _HAS_THREADS and variants:
+        try:
+            with ThreadPoolExecutor(max_workers=len(variants)) as executor:
+                future_to_variant = {
+                    executor.submit(check_pypi_availability, v): v
+                    for v in variants
+                }
+                for future in as_completed(future_to_variant):
+                    variant = future_to_variant[future]
+                    try:
+                        var_result = future.result()
+                        if var_result["status"] == "taken":
+                            similar.append(variant)
+                    except Exception:
+                        pass  # Skip variants that error
+        except Exception:
+            # Fall back to sequential on any thread pool error
+            similar = []
+            for variant in variants:
+                var_result = check_pypi_availability(variant)
+                if var_result["status"] == "taken":
+                    similar.append(variant)
+    else:
+        for variant in variants:
+            var_result = check_pypi_availability(variant)
+            if var_result["status"] == "taken":
+                similar.append(variant)
 
     if similar:
         print("\nSimilar names already taken:")
