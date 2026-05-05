@@ -64,6 +64,8 @@ Usage:
 
 Options:
   --registry <npm|pypi|go>  Target a specific registry (auto-detected if omitted)
+  --target <npm|pypi|go>    Alias for --registry
+  --scope <subdir>          Subdirectory scope for subdir-scoped targets
   --no-tag               Disable ecosystem tagging for this invocation
   --help, -h             Show this help
   --version, -v          Show version"""
@@ -90,7 +92,7 @@ def parse_args(argv):
     Flags listed in VALUE_FLAGS consume the next token as their value
     (e.g. --registry npm). All other --flags are boolean.
     """
-    VALUE_FLAGS = ("registry", "width", "height", "font-size", "duration")
+    VALUE_FLAGS = ("registry", "target", "scope", "width", "height", "font-size", "duration")
     raw = argv[1:]
     positional = []
     flags = {}
@@ -171,19 +173,45 @@ def main():
 
     args = positional[1:]
     registry = flags.get("registry")
+    target = flags.get("target")
+    scope = flags.get("scope")
 
     # --registry was the last arg with no value following it
     if registry is True:
         print("Error: --registry requires a value (npm, pypi, or go).", file=sys.stderr)
         sys.exit(1)
 
-    # Validate --registry if provided
-    if registry and registry not in REGISTRIES:
-        print(
-            f"Error: unknown registry '{registry}'. Valid: {', '.join(REGISTRIES)}",
-            file=sys.stderr,
-        )
+    # --target is an alias for --registry
+    if target is True:
+        print("Error: --target requires a value (npm, pypi, or go).", file=sys.stderr)
         sys.exit(1)
+
+    # --scope was the last arg with no value following it
+    if scope is True:
+        print("Error: --scope requires a value (subdirectory path).", file=sys.stderr)
+        sys.exit(1)
+
+    # --target acts as alias for --registry; error if both given with different values
+    if target and registry and target != registry:
+        print("Error: --target and --registry conflict. Use one or the other.", file=sys.stderr)
+        sys.exit(1)
+    if target and not registry:
+        registry = target
+        flags["registry"] = target
+
+    # Validate --registry/--target if provided
+    if registry:
+        from .targets import TARGETS
+        if registry not in TARGETS:
+            print(
+                f"Error: unknown target '{registry}'. Valid: {', '.join(TARGETS.keys())}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    # Store scope in flags for downstream commands
+    if scope:
+        flags["scope"] = scope
 
     try:
         handler = _get_command_module(command)
