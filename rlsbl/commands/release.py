@@ -5,6 +5,7 @@ import sys
 import time
 
 from ..config import should_tag
+from ..lock import acquire_lock, release_lock
 from ..registries import REGISTRIES
 from ..tagging import ensure_github_topic, ensure_npm_keyword, ensure_pypi_keyword
 from ..utils import (
@@ -148,6 +149,21 @@ def run_cmd(registry, args, flags):
         log("--- No changes made ---")
         return
 
+    # Acquire advisory lock to prevent concurrent rlsbl operations
+    acquire_lock()
+
+    try:
+        _run_release_mutating(
+            registry, reg, flags, quiet, log, new_version, current_version,
+            bump_type, tag, branch, changelog_entry,
+        )
+    finally:
+        release_lock()
+
+
+def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current_version,
+                          bump_type, tag, branch, changelog_entry):
+    """Inner release logic that runs under the advisory lock (mutating phase)."""
     # Pre-compute which files will be modified
     version_file = reg.get_version_file()
     files_to_commit = []
