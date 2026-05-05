@@ -77,5 +77,29 @@ class DocsTarget(BaseTarget):
         return pages
 
     def publish(self, dir_path, version):
-        """Deploy docs to configured provider. Not yet implemented (Phase 3e)."""
-        pass
+        """Deploy docs to configured provider (Cloudflare Pages or GitHub Pages)."""
+        import sys
+
+        from .config import load_docs_config
+        from .deploy import deploy_cloudflare_pages, deploy_github_pages
+
+        config = load_docs_config(dir_path)
+        if not config or "deploy" not in config:
+            return
+
+        output_dir = os.path.join(dir_path, config["output"]["dir"])
+        if not os.path.isdir(output_dir):
+            print(
+                "Warning: docs output directory not found. "
+                "Run 'rlsbl docs build' first.",
+                file=sys.stderr,
+            )
+            return
+
+        provider = config["deploy"]["provider"]
+        if provider == "cloudflare-pages":
+            deploy_cloudflare_pages(
+                output_dir, config["deploy"]["project"], version
+            )
+        elif provider == "github-pages":
+            deploy_github_pages(output_dir, version)
