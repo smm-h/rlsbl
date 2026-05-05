@@ -8,6 +8,7 @@ from rlsbl.targets.protocol import ReleaseTarget
 from rlsbl.targets.npm import NpmTarget
 from rlsbl.targets.pypi import PypiTarget
 from rlsbl.targets.go import GoTarget
+from rlsbl.targets import TARGETS, detect_targets
 
 
 class TestNpmTarget:
@@ -113,3 +114,62 @@ class TestGoTarget:
     def test_tag_format(self):
         target = GoTarget()
         assert target.tag_format(None, "0.5.0") == "v0.5.0"
+
+
+class TestDetectTargets:
+    """Integration tests for detect_targets() discovery function."""
+
+    def test_detect_targets_with_package_json(self):
+        """detect_targets('.') in a dir with package.json returns 'npm' in results."""
+        with tempfile.TemporaryDirectory() as d:
+            pkg_path = os.path.join(d, "package.json")
+            with open(pkg_path, "w") as f:
+                json.dump({"name": "test-pkg", "version": "1.0.0"}, f)
+            result = detect_targets(d)
+            assert "npm" in result
+
+    def test_detect_targets_empty_directory(self):
+        """detect_targets('.') in an empty dir returns []."""
+        with tempfile.TemporaryDirectory() as d:
+            result = detect_targets(d)
+            assert result == []
+
+
+class TestTargetRegistryIntegration:
+    """Tests for the TARGETS registry dict and tag_format behavior."""
+
+    def test_tag_format_none_name(self):
+        """TARGETS['npm'].tag_format(None, '1.2.3') returns 'v1.2.3'."""
+        assert TARGETS["npm"].tag_format(None, "1.2.3") == "v1.2.3"
+
+    def test_tag_format_with_name_ignored(self):
+        """Root scope targets ignore the name argument in tag_format."""
+        assert TARGETS["npm"].tag_format("something", "1.2.3") == "v1.2.3"
+
+    def test_build_noop(self):
+        """TARGETS['npm'].build() is a no-op that doesn't raise."""
+        with tempfile.TemporaryDirectory() as d:
+            # Should complete without raising
+            TARGETS["npm"].build(d, "1.0.0")
+
+    def test_publish_noop(self):
+        """TARGETS['npm'].publish() is a no-op that doesn't raise."""
+        with tempfile.TemporaryDirectory() as d:
+            # Should complete without raising
+            TARGETS["npm"].publish(d, "1.0.0")
+
+
+class TestBackwardCompat:
+    """Tests for backward compatibility with the old registries module."""
+
+    def test_registries_import_and_read_version(self):
+        """from rlsbl.registries import REGISTRIES; REGISTRIES['npm'].read_version is callable."""
+        from rlsbl.registries import REGISTRIES
+        assert callable(REGISTRIES["npm"].read_version)
+
+    def test_targets_read_version_same_object(self):
+        """TARGETS['npm'].read_version is callable and same object as REGISTRIES."""
+        from rlsbl.registries import REGISTRIES
+        assert callable(TARGETS["npm"].read_version)
+        # They are the same dict, so same instance
+        assert TARGETS["npm"] is REGISTRIES["npm"]
