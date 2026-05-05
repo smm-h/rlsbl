@@ -7,17 +7,11 @@ Findings from two independent audits (correctness + security) on v0.7.0, filtere
 ### Auto-commit after scaffold
 `rlsbl/commands/init_cmd.py` — scaffold leaves modified/untracked files that the user must manually commit. Consider auto-committing when scaffold completes without conflicts. On conflict-free runs: stage all scaffold-touched files and commit with a message like `"rlsbl scaffold v{version}"`. On runs WITH conflicts: still auto-commit — git allows committing files with conflict markers, and having them tracked is better than leaving them untracked. The user resolves conflicts and commits again. The key question is whether to use safegit or git (detect via `find_commit_tool`). Could also add `--no-commit` flag to opt out.
 
-### Pagination URL validation in discover
-`rlsbl/commands/discover.py` — `_fetch_all_repos` follows `Link` header URLs without validating they start with `https://api.github.com/`. A MITM'd response could redirect the auth token to an arbitrary host. Fix: check URL prefix before following.
-
 ### Tagging not mentioned in release confirmation
 `rlsbl/commands/release.py` — the confirmation prompt shows files but doesn't explain that ecosystem tagging will add the `"rlsbl"` keyword to manifests. Fix: include "Will add 'rlsbl' keyword" in the prompt when tagging is enabled.
 
 ### record-gif non-integer flag gives raw error
 `rlsbl/commands/record_gif.py` — `--width abc` produces `ValueError: invalid literal for int()` without indicating which flag failed. Fix: wrap `int()` calls in try/except with a clear message.
-
-### Dead tomli fallback imports
-`rlsbl/__init__.py`, `rlsbl/commands/pre_push_check.py` — `try: import tomllib / except: import tomli` is dead code since `requires-python >= 3.11`. Fix: remove the fallback, use bare `import tomllib`.
 
 ### Rename test_tagging.py
 `tests/test_tagging.py` — tests 3 different modules (config, tagging, discover) under a misleading filename. Fix: split into `test_config.py`, `test_tagging.py`, `test_discover.py` or at minimum rename.
