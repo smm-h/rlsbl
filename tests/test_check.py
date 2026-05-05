@@ -1,4 +1,4 @@
-"""Tests for PyPI and Go availability checks in rlsbl.commands.check."""
+"""Tests for PyPI, Go, and GitHub availability checks in rlsbl.commands.check."""
 
 import unittest
 from unittest.mock import patch
@@ -6,6 +6,7 @@ from urllib.error import HTTPError, URLError
 
 from conftest import FakeResponse
 from rlsbl.commands.check import (
+    check_github_availability,
     check_go_availability,
     check_pypi_availability,
     get_pypi_variants,
@@ -75,6 +76,36 @@ class TestCheckGo(unittest.TestCase):
         """A generic URLError (network failure) returns error status."""
         mock_urlopen.side_effect = URLError("DNS resolution failed")
         result = check_go_availability("github.com/some/module")
+        self.assertEqual(result["status"], "error")
+        self.assertIn("message", result)
+
+
+class TestCheckGitHub(unittest.TestCase):
+    """Tests for check_github_availability."""
+
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_github_available_on_zero_count(self, mock_urlopen):
+        """Zero total_count means the name is unique on GitHub."""
+        mock_urlopen.return_value = FakeResponse({"total_count": 0, "items": []})
+        result = check_github_availability("some-unique-name")
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["count"], 0)
+
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_github_exists_on_nonzero_count(self, mock_urlopen):
+        """Non-zero total_count means repos with this name exist."""
+        mock_urlopen.return_value = FakeResponse({"total_count": 5, "items": []})
+        result = check_github_availability("popular-name")
+        self.assertEqual(result["status"], "exists")
+        self.assertEqual(result["count"], 5)
+        self.assertIn("note", result)
+        self.assertIn("5", result["note"])
+
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_github_error_on_exception(self, mock_urlopen):
+        """A network error returns error status."""
+        mock_urlopen.side_effect = URLError("Connection refused")
+        result = check_github_availability("some-name")
         self.assertEqual(result["status"], "error")
         self.assertIn("message", result)
 

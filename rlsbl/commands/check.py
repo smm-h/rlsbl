@@ -1,5 +1,6 @@
-"""Check command: check package name availability on npm, PyPI, or Go (pkg.go.dev)."""
+"""Check command: check package name availability on npm, PyPI, Go (pkg.go.dev), and GitHub."""
 
+import json
 import re
 import subprocess
 import sys
@@ -246,6 +247,42 @@ def check_go_availability(name):
         return {"status": "error", "message": str(e) or "Network error"}
 
 
+def check_github_availability(name):
+    """Check if a repository name exists on GitHub.
+
+    Searches the GitHub API for repositories with the given name.
+    Returns {"status": "available"|"exists"|"error", "count": int, ...}.
+    """
+    url = f"https://api.github.com/search/repositories?q={name}+in:name"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("User-Agent", "rlsbl-cli")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            count = data.get("total_count", 0)
+            if count == 0:
+                return {"status": "available", "count": 0}
+            return {
+                "status": "exists",
+                "count": count,
+                "note": f"{count} repos with this name on GitHub",
+            }
+    except Exception as e:
+        return {"status": "error", "message": str(e) or "Network error"}
+
+
+def _check_github(name):
+    """Show GitHub repo count as informational context (not an availability check)."""
+    result = check_github_availability(name)
+    if result["status"] == "error":
+        return
+    count = result.get("count", 0)
+    if count == 0:
+        print(f"\n  (i) No GitHub repos named \"{name}\")")
+    else:
+        print(f"\n  (i) {count} GitHub repo(s) named \"{name}\" (informational, not a registry)")
+
+
 def _check_name_go(name):
     """Check Go module path on pkg.go.dev."""
     print(f'Checking pkg.go.dev for "{name}"...')
@@ -281,3 +318,6 @@ def run_cmd(registry, args, flags):
         _check_name_pypi(name)
     elif registry == "go":
         _check_name_go(name)
+
+    # Always check GitHub for repos with this name
+    _check_github(name)
