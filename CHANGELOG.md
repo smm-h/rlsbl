@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.1
+
+- **Release aborts if behind remote.** Fetches origin before releasing and exits if local branch is behind. Use `--skip-remote-check` for offline releases.
+- **Watch reports which workflows ran.** After CI completes, prints a summary table of workflow names and results. Warns if a publish workflow exists on disk but didn't trigger.
+
 ## 0.11.0
 
 - **Docs system extracted to selfdoc.** `rlsbl docs` commands removed. DocsTarget now detects `selfdoc.json` and delegates to the `selfdoc` CLI. Install selfdoc separately for documentation generation.
