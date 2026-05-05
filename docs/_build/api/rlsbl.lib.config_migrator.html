@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rlsbl.lib.config_migrator - rlsbl</title>
+<style>
+:root {
+    --bg: #ffffff;
+    --fg: #1a1a2e;
+    --sidebar-bg: #f5f5f7;
+    --sidebar-width: 260px;
+    --code-bg: #f0f0f3;
+    --code-border: #dcdce0;
+    --link: #2563eb;
+    --link-hover: #1d4ed8;
+    --heading: #111827;
+    --border: #e5e7eb;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: var(--font-body);
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.6;
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar navigation */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-width);
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    padding: 1.5rem 1rem;
+    z-index: 100;
+}
+
+.sidebar h2 {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6b7280;
+    margin-bottom: 0.75rem;
+}
+
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+}
+
+.sidebar li {
+    margin-bottom: 0.25rem;
+}
+
+.sidebar a {
+    display: block;
+    padding: 0.25rem 0.5rem;
+    color: var(--fg);
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.sidebar a:hover {
+    background: var(--border);
+    color: var(--link);
+}
+
+/* Main content area */
+.content {
+    margin-left: var(--sidebar-width);
+    max-width: 52rem;
+    padding: 2rem 3rem;
+    flex: 1;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--heading);
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    line-height: 1.3;
+}
+
+h1 { font-size: 1.8rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+h2 { font-size: 1.4rem; }
+h3 { font-size: 1.15rem; }
+h4 { font-size: 1rem; }
+
+p {
+    margin-bottom: 1em;
+}
+
+a {
+    color: var(--link);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--link-hover);
+    text-decoration: underline;
+}
+
+/* Code */
+code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 3px;
+    padding: 0.15em 0.35em;
+}
+
+pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin-bottom: 1em;
+}
+
+pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.85rem;
+}
+
+/* Syntax highlighting classes (CSS-only) */
+.kw { color: #7c3aed; font-weight: 600; }
+.fn { color: #2563eb; }
+.str { color: #059669; }
+.num { color: #d97706; }
+.cmt { color: #6b7280; font-style: italic; }
+
+/* Lists */
+ul, ol {
+    margin-bottom: 1em;
+    padding-left: 1.5em;
+}
+
+li {
+    margin-bottom: 0.25em;
+}
+
+/* Bold / italic */
+strong { font-weight: 600; }
+em { font-style: italic; }
+
+/* Version badge */
+.version {
+    display: inline-block;
+    font-size: 0.8rem;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 4px;
+    padding: 0.1em 0.5em;
+    margin-left: 0.5em;
+    vertical-align: middle;
+}
+
+/* Mobile: collapse sidebar */
+@media (max-width: 768px) {
+    .sidebar {
+        position: static;
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    .content {
+        margin-left: 0;
+        padding: 1.5rem 1rem;
+    }
+    body {
+        flex-direction: column;
+    }
+}
+
+</style>
+</head>
+<body>
+<nav class="sidebar">
+<h2>rlsbl <span class="version">0.10.1</span></h2>
+<ul><li><a href="../index.html">Home</a></li><li><a href="../api/index.html">API Reference</a></li><li><a href="../api/rlsbl.commands.check.html">rlsbl.commands.check</a></li><li><a href="../api/rlsbl.commands.config.html">rlsbl.commands.config</a></li><li><a href="../api/rlsbl.commands.discover.html">rlsbl.commands.discover</a></li><li><a href="../api/rlsbl.commands.docs_cmd.html">rlsbl.commands.docs_cmd</a></li><li><a href="../api/rlsbl.commands.init_cmd.html">rlsbl.commands.init_cmd</a></li><li><a href="../api/rlsbl.commands.pre_push_check.html">rlsbl.commands.pre_push_check</a></li><li><a href="../api/rlsbl.commands.prs.html">rlsbl.commands.prs</a></li><li><a href="../api/rlsbl.commands.record_gif.html">rlsbl.commands.record_gif</a></li><li><a href="../api/rlsbl.commands.register_cmd.html">rlsbl.commands.register_cmd</a></li><li><a href="../api/rlsbl.commands.release.html">rlsbl.commands.release</a></li><li><a href="../api/rlsbl.commands.status.html">rlsbl.commands.status</a></li><li><a href="../api/rlsbl.commands.targets_cmd.html">rlsbl.commands.targets_cmd</a></li><li><a href="../api/rlsbl.commands.undo.html">rlsbl.commands.undo</a></li><li><a href="../api/rlsbl.commands.unreleased.html">rlsbl.commands.unreleased</a></li><li><a href="../api/rlsbl.commands.watch.html">rlsbl.commands.watch</a></li><li><a href="../api/rlsbl.config.html">rlsbl.config</a></li><li><a href="../api/rlsbl.lib.config_migrator.html" style="font-weight:600;color:var(--link)">rlsbl.lib.config_migrator</a></li><li><a href="../api/rlsbl.lib.html">rlsbl.lib</a></li><li><a href="../api/rlsbl.lib.schema_loader.html">rlsbl.lib.schema_loader</a></li><li><a href="../api/rlsbl.lock.html">rlsbl.lock</a></li><li><a href="../api/rlsbl.html">rlsbl</a></li><li><a href="../api/rlsbl.registries.go.html">rlsbl.registries.go</a></li><li><a href="../api/rlsbl.registries.npm.html">rlsbl.registries.npm</a></li><li><a href="../api/rlsbl.registries.pypi.html">rlsbl.registries.pypi</a></li><li><a href="../api/rlsbl.tagging.html">rlsbl.tagging</a></li><li><a href="../api/rlsbl.targets.base.html">rlsbl.targets.base</a></li><li><a href="../api/rlsbl.targets.codehome.html">rlsbl.targets.codehome</a></li><li><a href="../api/rlsbl.targets.docs.config.html">rlsbl.targets.docs.config</a></li><li><a href="../api/rlsbl.targets.docs.deploy.html">rlsbl.targets.docs.deploy</a></li><li><a href="../api/rlsbl.targets.docs.extract.html">rlsbl.targets.docs.extract</a></li><li><a href="../api/rlsbl.targets.docs.html.html">rlsbl.targets.docs.html</a></li><li><a href="../api/rlsbl.targets.docs.markdown.html">rlsbl.targets.docs.markdown</a></li><li><a href="../api/rlsbl.targets.docs.html">rlsbl.targets.docs</a></li><li><a href="../api/rlsbl.targets.go.html">rlsbl.targets.go</a></li><li><a href="../api/rlsbl.targets.html">rlsbl.targets</a></li><li><a href="../api/rlsbl.targets.npm.html">rlsbl.targets.npm</a></li><li><a href="../api/rlsbl.targets.protocol.html">rlsbl.targets.protocol</a></li><li><a href="../api/rlsbl.targets.pypi.html">rlsbl.targets.pypi</a></li><li><a href="../api/rlsbl.utils.html">rlsbl.utils</a></li></ul>
+</nav>
+<main class="content">
+<h1>rlsbl.lib.config_migrator</h1>
+<p>Generic config file migration engine.</p>
+<p>Supports merging defaults into existing config files and running versioned migrations that mutate config values. All writes are atomic (tmp + rename).</p>
+<p>Designed to be reusable across projects that need schema evolution for JSON config files.</p>
+<h2>Classes</h2>
+<h3>ConfigMigrator</h3>
+<p>Generic config file migration engine.</p>
+<p>Supports three merge strategies:</p>
+<ul><li>deep_recursive: add missing keys recursively (for nested dicts)</li><li>flat_dict: add missing top-level keys only</li><li>list_by_key: match list items by a key field, add missing attrs</li></ul>
+<p>Usage:     schema = {         "files": [             {"path": "config.json", "defaults": {...}, "merge_strategy": "flat_dict"},             {"path": "theme.json", "defaults": {...}, "merge_strategy": "deep_recursive"},             {"path": "segments.json", "defaults": [...], "merge_strategy": "list_by_key", "match_field": "key"},         ],         "schema_version_key": "_schema_version",         "migrations": [             {"version": 1, "description": "...", "apply": some_callable},         ],     }     migrator = ConfigMigrator(schema)     changes = migrator.run(Path("/path/to/config/dir"))</p>
+<h4>__init__</h4>
+<pre><code class="language-python">def __init__(self, schema: dict[str, Any]) -&gt; None</code></pre>
+<p>Initialize with a schema describing files, defaults, and migrations.</p>
+<p>Args:     schema: dict with:       - files: list of {path, defaults, merge_strategy, match_field?}       - schema_version_key: str (default "_schema_version")       - migrations: list of {version: int, description: str, apply: callable}         where apply receives a dict of all loaded configs keyed by filename         and mutates in place.</p>
+<h4>run</h4>
+<pre><code class="language-python">def run(self, base_dir: Path) -&gt; dict[str, bool]</code></pre>
+<p>Run migrations on all files in base_dir.</p>
+<p>Returns dict mapping filename -> whether it was written (changed).</p>
+<h4>deep_merge_missing</h4>
+<pre><code class="language-python">def deep_merge_missing(target: dict, defaults: dict) -&gt; bool</code></pre>
+<p>Add missing keys from defaults recursively. Returns True if changed.</p>
+<h4>flat_merge_missing</h4>
+<pre><code class="language-python">def flat_merge_missing(target: dict, defaults: dict) -&gt; bool</code></pre>
+<p>Add missing top-level keys. Returns True if changed.</p>
+<h4>list_merge_by_key</h4>
+<pre><code class="language-python">def list_merge_by_key(target_list: list[dict], defaults_list: list[dict], match_field: str) -&gt; bool</code></pre>
+<p>For each default item, find match in target by match_field, add missing attrs.</p>
+<p>Only enriches existing items in target_list. Does not add items that the user has removed (respects user deletions). Does not overwrite existing attrs.</p>
+<h4>_apply_migrations</h4>
+<pre><code class="language-python">def _apply_migrations(self, configs: dict[str, Any], schema_version_key: str) -&gt; set[str]</code></pre>
+<p>Apply pending versioned migrations.</p>
+<p>Returns set of filenames that were mutated by migrations. The schema version is stored in the first file in the schema's files list.</p>
+<h4>_save_json</h4>
+<pre><code class="language-python">def _save_json(path: Path, data: Any) -&gt; None</code></pre>
+<p>Atomic write: tmp file + rename.</p>
+<h4>_load_json</h4>
+<pre><code class="language-python">def _load_json(path: Path) -&gt; Any | None</code></pre>
+<p>Load JSON file, return None on missing/malformed.</p>
+</main>
+</body>
+</html>
