@@ -46,21 +46,34 @@ class DocsTarget(BaseTarget):
         return None
 
     def build(self, dir_path, version):
-        """Extract documentation from Python source files.
-
-        Currently performs extraction only. Markdown and HTML generation
-        will be added in later phases (3c-3d).
-        """
+        """Extract docs from Python sources, generate Markdown and HTML."""
         # Lazy imports to keep heavy deps optional
         from .config import load_docs_config
         from .extract import extract_python_docs
+        from .markdown import generate_markdown
+        from .html import generate_html
 
         config = load_docs_config(dir_path)
         if not config:
             return
 
         pages = extract_python_docs(config["source"]["paths"], dir_path)
-        # For now, just extract -- MD/HTML generation comes later
+        project_name = config.get(
+            "project_name", os.path.basename(os.path.abspath(dir_path))
+        )
+
+        md_files = generate_markdown(pages, version, project_name)
+        html_files = generate_html(md_files, version, project_name)
+
+        # Write HTML output to configured directory
+        output_dir = os.path.join(dir_path, config["output"]["dir"])
+        os.makedirs(output_dir, exist_ok=True)
+        for rel_path, content in html_files.items():
+            out_path = os.path.join(output_dir, rel_path)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "w") as f:
+                f.write(content)
+
         return pages
 
     def publish(self, dir_path, version):
