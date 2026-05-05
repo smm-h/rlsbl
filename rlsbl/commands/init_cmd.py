@@ -9,6 +9,7 @@ import sys
 import tempfile
 
 from ..config import should_tag
+from ..lock import acquire_lock, release_lock
 from ..registries import REGISTRIES
 from ..tagging import ensure_tags
 from ..utils import find_commit_tool
@@ -445,47 +446,53 @@ def run_cmd(registry, args, flags):
         print(reg.get_project_init_hint(), file=sys.stderr)
         sys.exit(1)
 
-    # Gather template variables
-    vars_dict = reg.get_template_vars(".")
-    from datetime import datetime
-    vars_dict["year"] = str(datetime.now().year)
+    # Acquire advisory lock to prevent concurrent rlsbl operations
+    acquire_lock()
 
-    force = flags.get("force", False)
-    update = flags.get("update", False)
+    try:
+        # Gather template variables
+        vars_dict = reg.get_template_vars(".")
+        from datetime import datetime
+        vars_dict["year"] = str(datetime.now().year)
 
-    existing_hashes = load_hashes()
+        force = flags.get("force", False)
+        update = flags.get("update", False)
 
-    # Process registry-specific templates
-    reg_created, reg_skipped, reg_warnings, reg_hashes = process_mappings(
-        reg.get_template_dir(),
-        reg.get_template_mappings(),
-        vars_dict,
-        force,
-        update,
-        existing_hashes,
-    )
+        existing_hashes = load_hashes()
 
-    # Process shared templates (skip if another registry already handled them)
-    shared_created, shared_skipped, shared_warnings, shared_hashes = [], [], [], {}
-    if not flags.get("skip-shared"):
-        shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
-            reg.get_shared_template_dir(),
-            reg.get_shared_template_mappings(),
+        # Process registry-specific templates
+        reg_created, reg_skipped, reg_warnings, reg_hashes = process_mappings(
+            reg.get_template_dir(),
+            reg.get_template_mappings(),
             vars_dict,
             force,
             update,
             existing_hashes,
         )
 
-    created = reg_created + shared_created
-    skipped = reg_skipped + shared_skipped
-    warnings = reg_warnings + shared_warnings
+        # Process shared templates (skip if another registry already handled them)
+        shared_created, shared_skipped, shared_warnings, shared_hashes = [], [], [], {}
+        if not flags.get("skip-shared"):
+            shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
+                reg.get_shared_template_dir(),
+                reg.get_shared_template_mappings(),
+                vars_dict,
+                force,
+                update,
+                existing_hashes,
+            )
 
-    _finalize_scaffold(
-        existing_hashes, [reg_hashes, shared_hashes],
-        created, skipped, warnings, registry=registry,
-        flags=flags, registries=[registry],
-    )
+        created = reg_created + shared_created
+        skipped = reg_skipped + shared_skipped
+        warnings = reg_warnings + shared_warnings
+
+        _finalize_scaffold(
+            existing_hashes, [reg_hashes, shared_hashes],
+            created, skipped, warnings, registry=registry,
+            flags=flags, registries=[registry],
+        )
+    finally:
+        release_lock()
 
 
 def run_cmd_multi(registries_list, args, flags):
@@ -501,63 +508,69 @@ def run_cmd_multi(registries_list, args, flags):
         print(f"Error: no {primary} project found in current directory.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Multiple registries detected: {', '.join(registries_list)}")
-    print("Scaffolding with merged publish workflow.")
+    # Acquire advisory lock to prevent concurrent rlsbl operations
+    acquire_lock()
 
-    vars_dict = reg.get_template_vars(".")
-    from datetime import datetime
-    vars_dict["year"] = str(datetime.now().year)
+    try:
+        print(f"Multiple registries detected: {', '.join(registries_list)}")
+        print("Scaffolding with merged publish workflow.")
 
-    force = flags.get("force", False)
-    update = flags.get("update", False)
-    existing_hashes = load_hashes()
+        vars_dict = reg.get_template_vars(".")
+        from datetime import datetime
+        vars_dict["year"] = str(datetime.now().year)
 
-    # Process primary registry CI template only (publish will come from merged)
-    ci_mappings = [m for m in reg.get_template_mappings() if "publish" not in m["template"]]
-    ci_created, ci_skipped, ci_warnings, ci_hashes = process_mappings(
-        reg.get_template_dir(),
-        ci_mappings,
-        vars_dict,
-        force,
-        update,
-        existing_hashes,
-    )
+        force = flags.get("force", False)
+        update = flags.get("update", False)
+        existing_hashes = load_hashes()
 
-    # Process merged publish workflow template
-    merged_tpl_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                  "templates", "merged")
-    merged_created, merged_skipped, merged_warnings, merged_hashes = process_mappings(
-        merged_tpl_dir,
-        [{"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"}],
-        vars_dict,
-        force,
-        update,
-        existing_hashes,
-    )
+        # Process primary registry CI template only (publish will come from merged)
+        ci_mappings = [m for m in reg.get_template_mappings() if "publish" not in m["template"]]
+        ci_created, ci_skipped, ci_warnings, ci_hashes = process_mappings(
+            reg.get_template_dir(),
+            ci_mappings,
+            vars_dict,
+            force,
+            update,
+            existing_hashes,
+        )
 
-    # Process shared templates (once)
-    shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
-        reg.get_shared_template_dir(),
-        reg.get_shared_template_mappings(),
-        vars_dict,
-        force,
-        update,
-        existing_hashes,
-    )
+        # Process merged publish workflow template
+        merged_tpl_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                      "templates", "merged")
+        merged_created, merged_skipped, merged_warnings, merged_hashes = process_mappings(
+            merged_tpl_dir,
+            [{"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"}],
+            vars_dict,
+            force,
+            update,
+            existing_hashes,
+        )
 
-    created = ci_created + merged_created + shared_created
-    skipped = ci_skipped + merged_skipped + shared_skipped
-    warnings = ci_warnings + merged_warnings + shared_warnings
+        # Process shared templates (once)
+        shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
+            reg.get_shared_template_dir(),
+            reg.get_shared_template_mappings(),
+            vars_dict,
+            force,
+            update,
+            existing_hashes,
+        )
 
-    _finalize_scaffold(
-        existing_hashes, [ci_hashes, merged_hashes, shared_hashes],
-        created, skipped, warnings,
-        flags=flags, registries=registries_list,
-    )
+        created = ci_created + merged_created + shared_created
+        skipped = ci_skipped + merged_skipped + shared_skipped
+        warnings = ci_warnings + merged_warnings + shared_warnings
 
-    # Show combined next steps for dual-registry
-    print("\nNext steps:")
-    print("  1. Add an NPM_TOKEN secret to your GitHub repo (Settings > Secrets > Actions)")
-    print("  2. Configure Trusted Publishing on pypi.org")
-    print("  3. Push to GitHub to activate the CI workflow")
-    print("  4. Run rlsbl release [patch|minor|major]")
+        _finalize_scaffold(
+            existing_hashes, [ci_hashes, merged_hashes, shared_hashes],
+            created, skipped, warnings,
+            flags=flags, registries=registries_list,
+        )
+
+        # Show combined next steps for dual-registry
+        print("\nNext steps:")
+        print("  1. Add an NPM_TOKEN secret to your GitHub repo (Settings > Secrets > Actions)")
+        print("  2. Configure Trusted Publishing on pypi.org")
+        print("  3. Push to GitHub to activate the CI workflow")
+        print("  4. Run rlsbl release [patch|minor|major]")
+    finally:
+        release_lock()
