@@ -13,9 +13,6 @@ Findings from two independent audits (correctness + security) on v0.7.0, filtere
 ### record-gif non-integer flag gives raw error
 `rlsbl/commands/record_gif.py` — `--width abc` produces `ValueError: invalid literal for int()` without indicating which flag failed. Fix: wrap `int()` calls in try/except with a clear message.
 
-### Rename test_tagging.py
-`tests/test_tagging.py` — tests 3 different modules (config, tagging, discover) under a misleading filename. Fix: split into `test_config.py`, `test_tagging.py`, `test_discover.py` or at minimum rename.
-
 ### Discover no page-count cap
 `rlsbl/commands/discover.py` — `MAX_RESULTS` limits total items but not page count. A server returning 1 item per page could cause 1000 API calls. Fix: add `MAX_PAGES = 20` guard.
 
