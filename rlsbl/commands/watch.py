@@ -139,6 +139,24 @@ def _print_workflow_audit(results):
     return missing_publish
 
 
+def _poll_runs(commit_sha, max_attempts=15, interval=2):
+    """Poll gh run list until at least one run appears.
+
+    Returns a list of run dicts (may be empty if nothing found after all attempts).
+    """
+    for _ in range(max_attempts):
+        try:
+            raw = run("gh", ["run", "list", "--commit", commit_sha,
+                             "--json", "databaseId,name,status"])
+            parsed = json.loads(raw)
+            if parsed:
+                return parsed
+        except Exception:
+            pass
+        time.sleep(interval)
+    return []
+
+
 def run_cmd(registry, args, flags):
     """Watch all CI runs for a commit until they complete.
 
@@ -178,18 +196,7 @@ def run_cmd(registry, args, flags):
         label = f"{repo_name} {tag}" if repo_name else tag
 
         # Poll until at least one run appears (retry up to 30s)
-        runs = []
-        for _ in range(15):
-            try:
-                raw = run("gh", ["run", "list", "--commit", commit_sha,
-                                 "--json", "databaseId,name,status"])
-                parsed = json.loads(raw)
-                if parsed:
-                    runs = parsed
-                    break
-            except Exception:
-                pass
-            time.sleep(2)
+        runs = _poll_runs(commit_sha)
 
         if not runs:
             print(f"rlsbl: {label}: no CI runs found after 30s", file=sys.stderr)
@@ -200,7 +207,24 @@ def run_cmd(registry, args, flags):
         # Watch runs in parallel (or directly if only one)
         results = _watch_runs(runs, label, repo_slug)
 
+        # Re-poll for late-starting workflows (e.g. Publish triggered by
+        # a GitHub Release that was created after CI started).  Wait briefly,
+        # then check once for any runs that were not in the initial set.
+        initial_ids = {r["databaseId"] for r in runs}
+        time.sleep(5)
+        all_runs_now = _poll_runs(commit_sha, max_attempts=1, interval=0)
+        late_runs = [r for r in all_runs_now if r["databaseId"] not in initial_ids]
+
+        if late_runs:
+            print(
+                f"rlsbl: {label}: found {len(late_runs)} late-starting run(s), watching...",
+                file=sys.stderr,
+            )
+            late_results = _watch_runs(late_runs, label, repo_slug)
+            results.extend(late_results)
+
         # Workflow audit: list what ran and flag missing publish workflows
+        # (runs after re-poll so it sees all workflows including late ones)
         _print_workflow_audit(results)
 
         # Desktop notification with aggregated results
