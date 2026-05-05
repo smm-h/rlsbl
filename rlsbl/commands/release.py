@@ -116,7 +116,9 @@ def run_cmd(registry, args, flags):
     if os.path.exists(pre_release_script):
         log("Running pre-release hook...")
         try:
-            run("bash", [pre_release_script])
+            env = os.environ.copy()
+            env["RLSBL_VERSION"] = new_version
+            run("bash", [pre_release_script], env=env)
         except Exception:
             print("Error: pre-release hook failed. Fix the issues and try again.", file=sys.stderr)
             sys.exit(1)
