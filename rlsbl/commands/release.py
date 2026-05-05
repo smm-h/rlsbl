@@ -75,10 +75,6 @@ def run_cmd(registry, args, flags):
     if branch not in ("main", "master"):
         print(f'Warning: you are on branch "{branch}", not main/master.', file=sys.stderr)
 
-    # Current version
-    current_version = reg.read_version(".")
-    log(f"Current version: {current_version}")
-
     # Derive scope_name from --scope flag for tag_format
     scope = flags.get("scope")
     scope_name = os.path.basename(scope.rstrip("/")) if scope else None
@@ -86,6 +82,25 @@ def run_cmd(registry, args, flags):
     # Get target instance for tag_format/build/publish
     from ..targets import TARGETS
     target = TARGETS[registry]
+
+    # Determine if this is a scoped (subdir) release
+    is_scoped = scope is not None and target.scope == "subdir"
+
+    # Batch mode detection: scope ends with "/" or is a directory with multiple
+    # plugin.toml files
+    if is_scoped:
+        if scope.endswith("/") or (
+            os.path.isdir(scope) and not os.path.exists(os.path.join(scope, "plugin.toml"))
+        ):
+            print("Batch release not yet implemented", file=sys.stderr)
+            sys.exit(1)
+
+    # version_dir: where to read/write version (scope path for subdir, "." otherwise)
+    version_dir = scope if is_scoped else "."
+
+    # Current version
+    current_version = reg.read_version(version_dir)
+    log(f"Current version: {current_version}")
 
     # If the current version has never been tagged, release it as-is (bootstrap)
     current_tag = target.tag_format(scope_name, current_version)
@@ -118,8 +133,15 @@ def run_cmd(registry, args, flags):
         print(f'Error: tag "{tag}" already exists.', file=sys.stderr)
         sys.exit(1)
 
-    # Validate changelog entry
-    changelog_path = os.path.join(".", "CHANGELOG.md")
+    # Validate changelog entry -- for scoped releases, check scope dir first
+    if is_scoped:
+        scoped_changelog = os.path.join(scope, "CHANGELOG.md")
+        if os.path.exists(scoped_changelog):
+            changelog_path = scoped_changelog
+        else:
+            changelog_path = os.path.join(".", "CHANGELOG.md")
+    else:
+        changelog_path = os.path.join(".", "CHANGELOG.md")
     if not os.path.exists(changelog_path):
         print(
             f"Error: CHANGELOG.md not found. Create one with a ## {new_version} section.",
@@ -162,17 +184,20 @@ def run_cmd(registry, args, flags):
             log(f"Version:   {new_version} (first release)")
         log(f"Tag:       {tag}")
         log(f"Branch:    {branch}")
-        # Show other version files that would be synced
-        other_files = []
-        for name, other_reg in REGISTRIES.items():
-            if name == registry:
-                continue
-            if other_reg.check_project_exists("."):
-                other_file = other_reg.get_version_file()
-                if other_file:
-                    other_files.append(other_file)
-        if other_files:
-            log(f"Sync to:   {', '.join(other_files)}")
+        if is_scoped:
+            log(f"Scope:     {scope}")
+        # Show other version files that would be synced (skip for scoped releases)
+        if not is_scoped:
+            other_files = []
+            for name, other_reg in REGISTRIES.items():
+                if name == registry:
+                    continue
+                if other_reg.check_project_exists("."):
+                    other_file = other_reg.get_version_file()
+                    if other_file:
+                        other_files.append(other_file)
+            if other_files:
+                log(f"Sync to:   {', '.join(other_files)}")
         log(f"Changelog:\n{changelog_entry}")
         log("--- No changes made ---")
         return
@@ -184,26 +209,34 @@ def run_cmd(registry, args, flags):
         _run_release_mutating(
             registry, reg, flags, quiet, log, new_version, current_version,
             bump_type, tag, branch, changelog_entry, target,
+            is_scoped=is_scoped, version_dir=version_dir, scope=scope,
         )
     finally:
         release_lock()
 
 
 def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current_version,
-                          bump_type, tag, branch, changelog_entry, target):
+                          bump_type, tag, branch, changelog_entry, target,
+                          is_scoped=False, version_dir=".", scope=None):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     # Pre-compute which files will be modified
     version_file = reg.get_version_file()
     files_to_commit = []
     if version_file:
-        files_to_commit.append(version_file)
-    for name, other_reg in REGISTRIES.items():
-        if name == registry:
-            continue
-        if other_reg.check_project_exists("."):
-            other_file = other_reg.get_version_file()
-            if other_file:
-                files_to_commit.append(other_file)
+        # For scoped releases, prefix the version file with the scope path
+        if is_scoped and scope:
+            files_to_commit.append(os.path.join(scope, version_file))
+        else:
+            files_to_commit.append(version_file)
+    # Sync version to other registries only for non-scoped releases
+    if not is_scoped:
+        for name, other_reg in REGISTRIES.items():
+            if name == registry:
+                continue
+            if other_reg.check_project_exists("."):
+                other_file = other_reg.get_version_file()
+                if other_file:
+                    files_to_commit.append(other_file)
 
     # Confirmation prompt (skip with --yes)
     if not flags.get("yes"):
@@ -228,21 +261,25 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     # Write new version to version files (skip if version didn't change, e.g. first release)
     if new_version != current_version:
         if version_file:
-            reg.write_version(".", new_version)
-            log(f"Updated version in {version_file}")
+            reg.write_version(version_dir, new_version)
+            if is_scoped and scope:
+                log(f"Updated version in {os.path.join(scope, version_file)}")
+            else:
+                log(f"Updated version in {version_file}")
 
-        # Sync version to all other recognized version files
-        for name, other_reg in REGISTRIES.items():
-            if name == registry:
-                continue
-            if other_reg.check_project_exists("."):
-                other_file = other_reg.get_version_file()
-                if other_file:
-                    other_reg.write_version(".", new_version)
-                    log(f"Synced version to {other_file}")
+        # Sync version to all other recognized version files (skip for scoped releases)
+        if not is_scoped:
+            for name, other_reg in REGISTRIES.items():
+                if name == registry:
+                    continue
+                if other_reg.check_project_exists("."):
+                    other_file = other_reg.get_version_file()
+                    if other_file:
+                        other_reg.write_version(".", new_version)
+                        log(f"Synced version to {other_file}")
 
-    # Ecosystem tagging: add keyword to manifests if enabled (after confirmation)
-    if should_tag(flags):
+    # Ecosystem tagging: add keyword to manifests if enabled (skip for scoped releases)
+    if should_tag(flags) and not is_scoped:
         try:
             if REGISTRIES["npm"].check_project_exists("."):
                 if ensure_npm_keyword(".", quiet=quiet):
@@ -338,8 +375,8 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     except Exception as e:
         print(f"Warning: target publish step failed: {e}", file=sys.stderr)
 
-    # Ecosystem tagging: add GitHub topic after release is created
-    if should_tag(flags):
+    # Ecosystem tagging: add GitHub topic after release is created (skip for scoped)
+    if should_tag(flags) and not is_scoped:
         ensure_github_topic(quiet=quiet)
 
     # Run post-release hook if present (non-fatal: release is already complete)
