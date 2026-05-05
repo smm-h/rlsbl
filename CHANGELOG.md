@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.1
+
+- **`rlsbl config show` subcommand.** Bare `rlsbl config` now prints help; use `config show` for project info.
+- **Migration prefix enforcement.** Schema loader raises an error if filename prefix doesn't match the version attribute inside.
+- **Lock guard.** Prevents fd leak on double-acquire.
+- **Race condition parsing fix.** Porcelain parser handles stripped leading whitespace correctly.
+- **README rewrite.** Full rewrite documenting all commands and v0.9.0 features.
+- Added `.rlsbl/lock` to `.gitignore`.
+- Added `prs` command to 0.9.0 changelog retroactively.
+
 ## 0.9.0
 
 - **`rlsbl unreleased` command.** Lists commits since last tag, cross-references CHANGELOG entries, reports coverage status. Supports `--json` for machine-readable output.
