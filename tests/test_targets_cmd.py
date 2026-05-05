@@ -1,0 +1,269 @@
+"""Tests for rlsbl targets command and multi-target release."""
+
+import json
+import os
+import shutil
+import tempfile
+from io import StringIO
+from unittest.mock import patch, MagicMock
+
+import pytest
+
+
+class TestTargetsCommand:
+    """Tests for the `rlsbl targets` command output."""
+
+    def setup_method(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+
+    def teardown_method(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    def test_lists_all_targets(self):
+        """Command output includes all registered targets."""
+        from rlsbl.commands.targets_cmd import run_cmd
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            run_cmd(None, [], {})
+
+        output = buf.getvalue()
+        assert "npm" in output
+        assert "pypi" in output
+        assert "go" in output
+        assert "codehome" in output
+        assert "docs" in output
+
+    def test_shows_header_row(self):
+        """Output starts with a header row containing column names."""
+        from rlsbl.commands.targets_cmd import run_cmd
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            run_cmd(None, [], {})
+
+        lines = buf.getvalue().splitlines()
+        header = lines[0]
+        assert "Target" in header
+        assert "Scope" in header
+        assert "Detected" in header
+        assert "Version file" in header
+
+    def test_detects_npm_in_project_with_package_json(self):
+        """In a directory with package.json, npm shows as detected."""
+        with open("package.json", "w") as f:
+            json.dump({"name": "test", "version": "1.0.0"}, f)
+
+        from rlsbl.commands.targets_cmd import run_cmd
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            run_cmd(None, [], {})
+
+        output = buf.getvalue()
+        # Find the npm line and verify it says "yes"
+        for line in output.splitlines():
+            if line.startswith("npm"):
+                assert "yes" in line
+                assert "package.json" in line
+                break
+        else:
+            pytest.fail("npm line not found in output")
+
+    def test_no_detection_in_empty_dir(self):
+        """In an empty directory, all targets show 'no' for detected."""
+        from rlsbl.commands.targets_cmd import run_cmd
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            run_cmd(None, [], {})
+
+        output = buf.getvalue()
+        lines = output.splitlines()[1:]  # skip header
+        for line in lines:
+            assert "no" in line
+
+    def test_scope_column_shows_subdir_for_codehome(self):
+        """Codehome target shows 'subdir' in the Scope column."""
+        from rlsbl.commands.targets_cmd import run_cmd
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            run_cmd(None, [], {})
+
+        output = buf.getvalue()
+        for line in output.splitlines():
+            if line.startswith("codehome"):
+                assert "subdir" in line
+                break
+        else:
+            pytest.fail("codehome line not found in output")
+
+    def test_docs_target_shows_none_version_file(self):
+        """Docs target shows '(none)' for version file."""
+        from rlsbl.commands.targets_cmd import run_cmd
+
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            run_cmd(None, [], {})
+
+        output = buf.getvalue()
+        for line in output.splitlines():
+            if line.startswith("docs"):
+                assert "(none)" in line
+                break
+        else:
+            pytest.fail("docs line not found in output")
+
+
+class TestMultiTargetRelease:
+    """Tests for multi-target release: secondary targets get build/publish called."""
+
+    def setup_method(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+        # Create package.json so npm is the primary target
+        with open("package.json", "w") as f:
+            json.dump({"name": "test-pkg", "version": "1.0.0"}, f, indent=2)
+            f.write("\n")
+        # Create CHANGELOG.md
+        with open("CHANGELOG.md", "w") as f:
+            f.write("# Changelog\n\n## 1.0.1\n\nPatch release with improvements.\n")
+
+    def teardown_method(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_secondary_targets_called_when_detected(
+        self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
+    ):
+        """When a secondary target (docs) is detected, its build/publish are called."""
+        # Create .rlsbl/docs.toml so docs target is detected
+        os.makedirs(".rlsbl", exist_ok=True)
+        with open(".rlsbl/docs.toml", "w") as f:
+            f.write('[source]\ntype = "python"\npaths = ["src/"]\n\n[output]\ndir = "docs/_build"\n')
+
+        # Mock run() responses:
+        # 1. tag -l (current tag exists) -> "v1.0.0"
+        # 2. tag -l (new tag doesn't exist) -> ""
+        # 3. git status --porcelain -> ""
+        # 4. git add -> ""
+        # 5. git commit -> ""
+        # 6. git tag -> ""
+        # 7. git push origin tag -> ""
+        # 8. gh release create -> ""
+        # 9. git rev-parse HEAD -> "abc123"
+        mock_run.side_effect = ["v1.0.0", "", "", "", "", "", "", "", "abc123"]
+
+        # Mock the docs target's build and publish to track calls
+        from rlsbl.targets import TARGETS
+        original_build = TARGETS["docs"].build
+        original_publish = TARGETS["docs"].publish
+        build_mock = MagicMock()
+        publish_mock = MagicMock()
+        TARGETS["docs"].build = build_mock
+        TARGETS["docs"].publish = publish_mock
+
+        try:
+            from rlsbl.commands.release import run_cmd
+
+            with patch("sys.stdout", StringIO()):
+                run_cmd("npm", ["patch"], {"yes": True, "quiet": False})
+
+            # Verify docs target build/publish were called
+            build_mock.assert_called_once_with(".", "1.0.1")
+            publish_mock.assert_called_once_with(".", "1.0.1")
+        finally:
+            # Restore original methods
+            TARGETS["docs"].build = original_build
+            TARGETS["docs"].publish = original_publish
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_skip_docs_flag_suppresses_secondary(
+        self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
+    ):
+        """--skip-docs prevents secondary target build/publish from running."""
+        # Create .rlsbl/docs.toml so docs target is detected
+        os.makedirs(".rlsbl", exist_ok=True)
+        with open(".rlsbl/docs.toml", "w") as f:
+            f.write('[source]\ntype = "python"\npaths = ["src/"]\n\n[output]\ndir = "docs/_build"\n')
+
+        mock_run.side_effect = ["v1.0.0", "", "", "", "", "", "", "", "abc123"]
+
+        from rlsbl.targets import TARGETS
+        original_build = TARGETS["docs"].build
+        original_publish = TARGETS["docs"].publish
+        build_mock = MagicMock()
+        publish_mock = MagicMock()
+        TARGETS["docs"].build = build_mock
+        TARGETS["docs"].publish = publish_mock
+
+        try:
+            from rlsbl.commands.release import run_cmd
+
+            with patch("sys.stdout", StringIO()):
+                run_cmd("npm", ["patch"], {"yes": True, "quiet": False, "skip-docs": True})
+
+            # Verify docs target build/publish were NOT called
+            build_mock.assert_not_called()
+            publish_mock.assert_not_called()
+        finally:
+            TARGETS["docs"].build = original_build
+            TARGETS["docs"].publish = original_publish
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_secondary_target_failure_is_non_fatal(
+        self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
+    ):
+        """If a secondary target's build/publish raises, release still completes."""
+        # Create .rlsbl/docs.toml so docs target is detected
+        os.makedirs(".rlsbl", exist_ok=True)
+        with open(".rlsbl/docs.toml", "w") as f:
+            f.write('[source]\ntype = "python"\npaths = ["src/"]\n\n[output]\ndir = "docs/_build"\n')
+
+        mock_run.side_effect = ["v1.0.0", "", "", "", "", "", "", "", "abc123"]
+
+        from rlsbl.targets import TARGETS
+        original_build = TARGETS["docs"].build
+        original_publish = TARGETS["docs"].publish
+        TARGETS["docs"].build = MagicMock(side_effect=RuntimeError("build failed"))
+        TARGETS["docs"].publish = MagicMock(side_effect=RuntimeError("publish failed"))
+
+        try:
+            from rlsbl.commands.release import run_cmd
+
+            # Should not raise -- secondary failures are non-fatal
+            buf = StringIO()
+            with patch("sys.stdout", StringIO()), patch("sys.stderr", buf):
+                run_cmd("npm", ["patch"], {"yes": True, "quiet": False})
+
+            # Verify warnings were emitted
+            stderr_output = buf.getvalue()
+            assert "docs target build failed" in stderr_output
+            assert "docs target publish failed" in stderr_output
+        finally:
+            TARGETS["docs"].build = original_build
+            TARGETS["docs"].publish = original_publish
