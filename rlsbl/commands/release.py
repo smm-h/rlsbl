@@ -252,6 +252,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
             file_path = line[3:].split(" -> ")[-1]
             dirty_files.add(file_path)
         expected_files = set(files_to_commit)
+        expected_files.add(os.path.join(".rlsbl", "lock"))
         unexpected = dirty_files - expected_files
         if unexpected:
             unexpected_list = ", ".join(sorted(unexpected))
