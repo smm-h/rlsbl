@@ -3,6 +3,7 @@
 ## 0.9.0
 
 - **`rlsbl unreleased` command.** Lists commits since last tag, cross-references CHANGELOG entries, reports coverage status. Supports `--json` for machine-readable output.
+- **`rlsbl prs` command.** Lists open GitHub pull requests for the current repo.
 - **Config management system.** `rlsbl config init/migrate/status` subcommands for managing project config with schema-driven migration (deep merge, flat merge, list-by-key merge strategies, versioned migrations, atomic writes).
 - **Public library API.** `from rlsbl.lib import ConfigMigrator, load_schema, migrate` for Python projects wanting startup migration.
 - **Scaffold auto-commits.** Created files are committed automatically (use `--no-commit` to opt out). Runs config migrations when `.rlsbl/config-schema.json` exists.
