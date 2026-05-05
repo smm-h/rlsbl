@@ -249,7 +249,11 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         dirty_files = set()
         for line in dirty_output.splitlines():
             # git status --porcelain format: XY <path> or XY <path> -> <path>
-            file_path = line[3:].split(" -> ")[-1]
+            # run() strips stdout so leading space may be lost on first line
+            parts = line.lstrip().split(None, 1)
+            if len(parts) < 2:
+                continue
+            file_path = parts[1].split(" -> ")[-1]
             dirty_files.add(file_path)
         expected_files = set(files_to_commit)
         expected_files.add(os.path.join(".rlsbl", "lock"))
