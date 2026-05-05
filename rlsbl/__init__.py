@@ -1,6 +1,7 @@
 """rlsbl: Release orchestration and project scaffolding for npm, PyPI, and Go."""
 
 import os
+import subprocess
 import sys
 
 
@@ -246,6 +247,12 @@ def main():
                     sys.exit(1)
                 registry = regs[0]
             handler.run_cmd(registry, args, flags)
+    except subprocess.CalledProcessError as e:
+        if e.stderr and e.stderr.strip():
+            print(f"Error: {e.stderr.strip()}", file=sys.stderr)
+        else:
+            print(f"Error: Command failed: {e.cmd[0]}", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
