@@ -17,9 +17,14 @@ def acquire_lock():
     """Acquire an exclusive advisory lock on .rlsbl/lock.
 
     If another process holds the lock, prints a waiting message and
-    blocks until the lock is available.
+    blocks until the lock is available. Returns early if already locked
+    (prevents fd leak on double-acquire).
     """
     global _lock_fd
+
+    # Guard against double-acquire: if already holding the lock, return early
+    if _lock_fd is not None:
+        return
 
     lock_dir = ".rlsbl"
     os.makedirs(lock_dir, exist_ok=True)
