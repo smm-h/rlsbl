@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ..utils import run
 
@@ -28,6 +29,65 @@ def _notify(title, body):
             )
     except Exception:
         pass
+
+
+def _watch_single_run(ci_run, label, repo_slug):
+    """Watch a single CI run. Returns a dict with name, passed, and message."""
+    run_id = str(ci_run["databaseId"])
+    workflow_name = ci_run.get("name", f"run {run_id}")
+
+    try:
+        # gh run watch blocks until the run completes;
+        # --exit-status makes it exit 1 on failure; check=True raises
+        # CalledProcessError so we can distinguish pass from fail
+        subprocess.run(
+            ["gh", "run", "watch", run_id, "--exit-status"],
+            capture_output=True, text=True, timeout=3600, check=True,
+        )
+        msg = f"rlsbl: {label}: [{workflow_name}] passed"
+        print(msg, file=sys.stderr)
+        return {"name": workflow_name, "passed": True}
+    except subprocess.CalledProcessError:
+        msg = f"rlsbl: {label}: [{workflow_name}] FAILED"
+        print(msg, file=sys.stderr)
+        if repo_slug:
+            print(f"rlsbl: https://github.com/{repo_slug}/actions/runs/{run_id}",
+                  file=sys.stderr)
+        return {"name": workflow_name, "passed": False}
+    except subprocess.TimeoutExpired:
+        msg = f"rlsbl: {label}: [{workflow_name}] timed out after 1h"
+        print(msg, file=sys.stderr)
+        return {"name": workflow_name, "passed": False}
+    except Exception as exc:
+        msg = f"rlsbl: {label}: [{workflow_name}] error: {exc}"
+        print(msg, file=sys.stderr)
+        return {"name": workflow_name, "passed": False}
+
+
+def _watch_runs(runs, label, repo_slug):
+    """Watch all runs in parallel (or directly if only one). Returns list of result dicts."""
+    if len(runs) == 1:
+        # No need for threads when there's only one run
+        return [_watch_single_run(runs[0], label, repo_slug)]
+
+    results = []
+    with ThreadPoolExecutor(max_workers=len(runs)) as executor:
+        futures = {
+            executor.submit(_watch_single_run, ci_run, label, repo_slug): ci_run
+            for ci_run in runs
+        }
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception as exc:
+                # Should not happen since _watch_single_run catches all exceptions,
+                # but guard against unexpected failures in the future machinery
+                ci_run = futures[future]
+                workflow_name = ci_run.get("name", f"run {ci_run['databaseId']}")
+                print(f"rlsbl: {label}: [{workflow_name}] thread error: {exc}",
+                      file=sys.stderr)
+                results.append({"name": workflow_name, "passed": False})
+    return results
 
 
 def run_cmd(registry, args, flags):
@@ -88,38 +148,20 @@ def run_cmd(registry, args, flags):
 
         print(f"rlsbl: {label}: found {len(runs)} CI run(s), watching...", file=sys.stderr)
 
-        # Watch each run sequentially, collecting results
-        any_failed = False
-        for ci_run in runs:
-            run_id = str(ci_run["databaseId"])
-            workflow_name = ci_run.get("name", f"run {run_id}")
+        # Watch runs in parallel (or directly if only one)
+        results = _watch_runs(runs, label, repo_slug)
 
-            try:
-                # gh run watch blocks until the run completes;
-                # --exit-status makes it exit 1 on failure; check=True raises
-                # CalledProcessError so we can distinguish pass from fail
-                subprocess.run(
-                    ["gh", "run", "watch", run_id, "--exit-status"],
-                    capture_output=True, text=True, timeout=3600, check=True,
-                )
-                print(f"rlsbl: {label}: {workflow_name} passed", file=sys.stderr)
-            except subprocess.CalledProcessError:
-                any_failed = True
-                print(f"rlsbl: {label}: {workflow_name} FAILED", file=sys.stderr)
-                if repo_slug:
-                    print(f"rlsbl: https://github.com/{repo_slug}/actions/runs/{run_id}",
-                          file=sys.stderr)
-            except subprocess.TimeoutExpired:
-                any_failed = True
-                print(f"rlsbl: {label}: {workflow_name} timed out after 1h", file=sys.stderr)
-
-        # Desktop notification for overall result
-        if any_failed:
-            _notify(f"{label}: CI FAILED", "One or more workflows failed")
+        # Desktop notification with aggregated results
+        passed = sum(1 for r in results if r["passed"])
+        failed = len(results) - passed
+        if failed:
+            body = f"{passed}/{len(results)} passed, {failed} failed"
+            _notify(f"{label}: CI FAILED", body)
         else:
-            _notify(f"{label}: CI passed", "All workflows passed")
+            body = f"{len(results)}/{len(results)} passed"
+            _notify(f"{label}: CI passed", body)
 
-        sys.exit(1 if any_failed else 0)
+        sys.exit(1 if failed else 0)
     except KeyboardInterrupt:
         print("\nWatch cancelled.", file=sys.stderr)
         sys.exit(130)
