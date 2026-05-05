@@ -1,4 +1,10 @@
-"""PyPI registry adapter for rlsbl."""
+"""PyPI registry adapter for rlsbl.
+
+DEPRECATED: This module is retained for backward compatibility with code that
+imports bare functions (e.g. pypi.read_version()) or patches module-level symbols
+(e.g. rlsbl.registries.pypi.run). New code should use rlsbl.targets.PypiTarget instead.
+Scheduled for removal in the next major version.
+"""
 
 import os
 import re
