@@ -10,6 +10,16 @@ from .. import detect_registries
 from ..registries import REGISTRIES
 
 
+def _parse_int_flag(flags, name, default):
+    """Parse an integer flag value, exiting with a clear error on invalid input."""
+    raw = flags.get(name, default)
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        print(f"Invalid value for --{name}: expected integer, got '{raw}'", file=sys.stderr)
+        sys.exit(1)
+
+
 def _get_bin_command():
     """Auto-detect the project's binary command name via registry template vars."""
     regs = detect_registries()
@@ -44,10 +54,10 @@ def run_cmd(registry, args, flags):
         sys.exit(1)
 
     # Parse configurable VHS parameters from flags
-    width = int(flags.get("width", 1200))
-    height = int(flags.get("height", 600))
-    font_size = int(flags.get("font-size", 24))
-    duration = int(flags.get("duration", 10))
+    width = _parse_int_flag(flags, "width", 1200)
+    height = _parse_int_flag(flags, "height", 600)
+    font_size = _parse_int_flag(flags, "font-size", 24)
+    duration = _parse_int_flag(flags, "duration", 10)
 
     assets_dir = "assets"
     os.makedirs(assets_dir, exist_ok=True)
