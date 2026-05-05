@@ -141,8 +141,16 @@ def _load_migrations(migrations_dir: Path) -> list[dict[str, Any]]:
     migration_files.sort(key=lambda x: x[0])
 
     migrations = []
-    for _prefix, filepath in migration_files:
+    for prefix, filepath in migration_files:
         module = _import_migration(filepath)
+
+        # Verify filename prefix matches the version attribute inside
+        if module.version != prefix:
+            raise SchemaLoadError(
+                f"Migration file {filepath.name} has version={module.version}, "
+                f"expected version={prefix} (must match filename prefix)"
+            )
+
         migrations.append({
             "version": module.version,
             "description": module.description,
