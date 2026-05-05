@@ -362,8 +362,8 @@ class TestScaffold(unittest.TestCase):
 
     # -- --force tests --
 
-    def test_force_overwrites_existing_files(self):
-        """With --force, scaffold overwrites existing files."""
+    def test_force_preserves_user_owned_files(self):
+        """With --force, scaffold does NOT overwrite user-owned files (e.g. CHANGELOG.md)."""
         with open("CHANGELOG.md", "w") as f:
             f.write("# My custom changelog\n")
 
@@ -371,8 +371,8 @@ class TestScaffold(unittest.TestCase):
 
         with open("CHANGELOG.md") as f:
             content = f.read()
-        self.assertNotIn("My custom changelog", content)
-        self.assertIn("0.1.0", content)
+        # User-owned files must be preserved even with --force
+        self.assertIn("My custom changelog", content)
 
     def test_force_updates_base(self):
         """With --force, the base should be updated to the new template content."""
