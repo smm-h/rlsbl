@@ -49,6 +49,35 @@ class TestBumpVersion(unittest.TestCase):
         with self.assertRaises(ValueError):
             bump_version("1.2.3", "mega")
 
+    # Pre-release suffix handling
+
+    def test_prerelease_beta_patch(self):
+        self.assertEqual(bump_version("1.0.0-beta.1", "patch"), "1.0.1")
+
+    def test_prerelease_beta_minor(self):
+        self.assertEqual(bump_version("1.0.0-beta.1", "minor"), "1.1.0")
+
+    def test_prerelease_beta_major(self):
+        self.assertEqual(bump_version("1.0.0-beta.1", "major"), "2.0.0")
+
+    def test_prerelease_rc_patch(self):
+        self.assertEqual(bump_version("2.3.0-rc.2", "patch"), "2.3.1")
+
+    def test_prerelease_rc_minor(self):
+        self.assertEqual(bump_version("2.3.0-rc.2", "minor"), "2.4.0")
+
+    def test_prerelease_rc_major(self):
+        self.assertEqual(bump_version("2.3.0-rc.2", "major"), "3.0.0")
+
+    def test_prerelease_alpha(self):
+        self.assertEqual(bump_version("0.5.0-alpha.3", "patch"), "0.5.1")
+
+    def test_clean_version_still_works_after_prerelease_support(self):
+        # Regression check: clean versions must remain unchanged
+        self.assertEqual(bump_version("3.2.1", "patch"), "3.2.2")
+        self.assertEqual(bump_version("3.2.1", "minor"), "3.3.0")
+        self.assertEqual(bump_version("3.2.1", "major"), "4.0.0")
+
 
 class TestExtractChangelogEntry(unittest.TestCase):
     """Tests for extract_changelog_entry(changelog_path, version)."""
