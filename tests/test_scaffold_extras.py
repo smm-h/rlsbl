@@ -1,5 +1,6 @@
-"""Tests for scaffold extras: --force USER_OWNED behavior and auto-commit."""
+"""Tests for scaffold extras: --force USER_OWNED behavior, auto-commit, and config migration."""
 
+import json
 import os
 import subprocess
 
@@ -162,3 +163,142 @@ def test_scaffold_no_commit_flag_skips_commit(mock_git_repo, capsys):
         capture_output=True, text=True, cwd=str(mock_git_repo),
     )
     assert result.stdout.strip() != "", "Tree should be dirty with --no-commit"
+
+
+# --- Config migration integration tests ---
+
+
+def test_scaffold_runs_config_migration_when_schema_exists(tmp_project, capsys):
+    """_finalize_scaffold runs config migrations when .rlsbl/config-schema.json exists."""
+    # Set up .rlsbl/config-schema.json
+    rlsbl_dir = tmp_project / ".rlsbl"
+    rlsbl_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create defaults file
+    defaults_dir = tmp_project / "defaults"
+    defaults_dir.mkdir()
+    defaults = {"theme": "dark", "debug": False, "log_level": "info"}
+    (defaults_dir / "config.json").write_text(json.dumps(defaults))
+
+    # Create schema pointing to the defaults
+    schema = {
+        "schema_version_key": "_schema_version",
+        "files": [
+            {
+                "path": "config.json",
+                "defaults_path": "defaults/config.json",
+                "merge_strategy": "deep_recursive",
+            }
+        ],
+    }
+    (rlsbl_dir / "config-schema.json").write_text(json.dumps(schema))
+
+    # Create an existing config.json missing some keys
+    existing_config = {"theme": "light"}
+    (tmp_project / "config.json").write_text(json.dumps(existing_config))
+
+    # Run _finalize_scaffold (with no-commit to avoid git dependency)
+    _finalize_scaffold(
+        existing_hashes={},
+        all_hash_dicts=[{}],
+        created=[],
+        skipped=[],
+        warnings=[],
+        registry=None,
+        flags={"no-commit": True, "no-tag": True},
+        registries=[],
+    )
+
+    captured = capsys.readouterr()
+    assert "config migration: config.json ... updated" in captured.out
+
+    # Verify missing keys were merged in
+    data = json.loads((tmp_project / "config.json").read_text())
+    assert data["theme"] == "light"  # user value preserved
+    assert data["debug"] is False  # default merged in
+    assert data["log_level"] == "info"  # default merged in
+
+
+def test_scaffold_without_schema_does_not_error(tmp_project, capsys):
+    """_finalize_scaffold works normally when no config-schema.json exists."""
+    # No .rlsbl/config-schema.json -- should silently skip migrations
+    _finalize_scaffold(
+        existing_hashes={},
+        all_hash_dicts=[{}],
+        created=[],
+        skipped=[],
+        warnings=[],
+        registry=None,
+        flags={"no-commit": True, "no-tag": True},
+        registries=[],
+    )
+
+    captured = capsys.readouterr()
+    # No migration output, no error
+    assert "config migration" not in captured.out
+    assert "Warning: config migration skipped" not in captured.out
+
+
+def test_scaffold_config_migration_adds_files_to_commit(mock_git_repo, capsys):
+    """Config migration output files are included in the auto-commit."""
+    # Set up schema and defaults
+    rlsbl_dir = mock_git_repo / ".rlsbl"
+    rlsbl_dir.mkdir(parents=True, exist_ok=True)
+
+    defaults_dir = mock_git_repo / "defaults"
+    defaults_dir.mkdir()
+    defaults = {"name": "test", "version": 1}
+    (defaults_dir / "config.json").write_text(json.dumps(defaults))
+
+    schema = {
+        "schema_version_key": "_schema_version",
+        "files": [
+            {
+                "path": "config.json",
+                "defaults_path": "defaults/config.json",
+                "merge_strategy": "flat_dict",
+            }
+        ],
+    }
+    (rlsbl_dir / "config-schema.json").write_text(json.dumps(schema))
+
+    # Existing config missing "version" key
+    (mock_git_repo / "config.json").write_text(json.dumps({"name": "my-project"}))
+
+    # Commit the setup files so they don't pollute porcelain output
+    subprocess.run(
+        ["git", "add", ".rlsbl", "defaults", "config.json"],
+        cwd=str(mock_git_repo), check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "add schema setup"],
+        cwd=str(mock_git_repo), check=True,
+    )
+
+    # Now run _finalize_scaffold which will modify config.json and commit it
+    _finalize_scaffold(
+        existing_hashes={},
+        all_hash_dicts=[{}],
+        created=[],
+        skipped=[],
+        warnings=[],
+        registry=None,
+        flags={"no-tag": True},
+        registries=[],
+    )
+
+    captured = capsys.readouterr()
+    assert "config migration: config.json ... updated" in captured.out
+    assert "Committed scaffold changes." in captured.out
+
+    # Verify config.json was committed (working tree should be clean)
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True, text=True, cwd=str(mock_git_repo),
+    )
+    assert result.stdout.strip() == "", f"Dirty tree: {result.stdout}"
+
+    # Verify the committed config has the merged keys
+    data = json.loads((mock_git_repo / "config.json").read_text())
+    assert data["name"] == "my-project"  # user value preserved
+    assert data["version"] == 1  # default merged in
