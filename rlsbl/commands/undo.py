@@ -2,7 +2,7 @@
 
 import sys
 
-from ..utils import run, check_gh_installed, check_gh_auth, get_push_timeout, is_clean_tree
+from ..utils import run, check_gh_installed, check_gh_auth, get_push_timeout, get_current_branch, push_if_needed, is_clean_tree
 
 
 def run_cmd(registry, args, flags):
@@ -61,14 +61,35 @@ def run_cmd(registry, args, flags):
         print(f"Warning: could not delete local tag: {e}")
 
     # Revert the version bump commit (should be HEAD)
+    reverted = False
     try:
         head_msg = run("git", ["log", "-1", "--format=%s"])
         if head_msg == tag:
             run("git", ["revert", "--no-edit", "HEAD"])
             print(f"Reverted commit: {head_msg}")
+            reverted = True
         else:
             print(f"Warning: HEAD commit ({head_msg}) doesn't match tag ({tag}). Skipping revert.")
     except Exception as e:
         print(f"Warning: could not revert commit: {e}")
 
-    print(f"\nUndo complete. Run 'git push' to sync the revert.")
+    # Push the revert commit to remote
+    if reverted:
+        should_push = flags.get("yes")
+        if not should_push:
+            try:
+                answer = input("\nPush revert to remote? [y/N] ").strip().lower()
+                should_push = answer == "y"
+            except (EOFError, KeyboardInterrupt):
+                should_push = False
+
+        if should_push:
+            try:
+                branch = get_current_branch()
+                push_if_needed(branch)
+                print("Pushed revert to remote.")
+            except Exception as e:
+                print(f"Warning: could not push revert: {e}")
+                print("Run 'git push' manually to sync the revert.")
+
+    print("\nUndo complete.")
