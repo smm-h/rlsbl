@@ -170,6 +170,8 @@ def run_cmd(registry, args, flags):
             print(f"  Files: {', '.join(files_to_commit)}")
         else:
             print("  Files: (none -- version is the git tag)")
+        if should_tag(flags):
+            print("  Will add 'rlsbl' keyword to project manifests")
         try:
             answer = input("Proceed? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
