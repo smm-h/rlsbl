@@ -86,6 +86,10 @@ def run_cmd(registry, args, flags):
     # Determine if this is a scoped (subdir) release
     is_scoped = scope is not None and target.scope == "subdir"
 
+    # Warn if --scope is used with a root-scoped target (it has no effect)
+    if scope is not None and target.scope != "subdir":
+        print(f"Warning: --scope is ignored for root-scoped target '{target.name}'", file=sys.stderr)
+
     # Batch mode detection: scope ends with "/" or is a directory with multiple
     # plugin.toml files
     if is_scoped:
@@ -97,6 +101,11 @@ def run_cmd(registry, args, flags):
 
     # version_dir: where to read/write version (scope path for subdir, "." otherwise)
     version_dir = scope if is_scoped else "."
+
+    # Validate that the scope directory actually exists
+    if is_scoped and not os.path.isdir(version_dir):
+        print(f"Error: scope directory does not exist: {version_dir}", file=sys.stderr)
+        sys.exit(1)
 
     # Current version
     current_version = reg.read_version(version_dir)
@@ -264,6 +273,11 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
             reg.write_version(version_dir, new_version)
             if is_scoped and scope:
                 log(f"Updated version in {os.path.join(scope, version_file)}")
+                # write_version may also modify pyproject.toml (e.g. CodehomeTarget);
+                # ensure it's included in files_to_commit
+                scoped_pyproject = os.path.join(scope, "pyproject.toml")
+                if os.path.exists(scoped_pyproject) and scoped_pyproject not in files_to_commit:
+                    files_to_commit.append(scoped_pyproject)
             else:
                 log(f"Updated version in {version_file}")
 
@@ -309,7 +323,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
     # Build step (no-op for npm/pypi/go targets)
     try:
-        target.build(".", new_version)
+        target.build(version_dir, new_version)
     except Exception as e:
         print(f"Warning: target build step failed: {e}", file=sys.stderr)
 
@@ -371,7 +385,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
     # Publish step (no-op for npm/pypi/go targets)
     try:
-        target.publish(".", new_version)
+        target.publish(version_dir, new_version)
     except Exception as e:
         print(f"Warning: target publish step failed: {e}", file=sys.stderr)
 
