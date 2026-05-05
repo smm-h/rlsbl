@@ -5,7 +5,13 @@ import json
 import pytest
 
 from conftest import FakeResponse
-from rlsbl.commands.discover import _parse_next_link, _relative_time, run_cmd
+from rlsbl.commands.discover import (
+    MAX_PAGES,
+    _fetch_all_repos,
+    _parse_next_link,
+    _relative_time,
+    run_cmd,
+)
 
 
 class TestRelativeTime:
@@ -66,3 +72,34 @@ class TestRunCmd:
         run_cmd(None, [], {})
         captured = capsys.readouterr()
         assert "No rlsbl-tagged repositories found" in captured.out
+
+
+class TestFetchAllReposPageCap:
+    """Tests for pagination page-count cap in _fetch_all_repos."""
+
+    def test_stops_at_max_pages(self, monkeypatch):
+        """Verify pagination stops after MAX_PAGES even if more pages are available."""
+        call_count = 0
+
+        def fake_make_request(url, token):
+            nonlocal call_count
+            call_count += 1
+            # Return 1 item per page with a next link, simulating infinite pages
+            data = {
+                "total_count": 9999,
+                "items": [{"full_name": f"user/repo-{call_count}"}],
+            }
+            headers = {
+                "Link": '<https://api.github.com/search/repositories?q=topic:rlsbl&page=next>; rel="next"'
+            }
+            return data, headers
+
+        monkeypatch.setattr(
+            "rlsbl.commands.discover._make_request", fake_make_request
+        )
+
+        repos = _fetch_all_repos("fake-token")
+
+        # Should have stopped at MAX_PAGES, not continued indefinitely
+        assert call_count == MAX_PAGES
+        assert len(repos) == MAX_PAGES
