@@ -766,5 +766,137 @@ class TestPrePushCheck(unittest.TestCase):
         self.assertIsNone(reg_name)
 
 
+# ---------------------------------------------------------------------------
+# Release target configuration tests
+# ---------------------------------------------------------------------------
+
+
+class TestResolveReleaseTargets(unittest.TestCase):
+    """Tests for resolve_release_targets: config + --include/--exclude."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    def test_missing_config_falls_back_to_auto_detect(self):
+        """Without release_targets in config, auto-detect all root-scoped detected targets."""
+        # Create selfdoc.json so docs target is detected
+        with open("selfdoc.json", "w") as f:
+            f.write("{}")
+
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {})
+        # docs is root-scoped and detected via selfdoc.json
+        self.assertIn("docs", result)
+        # npm is the primary and must be excluded from secondaries
+        self.assertNotIn("npm", result)
+
+    def test_config_release_targets_restricts_secondaries(self):
+        """release_targets in config restricts which secondaries run."""
+        # Create selfdoc.json so docs target would be auto-detected
+        with open("selfdoc.json", "w") as f:
+            f.write("{}")
+        # Config says only npm participates (but npm is primary, so secondaries = empty)
+        os.makedirs(".rlsbl", exist_ok=True)
+        with open(os.path.join(".rlsbl", "config.json"), "w") as f:
+            json.dump({"release_targets": ["npm"]}, f)
+
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {})
+        # docs is NOT in the configured list, so it should not appear
+        self.assertNotIn("docs", result)
+        # npm is primary, excluded from secondaries
+        self.assertNotIn("npm", result)
+        self.assertEqual(result, set())
+
+    def test_config_release_targets_includes_docs(self):
+        """release_targets listing docs includes it even without auto-detect."""
+        os.makedirs(".rlsbl", exist_ok=True)
+        with open(os.path.join(".rlsbl", "config.json"), "w") as f:
+            json.dump({"release_targets": ["npm", "docs"]}, f)
+
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {})
+        self.assertIn("docs", result)
+        self.assertNotIn("npm", result)
+
+    def test_include_flag_adds_target(self):
+        """--include adds a target that is not in the baseline."""
+        # No config, no selfdoc.json -> docs would not be auto-detected
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {"include": "docs"})
+        self.assertIn("docs", result)
+
+    def test_exclude_flag_removes_target(self):
+        """--exclude removes a target from the baseline."""
+        # Create selfdoc.json so docs would be auto-detected
+        with open("selfdoc.json", "w") as f:
+            f.write("{}")
+
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {"exclude": "docs"})
+        self.assertNotIn("docs", result)
+
+    def test_include_and_exclude_together(self):
+        """--include and --exclude can be used together; exclude wins for same target."""
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {"include": "docs", "exclude": "docs"})
+        # exclude is applied after include, so docs is removed
+        self.assertNotIn("docs", result)
+
+    def test_comma_separated_include(self):
+        """--include accepts comma-separated target names."""
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {"include": "docs,pypi"})
+        self.assertIn("docs", result)
+        self.assertIn("pypi", result)
+
+    def test_comma_separated_exclude(self):
+        """--exclude accepts comma-separated target names."""
+        with open("selfdoc.json", "w") as f:
+            f.write("{}")
+
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {"exclude": "docs,pypi"})
+        self.assertNotIn("docs", result)
+        self.assertNotIn("pypi", result)
+
+    def test_primary_always_excluded_from_secondaries(self):
+        """The primary target is never in the secondary set, even if config lists it."""
+        os.makedirs(".rlsbl", exist_ok=True)
+        with open(os.path.join(".rlsbl", "config.json"), "w") as f:
+            json.dump({"release_targets": ["npm", "docs"]}, f)
+
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {})
+        self.assertNotIn("npm", result)
+
+    def test_unknown_target_in_config_ignored(self):
+        """Unknown target names in config are silently filtered out."""
+        os.makedirs(".rlsbl", exist_ok=True)
+        with open(os.path.join(".rlsbl", "config.json"), "w") as f:
+            json.dump({"release_targets": ["npm", "nonexistent", "docs"]}, f)
+
+        from rlsbl.commands.release import resolve_release_targets
+
+        result = resolve_release_targets("npm", {})
+        self.assertIn("docs", result)
+        self.assertNotIn("nonexistent", result)
+
+
 if __name__ == "__main__":
     unittest.main()
