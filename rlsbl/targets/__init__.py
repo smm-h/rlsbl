@@ -3,7 +3,6 @@
 from .npm import NpmTarget
 from .pypi import PypiTarget
 from .go import GoTarget
-from .codehome import CodehomeTarget
 from .docs import DocsTarget
 from .protocol import ReleaseTarget
 from .base import BaseTarget
@@ -13,7 +12,6 @@ TARGETS = {
     "npm": NpmTarget(),
     "pypi": PypiTarget(),
     "go": GoTarget(),
-    "codehome": CodehomeTarget(),
     "docs": DocsTarget(),
 }
 

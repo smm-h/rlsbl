@@ -34,7 +34,6 @@ class TestTargetsCommand:
         assert "npm" in output
         assert "pypi" in output
         assert "go" in output
-        assert "codehome" in output
         assert "docs" in output
 
     def test_shows_header_row(self):
@@ -86,22 +85,6 @@ class TestTargetsCommand:
         for line in lines:
             assert "no" in line
 
-    def test_scope_column_shows_root_for_codehome(self):
-        """Codehome target shows 'root' in the Scope column."""
-        from rlsbl.commands.targets_cmd import run_cmd
-
-        buf = StringIO()
-        with patch("sys.stdout", buf):
-            run_cmd(None, [], {})
-
-        output = buf.getvalue()
-        for line in output.splitlines():
-            if line.startswith("codehome"):
-                assert "root" in line
-                break
-        else:
-            pytest.fail("codehome line not found in output")
-
     def test_docs_target_shows_none_version_file(self):
         """Docs target shows '(none)' for version file."""
         from rlsbl.commands.targets_cmd import run_cmd
@@ -149,10 +132,9 @@ class TestMultiTargetRelease:
         self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
     ):
         """When a secondary target (docs) is detected, its build/publish are called."""
-        # Create .rlsbl/docs.toml so docs target is detected
-        os.makedirs(".rlsbl", exist_ok=True)
-        with open(".rlsbl/docs.toml", "w") as f:
-            f.write('[source]\ntype = "python"\npaths = ["src/"]\n\n[output]\ndir = "docs/_build"\n')
+        # Create selfdoc.json so docs target is detected
+        with open("selfdoc.json", "w") as f:
+            f.write("{}")
 
         # Mock run() responses:
         # 1. tag -l (current tag exists) -> "v1.0.0"
@@ -200,10 +182,9 @@ class TestMultiTargetRelease:
         self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
     ):
         """--skip-docs prevents secondary target build/publish from running."""
-        # Create .rlsbl/docs.toml so docs target is detected
-        os.makedirs(".rlsbl", exist_ok=True)
-        with open(".rlsbl/docs.toml", "w") as f:
-            f.write('[source]\ntype = "python"\npaths = ["src/"]\n\n[output]\ndir = "docs/_build"\n')
+        # Create selfdoc.json so docs target is detected
+        with open("selfdoc.json", "w") as f:
+            f.write("{}")
 
         mock_run.side_effect = ["v1.0.0", "", "", "", "", "", "", "", "abc123"]
 
@@ -239,10 +220,9 @@ class TestMultiTargetRelease:
         self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
     ):
         """If a secondary target's build/publish raises, release still completes."""
-        # Create .rlsbl/docs.toml so docs target is detected
-        os.makedirs(".rlsbl", exist_ok=True)
-        with open(".rlsbl/docs.toml", "w") as f:
-            f.write('[source]\ntype = "python"\npaths = ["src/"]\n\n[output]\ndir = "docs/_build"\n')
+        # Create selfdoc.json so docs target is detected
+        with open("selfdoc.json", "w") as f:
+            f.write("{}")
 
         mock_run.side_effect = ["v1.0.0", "", "", "", "", "", "", "", "abc123"]
 
