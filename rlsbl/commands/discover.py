@@ -10,6 +10,7 @@ import urllib.request
 
 SEARCH_URL = "https://api.github.com/search/repositories?q=topic:rlsbl&sort=updated&per_page=100"
 MAX_RESULTS = 1000
+MAX_PAGES = 20
 
 
 def _get_github_token():
@@ -111,11 +112,13 @@ def _fetch_all_repos(token):
     """Fetch all repos with the rlsbl topic, handling pagination."""
     repos = []
     url = SEARCH_URL
+    pages_fetched = 0
 
-    while url and len(repos) < MAX_RESULTS:
+    while url and len(repos) < MAX_RESULTS and pages_fetched < MAX_PAGES:
         data, headers = _make_request(url, token)
         items = data.get("items", [])
         repos.extend(items)
+        pages_fetched += 1
         url = _parse_next_link(headers)
 
     return repos
