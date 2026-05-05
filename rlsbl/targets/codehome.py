@@ -3,10 +3,37 @@
 Each codehome plugin (or plugin group) lives in its own git repo with a
 plugin.json at the root. Version management is standard: bump plugin.json,
 tag v1.2.3, push. Push IS delivery -- codehome polls repos for newer tags.
+
+Plugin Registry Format
+----------------------
+A central registry file (plugins.json) lists all known plugin repos so that
+codehome can discover them without scanning GitHub. The schema:
+
+    {
+      "plugins": [
+        {
+          "name": "supervisor",
+          "repo": "https://github.com/smm-h/supervisor",
+          "description": "Worktree, branch, and git management",
+          "plugins_provided": ["supervisor", "worktree", "branch-tools"]
+        }
+      ]
+    }
+
+Fields:
+- name: The plugin group name (from plugin.json "name")
+- repo: HTTPS URL of the git repository (from git remote "origin")
+- description: Human-readable summary (from plugin.json "description")
+- plugins_provided: List of individual plugin IDs shipped by this repo
+  (from plugin.json "plugins_provided"; falls back to [name] if absent)
+
+Versions are NOT stored in the registry -- they are discovered at runtime
+by checking git tags on each repo.
 """
 
 import json
 import os
+import subprocess
 
 from .base import BaseTarget
 
@@ -32,6 +59,71 @@ def validate_plugin_json(data):
         raise PluginValidationError(
             f"plugin.json version '{version}' is not valid semver (expected X.Y.Z)"
         )
+
+
+def generate_registry_entry(dir_path):
+    """Generate a registry entry dict from the current plugin repo.
+
+    Reads plugin.json and returns a dict suitable for inclusion in a
+    plugin registry (plugins.json):
+    {
+        "name": "supervisor",
+        "repo": "https://github.com/smm-h/supervisor",
+        "description": "Worktree, branch, and git management",
+        "plugins_provided": ["supervisor", "worktree"]
+    }
+
+    If plugin.json is missing, raises FileNotFoundError.
+    If git remote "origin" is not configured, the "repo" field is omitted.
+    """
+    plugin_path = os.path.join(dir_path, "plugin.json")
+    if not os.path.exists(plugin_path):
+        raise FileNotFoundError(f"No plugin.json found in {dir_path}")
+
+    with open(plugin_path) as f:
+        data = json.load(f)
+
+    entry = {
+        "name": data["name"],
+        "description": data.get("description", ""),
+        "plugins_provided": data.get("plugins_provided", [data["name"]]),
+    }
+
+    # Try to get repo URL from git remote origin
+    repo_url = _get_git_remote_url(dir_path)
+    if repo_url:
+        entry["repo"] = repo_url
+
+    return entry
+
+
+def _get_git_remote_url(dir_path):
+    """Get the HTTPS URL of the git remote 'origin', or None.
+
+    Normalizes SSH URLs (git@github.com:user/repo.git) to HTTPS form.
+    Strips trailing .git suffix for cleaner URLs.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=5,
+            cwd=dir_path,
+        )
+        if result.returncode != 0:
+            return None
+        url = result.stdout.strip()
+        if not url:
+            return None
+        # Normalize SSH to HTTPS
+        if url.startswith("git@"):
+            # git@github.com:user/repo.git -> https://github.com/user/repo
+            url = url.replace(":", "/", 1).replace("git@", "https://", 1)
+        # Strip trailing .git
+        if url.endswith(".git"):
+            url = url[:-4]
+        return url
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
 
 
 class CodehomeTarget(BaseTarget):
