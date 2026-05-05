@@ -226,6 +226,25 @@ def run_cmd(registry, args, flags):
         except Exception:
             pass
 
+    # Re-check working tree: abort if files outside our expected set were modified
+    # (guards against concurrent processes dirtying the tree after our initial check)
+    dirty_output = run("git", ["status", "--porcelain"])
+    if dirty_output:
+        dirty_files = set()
+        for line in dirty_output.splitlines():
+            # git status --porcelain format: XY <path> or XY <path> -> <path>
+            file_path = line[3:].split(" -> ")[-1]
+            dirty_files.add(file_path)
+        expected_files = set(files_to_commit)
+        unexpected = dirty_files - expected_files
+        if unexpected:
+            unexpected_list = ", ".join(sorted(unexpected))
+            print(
+                f"Unexpected modified files detected (possible concurrent change): {unexpected_list}. Aborting release.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
     # Commit if anything was actually modified (version bump or tagging)
     needs_commit = new_version != current_version or not is_clean_tree()
     if files_to_commit and needs_commit:
