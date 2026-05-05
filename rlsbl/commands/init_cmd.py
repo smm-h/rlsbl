@@ -177,27 +177,9 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
             raw = f.read()
         theirs, unreplaced = process_template(raw, vars_dict)
 
-        # --- New file or force overwrite: write and save base ---
-        if not os.path.exists(target) or force:
-            is_overwrite = os.path.exists(target) and force
-            target_dir = os.path.dirname(target)
-            if target_dir and target_dir != ".":
-                os.makedirs(target_dir, exist_ok=True)
-            with open(target, "w", encoding="utf-8") as f:
-                f.write(theirs)
-            _save_base(target, theirs)
-            new_hashes[target] = file_hash(target)
-            status = "overwritten" if is_overwrite else "created"
-            created.append((target, status))
-            if unreplaced:
-                warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
-            continue
-
-        # --- Existing file, not forced ---
-
-        # User-owned files: never touch after initial scaffold,
+        # --- User-owned files: never overwrite (even with --force),
         # except LICENSE gets its copyright year updated on --update.
-        if target in USER_OWNED:
+        if os.path.exists(target) and target in USER_OWNED:
             if update and target == "LICENSE":
                 from datetime import datetime
                 current_year = str(datetime.now().year)
@@ -243,6 +225,22 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                     skipped.append((target, "user-owned"))
             else:
                 skipped.append((target, "user-owned"))
+            continue
+
+        # --- New file or force overwrite (non-user-owned): write and save base ---
+        if not os.path.exists(target) or force:
+            is_overwrite = os.path.exists(target) and force
+            target_dir = os.path.dirname(target)
+            if target_dir and target_dir != ".":
+                os.makedirs(target_dir, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(theirs)
+            _save_base(target, theirs)
+            new_hashes[target] = file_hash(target)
+            status = "overwritten" if is_overwrite else "created"
+            created.append((target, status))
+            if unreplaced:
+                warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
             continue
 
         # --- Three-way merge for all other existing files ---
