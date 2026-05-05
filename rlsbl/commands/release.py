@@ -90,11 +90,11 @@ def run_cmd(registry, args, flags):
     if scope is not None and target.scope != "subdir":
         print(f"Warning: --scope is ignored for root-scoped target '{target.name}'", file=sys.stderr)
 
-    # Batch mode detection: scope ends with "/" or is a directory with multiple
-    # plugin.toml files
+    # Batch mode detection: scope is a directory without a recognizable version file
     if is_scoped:
+        version_file = target.version_file() or ""
         if scope.endswith("/") or (
-            os.path.isdir(scope) and not os.path.exists(os.path.join(scope, "plugin.toml"))
+            os.path.isdir(scope) and not os.path.exists(os.path.join(scope, version_file))
         ):
             print("Batch release not yet implemented", file=sys.stderr)
             sys.exit(1)
