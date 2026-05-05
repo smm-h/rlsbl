@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.0
+
+- **`rlsbl unreleased` command.** Lists commits since last tag, cross-references CHANGELOG entries, reports coverage status. Supports `--json` for machine-readable output.
+- **Config management system.** `rlsbl config init/migrate/status` subcommands for managing project config with schema-driven migration (deep merge, flat merge, list-by-key merge strategies, versioned migrations, atomic writes).
+- **Public library API.** `from rlsbl.lib import ConfigMigrator, load_schema, migrate` for Python projects wanting startup migration.
+- **Scaffold auto-commits.** Created files are committed automatically (use `--no-commit` to opt out). Runs config migrations when `.rlsbl/config-schema.json` exists.
+- **Parallel watch.** `rlsbl watch` polls CI runs concurrently (total time = max of all runs, not sum).
+- **Parallel variant checking.** `rlsbl check` uses ThreadPoolExecutor for concurrent registry queries.
+- **Advisory lockfile.** `.rlsbl/lock` prevents concurrent release/scaffold operations.
+- **`rlsbl undo` improvements.** Auto-pushes revert commit (with confirmation prompt, or automatic with `--yes`). Prints structured failure summary table with remediation commands on partial failure.
+- **Pre-release suffix support.** `bump_version` handles versions like `1.0.0-beta.1`.
+- **`--force` no longer overwrites user-owned files.** CHANGELOG.md, LICENSE, and hooks are preserved even with `--force`.
+- **Pre-release hook receives `RLSBL_VERSION`.** Matches the existing post-release hook behavior.
+- **Release race condition fix.** Aborts if unexpected files are modified before commit.
+- **Top-level error handler sanitized.** No longer exposes sensitive CalledProcessError details.
+- **Discover hardened.** Pagination capped at 20 pages; retries once on HTTP 403 with `Retry-After` header.
+- **`record-gif` validates flags.** Clear error message on non-integer flag values.
+- **npm check timeout.** Variant checking has 10-second subprocess timeout.
+- **Release prompt mentions ecosystem tagging** when enabled.
+- **Test suite expanded.** Split test_tagging.py into focused modules; added shared fixtures in conftest.py. 117 → 260 tests.
+- Fixed stale `.rlsbl/version` and `package.json` metadata (description, files array).
+
 ## 0.8.3
 
 - Fix watch: resolve short SHAs to full 40-char (`gh run list --commit` requires it)
