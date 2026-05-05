@@ -41,7 +41,7 @@ __version__ = _detect_version()
 
 REGISTRIES = ("npm", "pypi", "go")
 COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover", "watch",
-            "pre-push-check", "prs", "record-gif", "unreleased", "docs", "targets")
+            "pre-push-check", "prs", "record-gif", "unreleased", "docs", "targets", "register")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -61,6 +61,7 @@ Usage:
   rlsbl unreleased [--json]                                 Audit changelog coverage for unreleased commits
   rlsbl docs [init|build|serve|deploy]                      Generate and deploy documentation
   rlsbl targets                                             List available release targets
+  rlsbl register                                            Print plugin registry entry for this repo
   rlsbl record-gif [--width N] [--height N] [--font-size N] [--duration N]
                                                             Record a demo GIF with vhs
 
@@ -137,6 +138,7 @@ def _get_command_module(command):
         "unreleased": "unreleased",
         "docs": "docs_cmd",
         "targets": "targets_cmd",
+        "register": "register_cmd",
     }
     module_name = module_map.get(command)
     if not module_name:
@@ -271,7 +273,7 @@ def main():
         elif command == "watch":
             # watch: monitors CI runs, no registry needed
             handler.run_cmd(registry, args, flags)
-        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "docs", "targets"):
+        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "docs", "targets", "register"):
             # Standalone commands, no registry needed
             handler.run_cmd(registry, args, flags)
         else:
