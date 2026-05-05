@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0
+
+- **Docs system extracted to selfdoc.** `rlsbl docs` commands removed. DocsTarget now detects `selfdoc.json` and delegates to the `selfdoc` CLI. Install selfdoc separately for documentation generation.
+- **`rlsbl check` includes GitHub repo search.** Shows repo count as informational context (not an availability check) after registry checks.
+- **Codehome target removed.** The plugin target and `rlsbl register` command were premature and have been removed pending a more mature design.
+
 ## 0.10.1
 
 - **Codehome target rewrite.** Now root-scoped: each plugin (or plugin group) lives in its own repo with `plugin.json`. Standard `v1.2.3` tags, no namespacing. Push is delivery.
