@@ -48,6 +48,27 @@ class BaseTarget:
     def get_project_init_hint(self):
         return ""
 
+    # --- get_* aliases for backward compatibility with old module-based API ---
+    # Commands call reg.get_version_file(), reg.get_template_dir(), etc.
+
+    def get_version_file(self):
+        return self.version_file()
+
+    def get_template_dir(self):
+        return self.template_dir()
+
+    def get_shared_template_dir(self):
+        return self.shared_template_dir()
+
+    def get_template_vars(self, dir_path):
+        return self.template_vars(dir_path)
+
+    def get_template_mappings(self):
+        return self.template_mappings()
+
+    def get_shared_template_mappings(self):
+        return self.shared_template_mappings()
+
     def build(self, dir_path, version):
         pass
 
