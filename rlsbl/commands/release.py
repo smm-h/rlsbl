@@ -389,6 +389,23 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     except Exception as e:
         print(f"Warning: target publish step failed: {e}", file=sys.stderr)
 
+    # Multi-target: run build/publish for secondary root-scoped targets
+    # (e.g. docs target piggybacks on the primary release)
+    if not is_scoped and not flags.get("skip-docs"):
+        from ..targets import TARGETS as ALL_TARGETS
+        for sec_name, sec_target in ALL_TARGETS.items():
+            if sec_name == registry:
+                continue
+            if sec_target.scope == "root" and sec_target.detect("."):
+                try:
+                    sec_target.build(".", new_version)
+                except Exception as e:
+                    print(f"Warning: {sec_name} target build failed: {e}", file=sys.stderr)
+                try:
+                    sec_target.publish(".", new_version)
+                except Exception as e:
+                    print(f"Warning: {sec_name} target publish failed: {e}", file=sys.stderr)
+
     # Ecosystem tagging: add GitHub topic after release is created (skip for scoped)
     if should_tag(flags) and not is_scoped:
         ensure_github_topic(quiet=quiet)
