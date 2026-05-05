@@ -75,6 +75,26 @@ def run_cmd(registry, args, flags):
     if branch not in ("main", "master"):
         print(f'Warning: you are on branch "{branch}", not main/master.', file=sys.stderr)
 
+    # Remote-ahead check: abort if local branch is behind origin
+    if not flags.get("skip-remote-check"):
+        try:
+            run("git", ["fetch", "origin", "--quiet"])
+        except Exception:
+            # Network failure or no remote — warn but don't block the release
+            print("Warning: could not fetch from origin. Skipping remote-ahead check.", file=sys.stderr)
+        else:
+            try:
+                behind_count = int(run("git", ["rev-list", "--count", f"HEAD..origin/{branch}"]))
+            except Exception:
+                # Remote branch may not exist yet — not an error
+                behind_count = 0
+            if behind_count > 0:
+                print(
+                    f"Error: local branch is {behind_count} commit(s) behind origin/{branch}. Pull before releasing.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
     # Derive scope_name from --scope flag for tag_format
     scope = flags.get("scope")
     scope_name = os.path.basename(scope.rstrip("/")) if scope else None
