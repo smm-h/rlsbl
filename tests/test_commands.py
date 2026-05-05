@@ -485,10 +485,11 @@ class TestRelease(unittest.TestCase):
     def test_release_dry_run(self, _gh_inst, _gh_auth, _clean, _branch,
                              _commit_tool, mock_run, _push):
         """Dry run should not modify any files."""
-        # First tag -l call checks if current version tag exists (return
-        # non-empty so it treats this as an existing release and bumps).
-        # Second tag -l call checks if the bumped tag exists (return empty).
-        mock_run.side_effect = ["v1.0.0", ""]
+        # 1. git fetch origin --quiet (remote-ahead check)
+        # 2. git rev-list --count HEAD..origin/main (0 commits behind)
+        # 3. tag -l for current version (exists -> bump)
+        # 4. tag -l for bumped version (doesn't exist -> proceed)
+        mock_run.side_effect = ["", "0", "v1.0.0", ""]
 
         from rlsbl.commands.release import run_cmd
 
@@ -517,6 +518,66 @@ class TestRelease(unittest.TestCase):
         with self.assertRaises(SystemExit) as ctx:
             run_cmd("npm", ["patch"], {"quiet": True})
         self.assertEqual(ctx.exception.code, 1)
+
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_release_behind_remote_aborts(self, _gh_inst, _gh_auth, _clean,
+                                          _branch, mock_run):
+        """Release should abort when local branch is behind origin."""
+        from rlsbl.commands.release import run_cmd
+
+        # git fetch succeeds, rev-list returns "3" (3 commits behind)
+        mock_run.side_effect = [
+            "",   # git fetch origin --quiet
+            "3",  # git rev-list --count HEAD..origin/main
+        ]
+
+        with self.assertRaises(SystemExit) as ctx:
+            run_cmd("npm", ["patch"], {"quiet": True})
+        self.assertEqual(ctx.exception.code, 1)
+
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_release_fetch_failure_warns_but_continues(self, _gh_inst, _gh_auth,
+                                                        _clean, _branch, mock_run):
+        """If git fetch fails, warn but don't block the release."""
+        from rlsbl.commands.release import run_cmd
+
+        # git fetch raises (no network), then tag -l calls for version checks
+        mock_run.side_effect = [
+            subprocess.CalledProcessError(1, "git"),  # git fetch fails
+            "v1.0.0",  # tag -l for current version (exists)
+            "",         # tag -l for bumped version (doesn't exist)
+        ]
+
+        # Should reach dry-run exit without aborting
+        with patch("sys.stdout", new_callable=StringIO):
+            run_cmd("npm", ["patch"], {"quiet": False, "dry-run": True})
+
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_release_skip_remote_check_flag(self, _gh_inst, _gh_auth, _clean,
+                                             _branch, mock_run):
+        """--skip-remote-check should bypass the remote-ahead check entirely."""
+        from rlsbl.commands.release import run_cmd
+
+        # Only tag -l calls, no fetch or rev-list
+        mock_run.side_effect = [
+            "v1.0.0",  # tag -l for current version (exists)
+            "",         # tag -l for bumped version (doesn't exist)
+        ]
+
+        with patch("sys.stdout", new_callable=StringIO):
+            run_cmd("npm", ["patch"], {"quiet": False, "dry-run": True, "skip-remote-check": True})
 
 
 # ---------------------------------------------------------------------------
