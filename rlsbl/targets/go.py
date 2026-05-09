@@ -2,10 +2,17 @@
 
 Go projects use a VERSION file as the source of truth for rlsbl. GoReleaser
 handles the build/publish step triggered by the GitHub Release that rlsbl creates.
+
+Libraries (no `package main`) skip GoReleaser scaffolding and rely on tagged
+releases being available via `go get`. After each release, the Go module proxy
+is notified so the new version is immediately discoverable.
 """
 
+import glob
 import os
 import re
+import shutil
+import subprocess
 
 from .base import BaseTarget
 from ..utils import run
@@ -26,6 +33,44 @@ class GoTarget(BaseTarget):
 
     def detect(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "go.mod"))
+
+    def _read_module_path(self, dir_path):
+        """Extract the module path from go.mod, or empty string if unavailable."""
+        mod_path = os.path.join(dir_path, "go.mod")
+        if not os.path.exists(mod_path):
+            return ""
+        with open(mod_path, encoding="utf-8") as f:
+            content = f.read()
+        match = re.search(r"^module\s+(\S+)", content, re.MULTILINE)
+        return match.group(1) if match else ""
+
+    def _is_library(self, dir_path):
+        """Return True if the project has no `package main` in root .go files."""
+        for go_file in glob.glob(os.path.join(dir_path, "*.go")):
+            with open(go_file, encoding="utf-8") as f:
+                for line in f:
+                    if re.match(r"^package\s+main\b", line):
+                        return False
+        return True
+
+    def publish(self, dir_path, version):
+        """Notify the Go module proxy so the new version is immediately available."""
+        module_path = self._read_module_path(dir_path)
+        if not module_path:
+            print("Warning: could not read module path from go.mod, skipping proxy notification")
+            return
+
+        if not shutil.which("go"):
+            print("Warning: 'go' not found on PATH, skipping proxy notification")
+            return
+
+        ref = f"{module_path}@v{version}"
+        env = {**os.environ, "GOPROXY": "proxy.golang.org"}
+        try:
+            run("go", ["list", "-m", ref], env=env)
+            print(f"Notified Go module proxy: {ref}")
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            print(f"Warning: proxy notification failed for {ref}: {exc}")
 
     def read_version(self, dir_path):
         """Read version from the VERSION file."""
@@ -58,14 +103,7 @@ class GoTarget(BaseTarget):
 
     def template_vars(self, dir_path):
         """Extract template variables from go.mod."""
-        mod_path = os.path.join(dir_path, "go.mod")
-        name = ""
-        if os.path.exists(mod_path):
-            with open(mod_path) as f:
-                content = f.read()
-            match = re.search(r"^module\s+(\S+)", content, re.MULTILINE)
-            if match:
-                name = match.group(1)
+        name = self._read_module_path(dir_path)
 
         # Derive short name from module path (last segment)
         short_name = name.rsplit("/", 1)[-1] if "/" in name else name
@@ -88,6 +126,11 @@ class GoTarget(BaseTarget):
         except FileNotFoundError:
             version = "0.0.0"
 
+        if self._is_library(dir_path):
+            publish_setup = "Go library -- no publish step needed. Tagged releases are available via go get."
+        else:
+            publish_setup = "GoReleaser handles binary publishing via GitHub Actions (no secrets needed)"
+
         return {
             "name": short_name,
             "modulePath": name,
@@ -95,16 +138,20 @@ class GoTarget(BaseTarget):
             "author": author,
             "repoName": repo_name,
             "binCommand": short_name,
-            "publishSetup": "GoReleaser handles binary publishing via GitHub Actions (no secrets needed)",
+            "publishSetup": publish_setup,
         }
 
     def template_mappings(self):
-        return [
+        mappings = [
             {"template": "VERSION.tpl", "target": "VERSION"},
             {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
-            {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
-            {"template": "goreleaser.yml.tpl", "target": ".goreleaser.yml"},
         ]
+        if not self._is_library("."):
+            mappings.extend([
+                {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
+                {"template": "goreleaser.yml.tpl", "target": ".goreleaser.yml"},
+            ])
+        return mappings
 
     def check_project_exists(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "go.mod"))
