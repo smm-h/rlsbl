@@ -42,13 +42,20 @@ def acquire_lock():
 
 
 def release_lock():
-    """Release the advisory lock and close the file descriptor."""
+    """Release the advisory lock, close the file descriptor, and remove the lock file."""
     global _lock_fd
 
     if _lock_fd is not None:
+        lock_path = _lock_fd.name
         fcntl.flock(_lock_fd, fcntl.LOCK_UN)
         _lock_fd.close()
         _lock_fd = None
+        # Remove the lock file so it doesn't leave an untracked file
+        # that dirties the working tree for subsequent operations.
+        try:
+            os.unlink(lock_path)
+        except FileNotFoundError:
+            pass
 
 
 @contextmanager
