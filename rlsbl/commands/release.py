@@ -417,8 +417,19 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
             )
             sys.exit(1)
 
-    # Commit if anything was actually modified (version bump or tagging)
-    needs_commit = new_version != current_version or not is_clean_tree()
+    # Commit if any of the files we track actually have changes.
+    # Don't use is_clean_tree() as a proxy — the advisory lock file (.rlsbl/lock)
+    # makes the tree appear dirty even when no release-relevant files changed.
+    def has_staged_or_modified(paths):
+        """Check if any of the given paths have actual changes vs the index."""
+        for p in paths:
+            diff = run("git", ["diff", "--name-only", "--", p]) if os.path.exists(p) else ""
+            status = run("git", ["status", "--porcelain", "--", p])
+            if diff or status:
+                return True
+        return False
+
+    needs_commit = new_version != current_version or has_staged_or_modified(files_to_commit)
     if files_to_commit and needs_commit:
         commit_tool = find_commit_tool()
         if commit_tool == "safegit":
