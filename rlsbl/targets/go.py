@@ -19,6 +19,8 @@ from ..utils import run
 
 VERSION_FILE = "VERSION"
 
+_GO_VERSION_RE = re.compile(r"^go\s+(\d+\.\d+(?:\.\d+)?)", re.MULTILINE)
+
 
 class GoTarget(BaseTarget):
     """Release target for Go projects (go.mod + VERSION file)."""
@@ -29,6 +31,17 @@ class GoTarget(BaseTarget):
 
     def detect(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "go.mod"))
+
+    def read_name(self, dir_path):
+        """Read the last segment of the module path from go.mod."""
+        module_path = self._read_module_path(dir_path)
+        if not module_path:
+            return None
+        return module_path.rsplit("/", 1)[-1] if "/" in module_path else module_path
+
+    def read_metadata(self, dir_path):
+        """Go modules have no license/description in go.mod."""
+        return {}
 
     def _read_module_path(self, dir_path):
         """Extract the module path from go.mod, or empty string if unavailable."""
@@ -173,7 +186,7 @@ class GoTarget(BaseTarget):
         else:
             goreleaser_main = "."
 
-        return {
+        result = {
             "name": short_name,
             "modulePath": name,
             "version": version,
@@ -183,6 +196,17 @@ class GoTarget(BaseTarget):
             "publishSetup": publish_setup,
             "goreleaserMain": goreleaser_main,
         }
+
+        # Extract minimum required Go version from go.mod
+        mod_path = os.path.join(dir_path, "go.mod")
+        if os.path.exists(mod_path):
+            with open(mod_path, encoding="utf-8") as f:
+                mod_content = f.read()
+            m = _GO_VERSION_RE.search(mod_content)
+            if m:
+                result["minRequiredGo"] = m.group(1)
+
+        return result
 
     def template_mappings(self):
         mappings = [
