@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 
-from ..config import should_tag
+from ..config import should_tag, read_project_config, write_project_config
 from ..lock import acquire_lock, release_lock
 from ..targets import TARGETS
 from ..tagging import ensure_tags
@@ -45,6 +45,17 @@ def save_hashes(hashes):
     with open(HASHES_FILE, "w") as f:
         json.dump(hashes, f, indent=2)
         f.write("\n")
+
+
+def _ensure_target_in_config(registry_name):
+    """Add registry_name to the targets array in .rlsbl/config.json if not already present."""
+    config = read_project_config()
+    targets = config.get("targets", [])
+    if not isinstance(targets, list):
+        targets = []
+    if registry_name not in targets:
+        targets.append(registry_name)
+    write_project_config("targets", targets)
 
 
 NEXT_STEPS = {
@@ -417,7 +428,8 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
         if mf not in files_to_commit:
             files_to_commit.append(mf)
     # Include .rlsbl/ internal files written during scaffold
-    for rlsbl_file in [HASHES_FILE, os.path.join(".rlsbl", "version")]:
+    config_file = os.path.join(".rlsbl", "config.json")
+    for rlsbl_file in [HASHES_FILE, os.path.join(".rlsbl", "version"), config_file]:
         if os.path.exists(rlsbl_file) and rlsbl_file not in files_to_commit:
             files_to_commit.append(rlsbl_file)
     # Include any base files that were saved for the created targets
@@ -473,6 +485,9 @@ def run_cmd(registry, args, flags):
     acquire_lock()
 
     try:
+        # Register this target in .rlsbl/config.json targets array
+        _ensure_target_in_config(registry)
+
         # Gather template variables
         vars_dict = reg.get_template_vars(".")
         from datetime import datetime
@@ -535,6 +550,10 @@ def run_cmd_multi(registries_list, args, flags):
     acquire_lock()
 
     try:
+        # Register all targets in .rlsbl/config.json targets array
+        for r in registries_list:
+            _ensure_target_in_config(r)
+
         print(f"Multiple registries detected: {', '.join(registries_list)}")
         print("Scaffolding with merged publish workflow.")
 

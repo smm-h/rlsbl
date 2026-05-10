@@ -159,6 +159,60 @@ class TestTargetRegistryIntegration:
             TARGETS["npm"].publish(d, "1.0.0")
 
 
+class TestDetectTargetsConfig:
+    """Tests for config-driven target detection via .rlsbl/config.json."""
+
+    def test_config_targets_override_autodetection(self):
+        """Config targets take precedence: only 'npm' returned even if go.mod exists."""
+        with tempfile.TemporaryDirectory() as d:
+            # Create go.mod so auto-detection would find 'go'
+            with open(os.path.join(d, "go.mod"), "w") as f:
+                f.write("module example.com/test\n\ngo 1.21\n")
+            # Create config that only declares npm
+            rlsbl_dir = os.path.join(d, ".rlsbl")
+            os.makedirs(rlsbl_dir)
+            with open(os.path.join(rlsbl_dir, "config.json"), "w") as f:
+                json.dump({"targets": ["npm"]}, f)
+            result = detect_targets(d)
+            assert result == ["npm"]
+
+    def test_no_config_falls_back_to_autodetection(self):
+        """Without config, detect_targets uses auto-detection (backward compat)."""
+        with tempfile.TemporaryDirectory() as d:
+            pkg_path = os.path.join(d, "package.json")
+            with open(pkg_path, "w") as f:
+                json.dump({"name": "test", "version": "1.0.0"}, f)
+            result = detect_targets(d)
+            assert "npm" in result
+
+    def test_empty_targets_array_returns_empty(self):
+        """Explicit empty targets array means no targets."""
+        with tempfile.TemporaryDirectory() as d:
+            # Create package.json so auto-detection would find npm
+            with open(os.path.join(d, "package.json"), "w") as f:
+                json.dump({"name": "test", "version": "1.0.0"}, f)
+            # Config explicitly declares no targets
+            rlsbl_dir = os.path.join(d, ".rlsbl")
+            os.makedirs(rlsbl_dir)
+            with open(os.path.join(rlsbl_dir, "config.json"), "w") as f:
+                json.dump({"targets": []}, f)
+            result = detect_targets(d)
+            assert result == []
+
+    def test_unknown_target_warns_and_skips(self, capsys):
+        """Unknown target names produce a warning and are skipped."""
+        with tempfile.TemporaryDirectory() as d:
+            rlsbl_dir = os.path.join(d, ".rlsbl")
+            os.makedirs(rlsbl_dir)
+            with open(os.path.join(rlsbl_dir, "config.json"), "w") as f:
+                json.dump({"targets": ["npm", "nonexistent"]}, f)
+            result = detect_targets(d)
+            assert result == ["npm"]
+            captured = capsys.readouterr()
+            assert "nonexistent" in captured.err
+            assert "Warning" in captured.err
+
+
 class TestBackwardCompat:
     """Tests for backward compatibility with the old registries module."""
 

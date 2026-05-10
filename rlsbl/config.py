@@ -47,6 +47,11 @@ def should_tag(flags):
     return True
 
 
+def read_project_config():
+    """Read .rlsbl/config.json, return dict or empty dict if missing/malformed."""
+    return read_json_config(_project_config())
+
+
 def write_project_config(key, value):
     """Write or update a key in .rlsbl/config.json (creates dir if needed)."""
     os.makedirs(os.path.dirname(_project_config()), exist_ok=True)
