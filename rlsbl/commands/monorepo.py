@@ -490,14 +490,26 @@ def _cmd_status(flags):
             else:
                 unreleased_str = f"{count} entries"
 
-        rows.append((name, path, target_name, version, latest_tag, unreleased_str))
+        # Watch paths
+        watch = proj.get("watch", [])
+        watch_str = f"{len(watch)} paths" if watch else "-"
+
+        rows.append((name, path, target_name, version, latest_tag, unreleased_str, watch_str))
+
+    # Determine if any project has watch paths
+    any_watch = any(row[6] != "-" for row in rows)
 
     # Calculate column widths
-    headers = ("Project", "Path", "Target", "Version", "Tag", "Unreleased")
+    base_headers = ("Project", "Path", "Target", "Version", "Tag", "Unreleased")
+    if any_watch:
+        headers = base_headers + ("Watch",)
+    else:
+        headers = base_headers
+
     widths = [len(h) for h in headers]
     for row in rows:
-        for i, cell in enumerate(row):
-            widths[i] = max(widths[i], len(cell))
+        for i in range(len(headers)):
+            widths[i] = max(widths[i], len(row[i]))
 
     # Print header
     header_line = "  ".join(h.ljust(widths[i]) for i, h in enumerate(headers))
@@ -505,5 +517,6 @@ def _cmd_status(flags):
 
     # Print rows
     for row in rows:
-        line = "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row))
+        cells = row[:len(headers)]
+        line = "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(cells))
         print(line)

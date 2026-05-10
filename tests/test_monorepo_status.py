@@ -7,7 +7,7 @@ import subprocess
 import pytest
 
 from rlsbl.commands.monorepo import _cmd_init, _cmd_add, _cmd_status
-from rlsbl.workspace import load_workspace
+from rlsbl.workspace import load_workspace, save_workspace
 
 
 def _make_npm_project(base_path, subdir, version="0.1.0"):
@@ -218,3 +218,61 @@ class TestStatusMonorepoAware:
         assert "Part of monorepo" in captured.out
         # Root is not a registered project, so no mono tag
         assert "Mono tag" not in captured.out
+
+
+class TestMonorepoStatusWatch:
+    """Tests for watch path display in monorepo status."""
+
+    def test_status_shows_watch_count(self, mock_git_repo, capsys):
+        """Project with watch paths shows count in Watch column."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "tooling", version="1.0.0")
+        _cmd_add(["tooling"], {})
+
+        # Add watch paths to workspace
+        projects = load_workspace(".")
+        for p in projects:
+            if p["name"] == "tooling":
+                p["watch"] = ["Package.swift", "shared/**"]
+        save_workspace(".", projects)
+
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        assert "Watch" in captured.out
+        assert "2 paths" in captured.out
+
+    def test_status_no_watch_shows_dash(self, mock_git_repo, capsys):
+        """Project without watch paths shows '-' when Watch column is present."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "tooling", version="1.0.0")
+        _make_npm_project(mock_git_repo, "core", version="1.0.0")
+        _cmd_add(["tooling"], {})
+        _cmd_add(["core"], {})
+
+        # Add watch only to tooling
+        projects = load_workspace(".")
+        for p in projects:
+            if p["name"] == "tooling":
+                p["watch"] = ["Package.swift"]
+        save_workspace(".", projects)
+
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        assert "Watch" in captured.out
+        assert "1 paths" in captured.out
+        # core should show "-"
+        lines = captured.out.strip().split("\n")
+        core_line = [l for l in lines if "core" in l][0]
+        assert "-" in core_line
+
+    def test_status_no_watch_column_when_none(self, mock_git_repo, capsys):
+        """Watch column is omitted when no project has watch paths."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "tooling", version="1.0.0")
+        _cmd_add(["tooling"], {})
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        assert "Watch" not in captured.out
