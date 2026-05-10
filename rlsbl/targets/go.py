@@ -27,10 +27,6 @@ class GoTarget(BaseTarget):
     def name(self):
         return "go"
 
-    @property
-    def scope(self):
-        return "root"
-
     def detect(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "go.mod"))
 
@@ -93,7 +89,7 @@ class GoTarget(BaseTarget):
     def version_file(self):
         return VERSION_FILE
 
-    def tag_format(self, name, version):
+    def tag_format(self, version):
         return f"v{version}"
 
     def template_dir(self):

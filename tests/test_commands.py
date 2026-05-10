@@ -784,7 +784,7 @@ class TestResolveReleaseTargets(unittest.TestCase):
         shutil.rmtree(self.tmp_dir)
 
     def test_missing_config_falls_back_to_auto_detect(self):
-        """Without release_targets in config, auto-detect all root-scoped detected targets."""
+        """Without release_targets in config, auto-detect all detected targets."""
         # Create selfdoc.json so docs target is detected
         with open("selfdoc.json", "w") as f:
             f.write("{}")
@@ -792,7 +792,7 @@ class TestResolveReleaseTargets(unittest.TestCase):
         from rlsbl.commands.release import resolve_release_targets
 
         result = resolve_release_targets("npm", {})
-        # docs is root-scoped and detected via selfdoc.json
+        # docs is detected via selfdoc.json
         self.assertIn("docs", result)
         # npm is the primary and must be excluded from secondaries
         self.assertNotIn("npm", result)

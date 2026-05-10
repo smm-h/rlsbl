@@ -17,10 +17,6 @@ class SpecTarget(BaseTarget):
     def name(self):
         return "spec"
 
-    @property
-    def scope(self):
-        return "root"
-
     def detect(self, dir_path):
         """True if version.json exists in root or spec/ subdir."""
         return (
@@ -68,8 +64,11 @@ class SpecTarget(BaseTarget):
     def version_file(self):
         return "version.json"
 
-    def tag_format(self, name, version):
+    def tag_format(self, version):
         return f"spec-v{version}"
+
+    def monorepo_tag_format(self, name, version):
+        return f"{name}@v{version}"
 
     def publish(self, dir_path, version):
         """No-op: the git tag IS the publication."""

@@ -16,10 +16,6 @@ class NpmTarget(BaseTarget):
     def name(self):
         return "npm"
 
-    @property
-    def scope(self):
-        return "root"
-
     def detect(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "package.json"))
 
@@ -57,7 +53,7 @@ class NpmTarget(BaseTarget):
     def version_file(self):
         return "package.json"
 
-    def tag_format(self, name, version):
+    def tag_format(self, version):
         return f"v{version}"
 
     def template_dir(self):

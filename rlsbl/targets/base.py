@@ -6,15 +6,14 @@ import os
 class BaseTarget:
     """Concrete base providing defaults for optional Protocol methods."""
 
-    @property
-    def scope(self):
-        return "root"
-
     def version_file(self):
         return None
 
-    def tag_format(self, name, version):
+    def tag_format(self, version):
         return f"v{version}"
+
+    def monorepo_tag_format(self, name, version):
+        return f"{name}@v{version}"
 
     def template_dir(self):
         return None

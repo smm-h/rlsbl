@@ -24,10 +24,6 @@ class CargoTarget(BaseTarget):
     def name(self):
         return "cargo"
 
-    @property
-    def scope(self):
-        return "root"
-
     def detect(self, dir_path):
         """Detect if dir has a Cargo.toml with a [package] section (not workspace-only)."""
         cargo_path = os.path.join(dir_path, "Cargo.toml")
@@ -60,7 +56,7 @@ class CargoTarget(BaseTarget):
     def version_file(self):
         return "Cargo.toml"
 
-    def tag_format(self, name, version):
+    def tag_format(self, version):
         return f"v{version}"
 
     def _is_library(self, dir_path):

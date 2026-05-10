@@ -26,10 +26,6 @@ class MavenTarget(BaseTarget):
     def name(self):
         return "maven"
 
-    @property
-    def scope(self):
-        return "root"
-
     def detect(self, dir_path):
         """Detect if dir has build.gradle.kts, build.gradle, or pom.xml."""
         return (
@@ -183,7 +179,7 @@ class MavenTarget(BaseTarget):
         # Dynamic: depends on project. Return None and let callers use read_version.
         return None
 
-    def tag_format(self, name, version):
+    def tag_format(self, version):
         return f"v{version}"
 
     def template_dir(self):

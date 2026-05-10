@@ -47,7 +47,6 @@ class TestTargetsCommand:
         lines = buf.getvalue().splitlines()
         header = lines[0]
         assert "Target" in header
-        assert "Scope" in header
         assert "Detected" in header
         assert "Version file" in header
 

@@ -49,7 +49,7 @@ def resolve_release_targets(primary, flags):
 
     Precedence:
       1. Start with the baseline from .rlsbl/config.json "release_targets" list.
-         If absent, fall back to auto-detect (all root-scoped targets that detect(".")).
+         If absent, fall back to auto-detect (all targets that detect(".")).
       2. Apply --include to add targets, --exclude to remove targets.
       3. The primary target is always excluded from the secondary set
          (it's handled separately by the main release flow).
@@ -65,10 +65,10 @@ def resolve_release_targets(primary, flags):
         # Baseline from config -- only include targets that actually exist
         baseline = {t for t in configured if t in ALL_TARGETS}
     else:
-        # Auto-detect: all root-scoped targets that are present
+        # Auto-detect: all targets that are present
         baseline = {
             name for name, t in ALL_TARGETS.items()
-            if t.scope == "root" and t.detect(".")
+            if t.detect(".")
         }
 
     # Apply --include (comma-separated or repeated)
@@ -144,43 +144,15 @@ def run_cmd(registry, args, flags):
                 )
                 sys.exit(1)
 
-    # Derive scope_name from --scope flag for tag_format
-    scope = flags.get("scope")
-    scope_name = os.path.basename(scope.rstrip("/")) if scope else None
-
     # Get target instance for tag_format/build/publish
     target = TARGETS[registry]
 
-    # Determine if this is a scoped (subdir) release
-    is_scoped = scope is not None and target.scope == "subdir"
-
-    # Warn if --scope is used with a root-scoped target (it has no effect)
-    if scope is not None and target.scope != "subdir":
-        print(f"Warning: --scope is ignored for root-scoped target '{target.name}'", file=sys.stderr)
-
-    # Batch mode detection: scope is a directory without a recognizable version file
-    if is_scoped:
-        version_file = target.version_file() or ""
-        if scope.endswith("/") or (
-            os.path.isdir(scope) and not os.path.exists(os.path.join(scope, version_file))
-        ):
-            print("Batch release not yet implemented", file=sys.stderr)
-            sys.exit(1)
-
-    # version_dir: where to read/write version (scope path for subdir, "." otherwise)
-    version_dir = scope if is_scoped else "."
-
-    # Validate that the scope directory actually exists
-    if is_scoped and not os.path.isdir(version_dir):
-        print(f"Error: scope directory does not exist: {version_dir}", file=sys.stderr)
-        sys.exit(1)
-
     # Current version
-    current_version = reg.read_version(version_dir)
+    current_version = reg.read_version(".")
     log(f"Current version: {current_version}")
 
     # If the current version has never been tagged, release it as-is (bootstrap)
-    current_tag = target.tag_format(scope_name, current_version)
+    current_tag = target.tag_format(current_version)
     current_tag_exists = len(run("git", ["tag", "-l", current_tag])) > 0
 
     if not current_tag_exists:
@@ -201,7 +173,7 @@ def run_cmd(registry, args, flags):
             sys.exit(1)
 
         new_version = bump_version(current_version, bump_type)
-        tag = target.tag_format(scope_name, new_version)
+        tag = target.tag_format(new_version)
         log(f"New version: {new_version} ({bump_type})")
 
     # Check tag doesn't already exist
@@ -210,15 +182,8 @@ def run_cmd(registry, args, flags):
         print(f'Error: tag "{tag}" already exists.', file=sys.stderr)
         sys.exit(1)
 
-    # Validate changelog entry -- for scoped releases, check scope dir first
-    if is_scoped:
-        scoped_changelog = os.path.join(scope, "CHANGELOG.md")
-        if os.path.exists(scoped_changelog):
-            changelog_path = scoped_changelog
-        else:
-            changelog_path = os.path.join(".", "CHANGELOG.md")
-    else:
-        changelog_path = os.path.join(".", "CHANGELOG.md")
+    # Validate changelog entry
+    changelog_path = os.path.join(".", "CHANGELOG.md")
     if not os.path.exists(changelog_path):
         print(
             f"Error: CHANGELOG.md not found. Create one with a ## {new_version} section.",
@@ -261,26 +226,23 @@ def run_cmd(registry, args, flags):
             log(f"Version:   {new_version} (first release)")
         log(f"Tag:       {tag}")
         log(f"Branch:    {branch}")
-        if is_scoped:
-            log(f"Scope:     {scope}")
-        # Show other version files that would be synced (skip for scoped releases)
-        if not is_scoped:
-            other_files = []
-            for name, other_reg in TARGETS.items():
-                if name == registry:
-                    continue
-                if other_reg.check_project_exists("."):
-                    other_file = other_reg.get_version_file()
-                    if other_file:
-                        other_files.append(other_file)
-            if other_files:
-                log(f"Sync to:   {', '.join(other_files)}")
+        # Show other version files that would be synced
+        other_files = []
+        for name, other_reg in TARGETS.items():
+            if name == registry:
+                continue
+            if other_reg.check_project_exists("."):
+                other_file = other_reg.get_version_file()
+                if other_file:
+                    other_files.append(other_file)
+        if other_files:
+            log(f"Sync to:   {', '.join(other_files)}")
         log(f"Changelog:\n{changelog_entry}")
         log("--- No changes made ---")
         return
 
     # Resolve which secondary targets participate in this release
-    secondary_targets = resolve_release_targets(registry, flags) if not is_scoped else set()
+    secondary_targets = resolve_release_targets(registry, flags)
 
     # Acquire advisory lock to prevent concurrent rlsbl operations
     acquire_lock()
@@ -289,7 +251,6 @@ def run_cmd(registry, args, flags):
         _run_release_mutating(
             registry, reg, flags, quiet, log, new_version, current_version,
             bump_type, tag, branch, changelog_entry, target,
-            is_scoped=is_scoped, version_dir=version_dir, scope=scope,
             secondary_targets=secondary_targets,
         )
     finally:
@@ -298,27 +259,21 @@ def run_cmd(registry, args, flags):
 
 def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current_version,
                           bump_type, tag, branch, changelog_entry, target,
-                          is_scoped=False, version_dir=".", scope=None,
                           secondary_targets=None):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     # Pre-compute which files will be modified
     version_file = reg.get_version_file()
     files_to_commit = []
     if version_file:
-        # For scoped releases, prefix the version file with the scope path
-        if is_scoped and scope:
-            files_to_commit.append(os.path.join(scope, version_file))
-        else:
-            files_to_commit.append(version_file)
-    # Sync version to other registries only for non-scoped releases
-    if not is_scoped:
-        for name, other_reg in TARGETS.items():
-            if name == registry:
-                continue
-            if other_reg.check_project_exists("."):
-                other_file = other_reg.get_version_file()
-                if other_file:
-                    files_to_commit.append(other_file)
+        files_to_commit.append(version_file)
+    # Sync version to other registries
+    for name, other_reg in TARGETS.items():
+        if name == registry:
+            continue
+        if other_reg.check_project_exists("."):
+            other_file = other_reg.get_version_file()
+            if other_file:
+                files_to_commit.append(other_file)
 
     # Confirmation prompt (skip with --yes)
     if not flags.get("yes"):
@@ -343,30 +298,21 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     # Write new version to version files (skip if version didn't change, e.g. first release)
     if new_version != current_version:
         if version_file:
-            reg.write_version(version_dir, new_version)
-            if is_scoped and scope:
-                log(f"Updated version in {os.path.join(scope, version_file)}")
-                # write_version may also modify pyproject.toml (e.g. CodehomeTarget);
-                # ensure it's included in files_to_commit
-                scoped_pyproject = os.path.join(scope, "pyproject.toml")
-                if os.path.exists(scoped_pyproject) and scoped_pyproject not in files_to_commit:
-                    files_to_commit.append(scoped_pyproject)
-            else:
-                log(f"Updated version in {version_file}")
+            reg.write_version(".", new_version)
+            log(f"Updated version in {version_file}")
 
-        # Sync version to all other recognized version files (skip for scoped releases)
-        if not is_scoped:
-            for name, other_reg in TARGETS.items():
-                if name == registry:
-                    continue
-                if other_reg.check_project_exists("."):
-                    other_file = other_reg.get_version_file()
-                    if other_file:
-                        other_reg.write_version(".", new_version)
-                        log(f"Synced version to {other_file}")
+        # Sync version to all other recognized version files
+        for name, other_reg in TARGETS.items():
+            if name == registry:
+                continue
+            if other_reg.check_project_exists("."):
+                other_file = other_reg.get_version_file()
+                if other_file:
+                    other_reg.write_version(".", new_version)
+                    log(f"Synced version to {other_file}")
 
-    # Ecosystem tagging: add keyword to manifests if enabled (skip for scoped releases)
-    if should_tag(flags) and not is_scoped:
+    # Ecosystem tagging: add keyword to manifests if enabled
+    if should_tag(flags):
         try:
             if TARGETS["npm"].check_project_exists("."):
                 if ensure_npm_keyword(".", quiet=quiet):
@@ -396,7 +342,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
     # Build step (no-op for npm/pypi/go targets)
     try:
-        target.build(version_dir, new_version)
+        target.build(".", new_version)
     except Exception as e:
         print(f"Warning: target build step failed: {e}", file=sys.stderr)
 
@@ -469,12 +415,12 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
     # Publish step (no-op for npm/pypi/go targets)
     try:
-        target.publish(version_dir, new_version)
+        target.publish(".", new_version)
     except Exception as e:
         print(f"Warning: target publish step failed: {e}", file=sys.stderr)
 
     # Multi-target: run build/publish for secondary targets resolved earlier
-    if not is_scoped and secondary_targets:
+    if secondary_targets:
         from ..targets import TARGETS as ALL_TARGETS
         for sec_name in sorted(secondary_targets):
             sec_target = ALL_TARGETS.get(sec_name)
@@ -489,8 +435,8 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
             except Exception as e:
                 print(f"Warning: {sec_name} target publish failed: {e}", file=sys.stderr)
 
-    # Ecosystem tagging: add GitHub topic after release is created (skip for scoped)
-    if should_tag(flags) and not is_scoped:
+    # Ecosystem tagging: add GitHub topic after release is created
+    if should_tag(flags):
         ensure_github_topic(quiet=quiet)
 
     # Run post-release hook if present (non-fatal: release is already complete)

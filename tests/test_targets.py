@@ -27,10 +27,6 @@ class TestNpmTarget:
         target = NpmTarget()
         assert target.name == "npm"
 
-    def test_scope(self):
-        target = NpmTarget()
-        assert target.scope == "root"
-
     def test_version_file(self):
         target = NpmTarget()
         assert target.version_file() == "package.json"
@@ -50,7 +46,7 @@ class TestNpmTarget:
 
     def test_tag_format(self):
         target = NpmTarget()
-        assert target.tag_format(None, "1.2.3") == "v1.2.3"
+        assert target.tag_format("1.2.3") == "v1.2.3"
 
 
 class TestPypiTarget:
@@ -61,10 +57,6 @@ class TestPypiTarget:
     def test_name(self):
         target = PypiTarget()
         assert target.name == "pypi"
-
-    def test_scope(self):
-        target = PypiTarget()
-        assert target.scope == "root"
 
     def test_version_file(self):
         target = PypiTarget()
@@ -85,7 +77,7 @@ class TestPypiTarget:
 
     def test_tag_format(self):
         target = PypiTarget()
-        assert target.tag_format(None, "2.0.0") == "v2.0.0"
+        assert target.tag_format("2.0.0") == "v2.0.0"
 
 
 class TestPypiWriteVersion:
@@ -149,10 +141,6 @@ class TestGoTarget:
         target = GoTarget()
         assert target.name == "go"
 
-    def test_scope(self):
-        target = GoTarget()
-        assert target.scope == "root"
-
     def test_version_file(self):
         target = GoTarget()
         assert target.version_file() == "VERSION"
@@ -172,7 +160,7 @@ class TestGoTarget:
 
     def test_tag_format(self):
         target = GoTarget()
-        assert target.tag_format(None, "0.5.0") == "v0.5.0"
+        assert target.tag_format("0.5.0") == "v0.5.0"
 
 
 class TestDetectTargets:
@@ -197,13 +185,13 @@ class TestDetectTargets:
 class TestTargetRegistryIntegration:
     """Tests for the TARGETS registry dict and tag_format behavior."""
 
-    def test_tag_format_none_name(self):
-        """TARGETS['npm'].tag_format(None, '1.2.3') returns 'v1.2.3'."""
-        assert TARGETS["npm"].tag_format(None, "1.2.3") == "v1.2.3"
+    def test_tag_format(self):
+        """TARGETS['npm'].tag_format('1.2.3') returns 'v1.2.3'."""
+        assert TARGETS["npm"].tag_format("1.2.3") == "v1.2.3"
 
-    def test_tag_format_with_name_ignored(self):
-        """Root scope targets ignore the name argument in tag_format."""
-        assert TARGETS["npm"].tag_format("something", "1.2.3") == "v1.2.3"
+    def test_monorepo_tag_format(self):
+        """TARGETS['npm'].monorepo_tag_format('core', '1.2.3') returns 'core@v1.2.3'."""
+        assert TARGETS["npm"].monorepo_tag_format("core", "1.2.3") == "core@v1.2.3"
 
     def test_build_noop(self):
         """TARGETS['npm'].build() is a no-op that doesn't raise."""
@@ -366,7 +354,7 @@ class TestSwiftTarget:
         assert (tmp_path / "VERSION").read_text().strip() == "2.0.0"
 
     def test_tag_format(self):
-        assert SwiftTarget().tag_format("pkg", "1.2.3") == "v1.2.3"
+        assert SwiftTarget().tag_format("1.2.3") == "v1.2.3"
 
 
 class TestSpecTarget:
@@ -387,7 +375,7 @@ class TestSpecTarget:
         assert data["version"] == "2.0.0"
 
     def test_tag_format(self):
-        assert SpecTarget().tag_format("myspec", "1.2.3") == "spec-v1.2.3"
+        assert SpecTarget().tag_format("1.2.3") == "spec-v1.2.3"
 
 
 class TestHexTarget:
@@ -408,7 +396,7 @@ class TestHexTarget:
         assert '"2.0.0"' in (tmp_path / "mix.exs").read_text()
 
     def test_tag_format(self):
-        assert HexTarget().tag_format("myapp", "1.2.3") == "v1.2.3"
+        assert HexTarget().tag_format("1.2.3") == "v1.2.3"
 
     def test_publish_with_token(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HEX_API_KEY", "test-key")
@@ -461,7 +449,7 @@ class TestDenoTarget:
         assert '"2.0.0"' in result
 
     def test_tag_format(self):
-        assert DenoTarget().tag_format("pkg", "1.2.3") == "v1.2.3"
+        assert DenoTarget().tag_format("1.2.3") == "v1.2.3"
 
     def test_publish_with_token(self, tmp_path, monkeypatch):
         monkeypatch.setenv("DENO_TOKEN", "test-token")
@@ -515,7 +503,7 @@ class TestCargoTarget:
         assert "# current" in result or "2.0.0" in result
 
     def test_tag_format(self):
-        assert CargoTarget().tag_format("myapp", "1.2.3") == "v1.2.3"
+        assert CargoTarget().tag_format("1.2.3") == "v1.2.3"
 
     def test_publish_with_token(self, tmp_path, monkeypatch):
         monkeypatch.setenv("CARGO_REGISTRY_TOKEN", "test-token")
@@ -574,7 +562,7 @@ class TestDockerTarget:
 
     def test_tag_format(self):
         from rlsbl.targets.docker import DockerTarget
-        assert DockerTarget().tag_format("app", "1.2.3") == "v1.2.3"
+        assert DockerTarget().tag_format("1.2.3") == "v1.2.3"
 
     def test_publish_without_token(self, tmp_path, monkeypatch, capsys):
         from rlsbl.targets.docker import DockerTarget
@@ -673,7 +661,7 @@ class TestMavenTarget:
 
     def test_tag_format(self):
         from rlsbl.targets.maven import MavenTarget
-        assert MavenTarget().tag_format("mylib", "1.2.3") == "v1.2.3"
+        assert MavenTarget().tag_format("1.2.3") == "v1.2.3"
 
     def test_publish_with_token(self, tmp_path, monkeypatch):
         from rlsbl.targets.maven import MavenTarget

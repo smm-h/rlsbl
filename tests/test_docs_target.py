@@ -19,17 +19,13 @@ class TestDocsTargetProtocol:
         target = DocsTarget()
         assert target.name == "docs"
 
-    def test_scope(self):
-        target = DocsTarget()
-        assert target.scope == "root"
-
     def test_version_file_none(self):
         target = DocsTarget()
         assert target.version_file() is None
 
     def test_tag_format_none(self):
         target = DocsTarget()
-        assert target.tag_format(None, "1.0.0") is None
+        assert target.tag_format("1.0.0") is None
 
     def test_read_version_fallback(self):
         target = DocsTarget()

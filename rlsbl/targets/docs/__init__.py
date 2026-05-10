@@ -17,10 +17,6 @@ class DocsTarget(BaseTarget):
     def name(self):
         return "docs"
 
-    @property
-    def scope(self):
-        return "root"
-
     def detect(self, dir_path):
         """True if selfdoc.json exists in the given directory."""
         return os.path.exists(os.path.join(dir_path, "selfdoc.json"))
@@ -37,7 +33,7 @@ class DocsTarget(BaseTarget):
         """No version file -- docs inherit from primary target."""
         return None
 
-    def tag_format(self, name, version):
+    def tag_format(self, version):
         """No separate tag -- uses primary target's tag."""
         return None
 

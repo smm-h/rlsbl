@@ -67,7 +67,6 @@ Usage:
 Options:
   --target <npm|pypi|go>    Target a specific registry (auto-detected if omitted)
   --registry <npm|pypi|go>  Deprecated alias for --target
-  --scope <subdir>          Subdirectory scope for subdir-scoped targets
   --include <target>        Add a target to the release (comma-separated)
   --exclude <target>        Remove a target from the release (comma-separated)
   --no-tag               Disable ecosystem tagging for this invocation
@@ -93,7 +92,7 @@ def parse_args(argv):
     Flags listed in VALUE_FLAGS consume the next token as their value
     (e.g. --registry npm). All other --flags are boolean.
     """
-    VALUE_FLAGS = ("registry", "target", "scope", "width", "height", "font-size", "duration",
+    VALUE_FLAGS = ("registry", "target", "width", "height", "font-size", "duration",
                    "include", "exclude", "name")
     raw = argv[1:]
     positional = []
@@ -178,7 +177,6 @@ def main():
     args = positional[1:]
     registry = flags.get("registry")
     target = flags.get("target")
-    scope = flags.get("scope")
 
     # Emit deprecation warning when --registry is used directly
     if registry and registry is not True:
@@ -192,11 +190,6 @@ def main():
     # --target is an alias for --registry
     if target is True:
         print("Error: --target requires a value (npm, pypi, or go).", file=sys.stderr)
-        sys.exit(1)
-
-    # --scope was the last arg with no value following it
-    if scope is True:
-        print("Error: --scope requires a value (subdirectory path).", file=sys.stderr)
         sys.exit(1)
 
     # --target acts as alias for --registry; error if both given with different values
@@ -216,10 +209,6 @@ def main():
                 file=sys.stderr,
             )
             sys.exit(1)
-
-    # Store scope in flags for downstream commands
-    if scope:
-        flags["scope"] = scope
 
     try:
         handler = _get_command_module(command)

@@ -1,6 +1,6 @@
 """Release target protocol -- the formal interface all targets must implement."""
 
-from typing import Protocol, Literal, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -14,11 +14,6 @@ class ReleaseTarget(Protocol):
     @property
     def name(self) -> str:
         """Unique identifier for this target (e.g. 'npm', 'pypi', 'codehome')."""
-        ...
-
-    @property
-    def scope(self) -> Literal["root", "subdir"]:
-        """Whether this target operates on the whole repo or a subdirectory."""
         ...
 
     def detect(self, dir_path: str) -> bool:
@@ -37,13 +32,12 @@ class ReleaseTarget(Protocol):
         """Filename that holds the version (e.g. 'package.json'), or None if inherited."""
         ...
 
-    def tag_format(self, name: str | None, version: str) -> str:
-        """Format the git tag for a release.
+    def tag_format(self, version: str) -> str:
+        """Format the git tag for a release. Returns f'v{version}' by default."""
+        ...
 
-        name is the scoped component name (for subdir targets), version is the new version.
-        Root targets typically ignore name and return f'v{version}'.
-        Subdir targets return f'{name}@v{version}'.
-        """
+    def monorepo_tag_format(self, name: str, version: str) -> str:
+        """Format the git tag for a monorepo release. Default: f'{name}@v{version}'."""
         ...
 
     # --- Optional: Scaffold support ---
