@@ -99,6 +99,14 @@ class TestAdd:
         assert len(projects) == 1
         assert projects[0]["watch"] == ["Package.swift", "shared/**"]
 
+    def test_subtree_remote_flag(self, mock_git_repo, capsys):
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "myproject")
+        _cmd_add(["myproject"], {"subtree-remote": "git@github.com:user/pkg.git"})
+        projects = load_workspace(str(mock_git_repo))
+        assert len(projects) == 1
+        assert projects[0]["subtree_remote"] == "git@github.com:user/pkg.git"
+
 
 class TestRemove:
     def test_removes_project(self, mock_git_repo, capsys):

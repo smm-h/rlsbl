@@ -87,6 +87,7 @@ def _cmd_add(args, flags):
 
     name = flags.get("name") or os.path.basename(path.rstrip("/"))
     watch_raw = flags.get("watch")
+    subtree_remote = flags.get("subtree-remote")
 
     root = find_workspace_root(".")
     if root is None:
@@ -107,6 +108,8 @@ def _cmd_add(args, flags):
     project = {"path": path, "name": name}
     if watch_raw:
         project["watch"] = [w.strip() for w in watch_raw.split(",")]
+    if subtree_remote:
+        project["subtree_remote"] = subtree_remote
     projects.append(project)
     save_workspace(root, projects)
     print(f"Added project '{name}' at {path}")
