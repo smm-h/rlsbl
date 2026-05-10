@@ -14,20 +14,7 @@ except ImportError:
     _HAS_THREADS = False
 
 
-def normalize_npm(name):
-    """Normalize an npm package name for similarity comparison.
-
-    Strips hyphens, underscores, dots, and lowercases.
-    """
-    return re.sub(r"[-_.]", "", name.lower())
-
-
-def normalize_pypi(name):
-    """Normalize a PyPI package name per PEP 503.
-
-    Lowercases and replaces runs of [-_.] with a single hyphen.
-    """
-    return re.sub(r"[-_.]+", "-", name.lower())
+from rlsbl.targets.utils import normalize_npm, normalize_pypi  # noqa: E402
 
 
 def check_npm_availability(name):
