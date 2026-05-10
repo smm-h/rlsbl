@@ -19,6 +19,36 @@ class NpmTarget(BaseTarget):
     def detect(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "package.json"))
 
+    def _detect_package_manager(self, dir_path):
+        """Detect the package manager by walking up from dir_path to the git root.
+
+        Checks each directory for lock files in priority order:
+        - pnpm-lock.yaml -> "pnpm"
+        - yarn.lock -> "yarn"
+        - package-lock.json -> "npm"
+
+        Stops at the git root (.git directory) or filesystem root.
+        Returns "npm" as fallback if no lock file is found.
+        """
+        current = os.path.abspath(dir_path)
+        while True:
+            for lockfile, pm in [
+                ("pnpm-lock.yaml", "pnpm"),
+                ("yarn.lock", "yarn"),
+                ("package-lock.json", "npm"),
+            ]:
+                if os.path.exists(os.path.join(current, lockfile)):
+                    return pm
+            # Stop if we reached the git root
+            if os.path.isdir(os.path.join(current, ".git")):
+                break
+            parent = os.path.dirname(current)
+            if parent == current:
+                # Filesystem root reached
+                break
+            current = parent
+        return "npm"
+
     def read_version(self, dir_path):
         """Read the version from package.json in the given directory."""
         pkg_path = os.path.join(dir_path, "package.json")
@@ -91,6 +121,7 @@ class NpmTarget(BaseTarget):
             "author": pkg.get("author", ""),
             "repoName": repo_name,
             "publishSetup": "Requires NPM_TOKEN secret on GitHub (Settings > Secrets > Actions)",
+            "packageManager": self._detect_package_manager(dir_path),
         }
 
     def template_mappings(self):
