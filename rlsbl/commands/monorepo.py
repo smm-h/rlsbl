@@ -16,17 +16,7 @@ def _auto_commit(message, files):
             check=True, capture_output=True, text=True,
         )
     except FileNotFoundError:
-        try:
-            subprocess.run(
-                ["git", "add", "--"] + files,
-                check=True, capture_output=True, text=True,
-            )
-            subprocess.run(
-                ["git", "commit", "-m", message],
-                check=True, capture_output=True, text=True,
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            pass
+        print("Error: safegit not found. Install it or check your PATH.", file=sys.stderr)
     except subprocess.CalledProcessError:
         pass
 
@@ -214,18 +204,19 @@ def _rewrite_trigger(content):
         new_lines = lines[:on_idx] + ["on:", "  workflow_call:", ""] + lines[on_idx + 1:]
         return "\n".join(new_lines) + "\n"
 
-    # Multi-line: find the jobs: line after on:
-    jobs_idx = None
-    for i, line in enumerate(lines):
-        if line.rstrip() == "jobs:" and i > on_idx:
-            jobs_idx = i
+    # Multi-line: find the next top-level key after on: (unindented, non-empty, non-comment)
+    next_key_idx = None
+    for i in range(on_idx + 1, len(lines)):
+        line = lines[i]
+        if line and not line[0].isspace() and not line.startswith("#"):
+            next_key_idx = i
             break
 
-    if jobs_idx is None:
-        print("Warning: no 'jobs:' found after 'on:' in workflow, skipping rewrite", file=sys.stderr)
+    if next_key_idx is None:
+        print("Warning: no top-level key found after 'on:' in workflow, skipping rewrite", file=sys.stderr)
         return content
 
-    new_lines = lines[:on_idx] + ["on:", "  workflow_call:", ""] + lines[jobs_idx:]
+    new_lines = lines[:on_idx] + ["on:", "  workflow_call:", ""] + lines[next_key_idx:]
     return "\n".join(new_lines) + "\n"
 
 
@@ -385,15 +376,8 @@ def _cmd_sync(flags):
 
     # Auto-commit
     all_files = written_files + deleted_files
-    try:
-        subprocess.run(
-            ["safegit", "commit", "-m", "monorepo: sync CI workflows", "--"] + all_files,
-            check=True,
-        )
-    except FileNotFoundError:
-        # safegit not available, fall back to git
-        subprocess.run(["git", "add", "--"] + all_files, check=True)
-        subprocess.run(["git", "commit", "-m", "monorepo: sync CI workflows"], check=True)
+    if all_files:
+        _auto_commit("monorepo: sync CI workflows", all_files)
 
     wf_count = len(written_files) - 1  # subtract router(s)
     if projects_with_publish:
@@ -402,7 +386,6 @@ def _cmd_sync(flags):
     msg = f"Synced {wf_count} workflow(s), generated {router_count} router(s)."
     if stale_removed:
         msg += f" Removed {stale_removed} stale workflow(s)."
-    msg += " Committed."
     print(msg)
 
 def _cmd_status(flags):
