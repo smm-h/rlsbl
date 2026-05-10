@@ -9,6 +9,8 @@ from .go import GoTarget
 from .docs import DocsTarget
 from .swift import SwiftTarget
 from .spec import SpecTarget
+from .hex import HexTarget
+from .deno import DenoTarget
 from .protocol import ReleaseTarget
 from .base import BaseTarget
 from ..config import read_json_config
@@ -21,6 +23,8 @@ TARGETS = {
     "docs": DocsTarget(),
     "swift": SwiftTarget(),
     "spec": SpecTarget(),
+    "hex": HexTarget(),
+    "deno": DenoTarget(),
 }
 
 

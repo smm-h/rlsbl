@@ -1,0 +1,110 @@
+"""Hex (Elixir/Erlang) release target for rlsbl."""
+
+import os
+import re
+import subprocess
+
+from .base import BaseTarget
+from ..utils import run
+
+
+class HexTarget(BaseTarget):
+    """Release target for Hex/Elixir projects (mix.exs)."""
+
+    @property
+    def name(self):
+        return "hex"
+
+    @property
+    def scope(self):
+        return "root"
+
+    def detect(self, dir_path):
+        return os.path.exists(os.path.join(dir_path, "mix.exs"))
+
+    def read_version(self, dir_path):
+        """Read the version from mix.exs."""
+        mix_path = os.path.join(dir_path, "mix.exs")
+        with open(mix_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        match = re.search(r'version:\s*"([^"]+)"', content)
+        if not match:
+            raise ValueError(f"No version found in {mix_path}")
+        return match.group(1)
+
+    def write_version(self, dir_path, version):
+        """Write a new version to mix.exs."""
+        mix_path = os.path.join(dir_path, "mix.exs")
+        with open(mix_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        new_content = re.sub(
+            r'(version:\s*)"[^"]+"',
+            f'\\1"{version}"',
+            content,
+        )
+        tmp_path = mix_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+        os.replace(tmp_path, mix_path)
+
+    def version_file(self):
+        return "mix.exs"
+
+    def tag_format(self, name, version):
+        return f"v{version}"
+
+    def template_dir(self):
+        return os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "templates", "hex"
+        )
+
+    def template_vars(self, dir_path):
+        """Extract template variables from mix.exs."""
+        mix_path = os.path.join(dir_path, "mix.exs")
+        with open(mix_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Extract app name
+        app_match = re.search(r'app:\s*:(\w+)', content)
+        app_name = app_match.group(1) if app_match else ""
+
+        # Author from git config
+        try:
+            author = run("git", ["config", "user.name"])
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            author = ""
+
+        return {
+            "name": app_name,
+            "version": self.read_version(dir_path),
+            "author": author,
+            "publishSetup": "Requires HEX_API_KEY secret on GitHub (Settings > Secrets > Actions)",
+        }
+
+    def template_mappings(self):
+        return [
+            {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
+            {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
+        ]
+
+    def publish(self, dir_path, version):
+        """Publish to Hex if HEX_API_KEY is available, otherwise defer to CI."""
+        token = os.environ.get("HEX_API_KEY")
+        if not token:
+            print("Skipping local Hex publish (no HEX_API_KEY). CI will handle it.")
+            return
+
+        try:
+            run("mix", ["hex.publish", "--yes"], env={
+                **os.environ,
+                "HEX_API_KEY": token,
+            })
+            print(f"Published to Hex: {version}")
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(f"mix hex.publish failed: {exc}") from exc
+
+    def check_project_exists(self, dir_path):
+        return os.path.exists(os.path.join(dir_path, "mix.exs"))
+
+    def get_project_init_hint(self):
+        return 'Run "mix new <project_name>" first'

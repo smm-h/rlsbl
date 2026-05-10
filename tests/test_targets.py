@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+import unittest.mock
 from unittest.mock import patch
 
 from rlsbl.targets.protocol import ReleaseTarget
@@ -11,6 +12,8 @@ from rlsbl.targets.pypi import PypiTarget
 from rlsbl.targets.go import GoTarget
 from rlsbl.targets.swift import SwiftTarget
 from rlsbl.targets.spec import SpecTarget
+from rlsbl.targets.hex import HexTarget
+from rlsbl.targets.deno import DenoTarget
 from rlsbl.targets import TARGETS, detect_targets
 
 
@@ -384,6 +387,95 @@ class TestSpecTarget:
 
     def test_tag_format(self):
         assert SpecTarget().tag_format("myspec", "1.2.3") == "spec-v1.2.3"
+
+
+class TestHexTarget:
+    def test_protocol_conformance(self):
+        assert isinstance(HexTarget(), ReleaseTarget)
+
+    def test_detection(self, tmp_path):
+        assert not HexTarget().detect(str(tmp_path))
+        (tmp_path / "mix.exs").write_text('defmodule MyApp.MixProject do\n  def project do\n    [app: :myapp, version: "1.0.0"]\n  end\nend')
+        assert HexTarget().detect(str(tmp_path))
+
+    def test_version_read_write(self, tmp_path):
+        target = HexTarget()
+        content = 'defmodule MyApp.MixProject do\n  def project do\n    [app: :myapp, version: "1.2.3"]\n  end\nend'
+        (tmp_path / "mix.exs").write_text(content)
+        assert target.read_version(str(tmp_path)) == "1.2.3"
+        target.write_version(str(tmp_path), "2.0.0")
+        assert '"2.0.0"' in (tmp_path / "mix.exs").read_text()
+
+    def test_tag_format(self):
+        assert HexTarget().tag_format("myapp", "1.2.3") == "v1.2.3"
+
+    def test_publish_with_token(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HEX_API_KEY", "test-key")
+        target = HexTarget()
+        with unittest.mock.patch("rlsbl.targets.hex.run") as mock_run:
+            target.publish(str(tmp_path), "1.0.0")
+            mock_run.assert_called_once()
+
+    def test_publish_without_token(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.delenv("HEX_API_KEY", raising=False)
+        target = HexTarget()
+        target.publish(str(tmp_path), "1.0.0")
+        captured = capsys.readouterr()
+        assert "Skipping local Hex publish (no HEX_API_KEY)" in captured.out
+
+
+class TestDenoTarget:
+    def test_protocol_conformance(self):
+        assert isinstance(DenoTarget(), ReleaseTarget)
+
+    def test_detection(self, tmp_path):
+        assert not DenoTarget().detect(str(tmp_path))
+        (tmp_path / "deno.json").write_text('{"name": "@scope/pkg", "version": "1.0.0"}')
+        assert DenoTarget().detect(str(tmp_path))
+
+    def test_detection_jsonc(self, tmp_path):
+        (tmp_path / "deno.jsonc").write_text('// config\n{"name": "@scope/pkg", "version": "1.0.0"}')
+        assert DenoTarget().detect(str(tmp_path))
+
+    def test_version_read_write(self, tmp_path):
+        target = DenoTarget()
+        (tmp_path / "deno.json").write_text('{"name": "@scope/pkg", "version": "1.2.3"}')
+        assert target.read_version(str(tmp_path)) == "1.2.3"
+        target.write_version(str(tmp_path), "2.0.0")
+        data = json.loads((tmp_path / "deno.json").read_text())
+        assert data["version"] == "2.0.0"
+
+    def test_version_read_jsonc(self, tmp_path):
+        target = DenoTarget()
+        (tmp_path / "deno.jsonc").write_text('// comment\n{"name": "@scope/pkg", "version": "3.0.0"}')
+        assert target.read_version(str(tmp_path)) == "3.0.0"
+
+    def test_version_write_jsonc_preserves_comments(self, tmp_path):
+        target = DenoTarget()
+        content = '// my config\n{"name": "@scope/pkg", "version": "1.0.0"}'
+        (tmp_path / "deno.jsonc").write_text(content)
+        target.write_version(str(tmp_path), "2.0.0")
+        result = (tmp_path / "deno.jsonc").read_text()
+        assert "// my config" in result
+        assert '"2.0.0"' in result
+
+    def test_tag_format(self):
+        assert DenoTarget().tag_format("pkg", "1.2.3") == "v1.2.3"
+
+    def test_publish_with_token(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DENO_TOKEN", "test-token")
+        target = DenoTarget()
+        with unittest.mock.patch("rlsbl.targets.deno.run") as mock_run:
+            target.publish(str(tmp_path), "1.0.0")
+            mock_run.assert_called_once()
+
+    def test_publish_without_token(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.delenv("DENO_TOKEN", raising=False)
+        monkeypatch.delenv("JSR_TOKEN", raising=False)
+        target = DenoTarget()
+        target.publish(str(tmp_path), "1.0.0")
+        captured = capsys.readouterr()
+        assert "Skipping local Deno publish (no DENO_TOKEN/JSR_TOKEN)" in captured.out
 
 
 class TestBackwardCompat:
