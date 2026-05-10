@@ -608,6 +608,91 @@ class TestDockerTarget:
                 assert mock_run.call_count >= 2
 
 
+class TestMavenTarget:
+    def test_protocol_conformance(self):
+        from rlsbl.targets.maven import MavenTarget
+        assert isinstance(MavenTarget(), ReleaseTarget)
+
+    def test_detection_gradle_kts(self, tmp_path):
+        from rlsbl.targets.maven import MavenTarget
+        assert not MavenTarget().detect(str(tmp_path))
+        (tmp_path / "build.gradle.kts").write_text('plugins { id("java") }\nversion = "1.0.0"\n')
+        assert MavenTarget().detect(str(tmp_path))
+
+    def test_detection_pom(self, tmp_path):
+        from rlsbl.targets.maven import MavenTarget
+        pom = '<project><version>1.0.0</version></project>'
+        (tmp_path / "pom.xml").write_text(pom)
+        assert MavenTarget().detect(str(tmp_path))
+
+    def test_version_from_gradle_properties(self, tmp_path):
+        from rlsbl.targets.maven import MavenTarget
+        (tmp_path / "build.gradle.kts").write_text('plugins { id("java") }')
+        (tmp_path / "gradle.properties").write_text("VERSION_NAME=1.2.3\n")
+        target = MavenTarget()
+        assert target.read_version(str(tmp_path)) == "1.2.3"
+        target.write_version(str(tmp_path), "2.0.0")
+        assert "VERSION_NAME=2.0.0" in (tmp_path / "gradle.properties").read_text()
+
+    def test_version_from_gradle_kts(self, tmp_path):
+        from rlsbl.targets.maven import MavenTarget
+        (tmp_path / "build.gradle.kts").write_text('version = "1.2.3"\n')
+        target = MavenTarget()
+        assert target.read_version(str(tmp_path)) == "1.2.3"
+        target.write_version(str(tmp_path), "2.0.0")
+        assert 'version = "2.0.0"' in (tmp_path / "build.gradle.kts").read_text()
+
+    def test_version_from_pom(self, tmp_path):
+        from rlsbl.targets.maven import MavenTarget
+        pom = '<?xml version="1.0"?>\n<project xmlns="http://maven.apache.org/POM/4.0.0">\n  <version>1.2.3</version>\n</project>'
+        (tmp_path / "pom.xml").write_text(pom)
+        target = MavenTarget()
+        assert target.read_version(str(tmp_path)) == "1.2.3"
+        target.write_version(str(tmp_path), "2.0.0")
+        assert "2.0.0" in (tmp_path / "pom.xml").read_text()
+
+    def test_version_priority(self, tmp_path):
+        from rlsbl.targets.maven import MavenTarget
+        # gradle.properties takes priority over build.gradle.kts
+        (tmp_path / "build.gradle.kts").write_text('version = "9.9.9"\n')
+        (tmp_path / "gradle.properties").write_text("version=1.0.0\n")
+        assert MavenTarget().read_version(str(tmp_path)) == "1.0.0"
+
+    def test_tag_format(self):
+        from rlsbl.targets.maven import MavenTarget
+        assert MavenTarget().tag_format("mylib", "1.2.3") == "v1.2.3"
+
+    def test_publish_with_token(self, tmp_path, monkeypatch):
+        from rlsbl.targets.maven import MavenTarget
+        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+        (tmp_path / "gradlew").write_text("#!/bin/sh\n")
+        os.chmod(tmp_path / "gradlew", 0o755)
+        target = MavenTarget()
+        with unittest.mock.patch("rlsbl.targets.maven.run") as mock_run:
+            target.publish(str(tmp_path), "1.0.0")
+            mock_run.assert_called_once()
+
+    def test_publish_without_token(self, tmp_path, monkeypatch, capsys):
+        from rlsbl.targets.maven import MavenTarget
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        MavenTarget().publish(str(tmp_path), "1.0.0")
+        captured = capsys.readouterr()
+        assert "Skipping local Maven/Gradle publish (no GITHUB_TOKEN)" in captured.out
+
+    def test_version_from_groovy_gradle(self, tmp_path):
+        from rlsbl.targets.maven import MavenTarget
+        (tmp_path / "build.gradle").write_text("version = '1.5.0'\n")
+        target = MavenTarget()
+        assert target.read_version(str(tmp_path)) == "1.5.0"
+        target.write_version(str(tmp_path), "2.0.0")
+        assert "version = '2.0.0'" in (tmp_path / "build.gradle").read_text()
+
+    def test_detection_groovy_gradle(self, tmp_path):
+        from rlsbl.targets.maven import MavenTarget
+        (tmp_path / "build.gradle").write_text("apply plugin: 'java'\n")
+        assert MavenTarget().detect(str(tmp_path))
+
+
 class TestBackwardCompat:
     """Tests for backward compatibility with the old registries module."""
 

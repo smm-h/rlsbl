@@ -13,6 +13,7 @@ from .hex import HexTarget
 from .deno import DenoTarget
 from .cargo import CargoTarget
 from .docker import DockerTarget
+from .maven import MavenTarget
 from .protocol import ReleaseTarget
 from .base import BaseTarget
 from ..config import read_json_config
@@ -29,6 +30,7 @@ TARGETS = {
     "deno": DenoTarget(),
     "cargo": CargoTarget(),
     "docker": DockerTarget(),
+    "maven": MavenTarget(),
 }
 
 
