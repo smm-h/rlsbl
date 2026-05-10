@@ -552,6 +552,62 @@ class TestCargoTarget:
         assert not target._is_library(str(tmp_path))
 
 
+class TestDockerTarget:
+    def test_protocol_conformance(self):
+        from rlsbl.targets.docker import DockerTarget
+        assert isinstance(DockerTarget(), ReleaseTarget)
+
+    def test_detection(self, tmp_path):
+        from rlsbl.targets.docker import DockerTarget
+        target = DockerTarget()
+        assert not target.detect(str(tmp_path))
+        (tmp_path / "Dockerfile").write_text("FROM python:3.12\n")
+        assert target.detect(str(tmp_path))
+
+    def test_version_read_write(self, tmp_path):
+        from rlsbl.targets.docker import DockerTarget
+        target = DockerTarget()
+        (tmp_path / "VERSION").write_text("1.2.3\n")
+        assert target.read_version(str(tmp_path)) == "1.2.3"
+        target.write_version(str(tmp_path), "2.0.0")
+        assert (tmp_path / "VERSION").read_text().strip() == "2.0.0"
+
+    def test_tag_format(self):
+        from rlsbl.targets.docker import DockerTarget
+        assert DockerTarget().tag_format("app", "1.2.3") == "v1.2.3"
+
+    def test_publish_reads_config(self, tmp_path, monkeypatch):
+        from rlsbl.targets.docker import DockerTarget
+        monkeypatch.chdir(tmp_path)
+        # No config -> should warn/error
+        os.makedirs(tmp_path / ".rlsbl", exist_ok=True)
+        (tmp_path / ".rlsbl" / "config.json").write_text('{}')
+        (tmp_path / "Dockerfile").write_text("FROM python:3.12\n")
+        target = DockerTarget()
+        import io, sys
+        captured = io.StringIO()
+        monkeypatch.setattr(sys, "stdout", captured)
+        target.publish(str(tmp_path), "1.0.0")
+        output = captured.getvalue()
+        # Should mention missing docker config
+        assert "docker" in output.lower() or "image" in output.lower() or "config" in output.lower()
+
+    def test_publish_with_config(self, tmp_path, monkeypatch):
+        from rlsbl.targets.docker import DockerTarget
+        import shutil
+        monkeypatch.chdir(tmp_path)
+        os.makedirs(tmp_path / ".rlsbl", exist_ok=True)
+        config = {"docker": {"image": "myapp", "registry": "ghcr.io"}}
+        (tmp_path / ".rlsbl" / "config.json").write_text(json.dumps(config))
+        (tmp_path / "Dockerfile").write_text("FROM python:3.12\n")
+        target = DockerTarget()
+        with unittest.mock.patch("shutil.which", return_value="/usr/bin/docker"):
+            with unittest.mock.patch("rlsbl.targets.docker.run") as mock_run:
+                target.publish(str(tmp_path), "1.0.0")
+                # Should have called docker build and docker push
+                assert mock_run.call_count >= 2
+
+
 class TestBackwardCompat:
     """Tests for backward compatibility with the old registries module."""
 
