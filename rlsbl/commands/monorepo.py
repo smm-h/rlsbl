@@ -266,7 +266,14 @@ def _generate_router(projects):
     lines.append("        with:")
     lines.append("          filters: |")
     for p in projects:
-        lines.append(f"            {p['name']}: '{p['path']}/**'")
+        watch = p.get("watch", [])
+        if watch:
+            lines.append(f"            {p['name']}:")
+            lines.append(f"              - '{p['path']}/**'")
+            for w in watch:
+                lines.append(f"              - '{w}'")
+        else:
+            lines.append(f"            {p['name']}: '{p['path']}/**'")
 
     # per-project jobs
     for p in projects:

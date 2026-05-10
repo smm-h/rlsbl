@@ -304,6 +304,48 @@ class TestRewriteTrigger:
         assert "Warning" in captured.err
 
 
+class TestRouterWatchPaths:
+    """Tests for watch path support in CI router generation."""
+
+    def test_router_without_watch_paths(self):
+        """Projects without watch key use single-line filter format."""
+        projects = [
+            {"name": "tooling", "path": "tooling"},
+            {"name": "core", "path": "core"},
+        ]
+        content = _generate_router(projects)
+        assert "tooling: 'tooling/**'" in content
+        assert "core: 'core/**'" in content
+
+    def test_router_with_watch_paths(self):
+        """Projects with watch key use multi-line list filter format."""
+        projects = [
+            {"name": "tooling", "path": "tooling", "watch": ["Package.swift", "shared/**"]},
+        ]
+        content = _generate_router(projects)
+        assert "            tooling:" in content
+        assert "              - 'tooling/**'" in content
+        assert "              - 'Package.swift'" in content
+        assert "              - 'shared/**'" in content
+        # Must NOT have single-line format
+        assert "tooling: 'tooling/**'" not in content
+
+    def test_router_mixed_watch_and_no_watch(self):
+        """Mixed projects: watch uses multi-line, no-watch uses single-line."""
+        projects = [
+            {"name": "tooling", "path": "tooling", "watch": ["Package.swift", "shared/**"]},
+            {"name": "core", "path": "core"},
+        ]
+        content = _generate_router(projects)
+        # tooling: multi-line
+        assert "            tooling:" in content
+        assert "              - 'tooling/**'" in content
+        assert "              - 'Package.swift'" in content
+        assert "              - 'shared/**'" in content
+        # core: single-line
+        assert "core: 'core/**'" in content
+
+
 class TestAutoCommit:
     def test_sync_commits_changes(self, mock_git_repo, capsys):
         _init_workspace_with_projects(mock_git_repo, [
