@@ -7,6 +7,29 @@ import sys
 from ..workspace import find_workspace_root, load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 from ..targets import detect_targets, TARGETS
 
+def _auto_commit(message, files):
+    """Best-effort commit of specific files. Failures are silently ignored."""
+    try:
+        subprocess.run(
+            ["safegit", "commit", "-m", message, "--"] + files,
+            check=True, capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        try:
+            subprocess.run(
+                ["git", "add", "--"] + files,
+                check=True, capture_output=True, text=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-m", message],
+                check=True, capture_output=True, text=True,
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+    except subprocess.CalledProcessError:
+        pass
+
+
 MONOREPO_HELP = """\
 Usage: rlsbl monorepo <subcommand>
 
@@ -53,6 +76,9 @@ def _cmd_init(flags):
     save_workspace(".", [])
     print("Initialized monorepo workspace in .rlsbl-monorepo/")
 
+    # Auto-commit workspace.toml
+    _auto_commit("monorepo: init workspace", [os.path.join(WORKSPACE_DIR, WORKSPACE_FILE)])
+
 
 def _cmd_add(args, flags):
     if not args:
@@ -90,6 +116,33 @@ def _cmd_add(args, flags):
     projects.append({"path": path, "name": name})
     save_workspace(root, projects)
     print(f"Added project '{name}' at {path}")
+
+    # Commit workspace.toml
+    ws_file = os.path.join(WORKSPACE_DIR, WORKSPACE_FILE)
+    _auto_commit(f"monorepo: add {name}", [ws_file])
+
+    # Auto-scaffold if not already scaffolded
+    project_rlsbl = os.path.join(path, ".rlsbl", "config.json")
+    if not os.path.exists(project_rlsbl):
+        print(f"Scaffolding {name}...")
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "rlsbl", "scaffold"],
+                cwd=path,
+                check=False,
+            )
+        except Exception as e:
+            print(f"Warning: scaffold failed: {e}", file=sys.stderr)
+
+    # Sync CI workflows
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "rlsbl", "monorepo", "sync"],
+            cwd=root,
+            check=False,
+        )
+    except Exception:
+        pass
 
 
 def _cmd_remove(args, flags):

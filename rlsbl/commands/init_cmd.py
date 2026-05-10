@@ -519,6 +519,26 @@ def _print_private_summary():
     print("  Go:     go get github.com/owner/repo@vX.Y.Z")
 
 
+def _trigger_monorepo_sync():
+    """If the current directory is inside a monorepo workspace, run sync.
+
+    Uses a subprocess so that sys.exit() calls inside sync don't kill scaffold.
+    Failures are silently ignored -- sync is best-effort after scaffold.
+    """
+    from ..workspace import find_workspace_root
+
+    ws_root = find_workspace_root(".")
+    if ws_root:
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "rlsbl", "monorepo", "sync"],
+                cwd=ws_root,
+                check=False,
+            )
+        except Exception:
+            pass
+
+
 def run_cmd(registry, args, flags):
     """Init command handler.
 
@@ -595,6 +615,9 @@ def run_cmd(registry, args, flags):
 
         if private:
             _print_private_summary()
+
+        # If inside a monorepo, sync root CI workflows
+        _trigger_monorepo_sync()
     finally:
         release_lock()
 
@@ -696,5 +719,8 @@ def run_cmd_multi(registries_list, args, flags):
             print("  2. Configure Trusted Publishing on pypi.org")
             print("  3. Push to GitHub to activate the CI workflow")
             print("  4. Run rlsbl release [patch|minor|major]")
+
+        # If inside a monorepo, sync root CI workflows
+        _trigger_monorepo_sync()
     finally:
         release_lock()
