@@ -6,6 +6,7 @@ import sys
 
 from ..lock import is_stale
 from ..targets import TARGETS, detect_targets
+from ..targets.utils import normalize_go, normalize_npm, normalize_pypi
 from ..utils import (
     check_gh_auth,
     check_gh_installed,
@@ -46,6 +47,114 @@ def _check_version_consistency():
 
     version = unique.pop()
     return ("PASS", f"{version} across {len(target_names)} target(s)")
+
+
+def _normalize_name(target_name, raw_name):
+    """Normalize a package name using the appropriate target normalizer."""
+    normalizers = {
+        "npm": normalize_npm,
+        "pypi": normalize_pypi,
+        "go": normalize_go,
+    }
+    normalizer = normalizers.get(target_name, str.lower)
+    return normalizer(raw_name)
+
+
+def _check_name_consistency():
+    """Check that all detected targets report the same package name."""
+    target_names = detect_targets(".")
+    if not target_names:
+        return ("WARN", "no targets detected")
+
+    names = {}
+    for name in target_names:
+        target = TARGETS[name]
+        try:
+            n = target.read_name(".")
+            names[name] = n
+        except Exception:
+            names[name] = None
+
+    # Targets that returned a name
+    have_name = {k: v for k, v in names.items() if v is not None}
+    if not have_name:
+        return ("WARN", "no targets reported a name")
+
+    # Warn about targets that couldn't provide a name
+    missing = [k for k, v in names.items() if v is None]
+
+    normalized = {k: _normalize_name(k, v) for k, v in have_name.items()}
+    unique = set(normalized.values())
+
+    if len(unique) == 1:
+        raw_name = next(iter(have_name.values()))
+        msg = f"{raw_name} across {len(target_names)} target(s)"
+        if missing:
+            msg += f" (no name from: {', '.join(missing)})"
+        return ("PASS", msg)
+
+    detail = ", ".join(f"{k}={v}" for k, v in have_name.items())
+    return ("WARN", f"name mismatch: {detail}")
+
+
+def _check_license_consistency():
+    """Check that all detected targets report the same license."""
+    target_names = detect_targets(".")
+    if not target_names:
+        return ("PASS", "no targets declare a license")
+
+    licenses = {}
+    for name in target_names:
+        target = TARGETS[name]
+        try:
+            meta = target.read_metadata(".")
+            if "license" in meta:
+                licenses[name] = meta["license"]
+        except Exception:
+            pass
+
+    if len(licenses) == 0:
+        return ("PASS", "no targets declare a license")
+    if len(licenses) < 2:
+        return ("PASS", f"only {len(licenses)} target(s) declare a license")
+
+    unique = set(v.lower() for v in licenses.values())
+    if len(unique) == 1:
+        license_val = next(iter(licenses.values()))
+        return ("PASS", f"{license_val} across {len(licenses)} target(s)")
+
+    detail = ", ".join(f"{k}={v}" for k, v in licenses.items())
+    return ("WARN", f"license mismatch: {detail}")
+
+
+def _check_description_consistency():
+    """Check that all detected targets report the same description."""
+    target_names = detect_targets(".")
+    if not target_names:
+        return ("PASS", "no targets declare a description")
+
+    descriptions = {}
+    for name in target_names:
+        target = TARGETS[name]
+        try:
+            meta = target.read_metadata(".")
+            if "description" in meta:
+                descriptions[name] = meta["description"]
+        except Exception:
+            pass
+
+    if len(descriptions) == 0:
+        return ("PASS", "no targets declare a description")
+    if len(descriptions) < 2:
+        return ("PASS", f"only {len(descriptions)} target(s) declare a description")
+
+    unique = set(descriptions.values())
+    if len(unique) == 1:
+        desc_val = next(iter(descriptions.values()))
+        return ("PASS", f"{desc_val} across {len(descriptions)} target(s)")
+
+    detail = ", ".join(f"{k}={v}" for k, v in descriptions.items())
+    return ("WARN", f"description mismatch: {detail}")
 
 
 def _check_local_tag(tag):
@@ -228,6 +337,9 @@ def run_cmd(registry, args, flags):
     results = {}
     results["Lock file"] = _check_stale_lock()
     results["Version files"] = _check_version_consistency()
+    results["Package names"] = _check_name_consistency()
+    results["License"] = _check_license_consistency()
+    results["Description"] = _check_description_consistency()
 
     if tag:
         results["Local tag"] = _check_local_tag(tag)
