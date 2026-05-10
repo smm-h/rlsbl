@@ -1,15 +1,22 @@
 """Tests for cross-target metadata consistency (Phases 1-4).
 
 Covers: process_template dotted vars, normalize functions, min-version extraction,
-read_name/read_metadata, _merge_template_vars, and doctor metadata checks.
+read_name/read_metadata, _merge_template_vars, doctor metadata checks,
+and scaffold --update preservation of version-reference comments.
 """
 
 import json
+import subprocess
 from unittest.mock import patch
 
 import pytest
 
-from rlsbl.commands.init_cmd import process_template, _merge_template_vars
+from rlsbl.commands.init_cmd import (
+    process_template,
+    process_mappings,
+    _merge_template_vars,
+    _load_base,
+)
 from rlsbl.targets import TARGETS
 from rlsbl.targets.utils import normalize_npm, normalize_pypi, normalize_go
 
@@ -395,3 +402,91 @@ class TestDoctorMetadataChecks:
         status, message = _check_description_consistency()
         assert status == "PASS"
         assert "A cool tool" in message
+
+
+# ---------------------------------------------------------------------------
+# Test class 7: version-reference comments in scaffold templates
+# ---------------------------------------------------------------------------
+
+
+class TestScaffoldUpdateVersionComments:
+    """Tests that version-reference comments (e.g. '# requires-python: >= 3.11')
+    render correctly and survive scaffold --update three-way merges."""
+
+    def test_process_template_renders_version_comment(self):
+        """process_template should render dotted vars in YAML comments."""
+        template = (
+            "jobs:\n"
+            "  test:\n"
+            "    strategy:\n"
+            "      matrix:\n"
+            "        # requires-python: >= {{pypi.minRequiredPython}}\n"
+            '        python-version: ["3.12", "3.13"]\n'
+        )
+        vars_dict = {"pypi.minRequiredPython": "3.11"}
+        content, unreplaced = process_template(template, vars_dict)
+        assert "# requires-python: >= 3.11" in content
+        assert unreplaced == []
+
+    def test_process_template_version_comment_unreplaced_when_missing(self):
+        """When the var is not provided, the placeholder stays and is reported."""
+        template = "# requires-python: >= {{pypi.minRequiredPython}}\n"
+        content, unreplaced = process_template(template, {})
+        assert "{{pypi.minRequiredPython}}" in content
+        assert "pypi.minRequiredPython" in unreplaced
+
+    def test_scaffold_update_preserves_version_comment(self, mock_git_repo):
+        """After scaffold + user edit + scaffold --update, version-reference
+        comments survive the three-way merge."""
+        tpl_dir = mock_git_repo / "_tpls"
+        tpl_dir.mkdir()
+
+        # Template v1 with a version-reference comment (7 lines for merge spacing)
+        tpl_v1 = (
+            "name: CI\n"
+            "on:\n"
+            "  push:\n"
+            "    branches: [main]\n"
+            "jobs:\n"
+            "  test:\n"
+            "    strategy:\n"
+            "      matrix:\n"
+            "        # requires-python: >= {{pypi.minRequiredPython}}\n"
+            '        python-version: ["3.12", "3.13"]\n'
+            "    steps:\n"
+            "      - uses: actions/checkout@v6\n"
+        )
+        (tpl_dir / "ci.yml.tpl").write_text(tpl_v1)
+
+        mappings = [{"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"}]
+        vars_dict = {"pypi.minRequiredPython": "3.11"}
+
+        # Initial scaffold
+        created, skipped, warnings, hashes = process_mappings(
+            str(tpl_dir), mappings, vars_dict, force=False,
+        )
+        ci_path = mock_git_repo / ".github" / "workflows" / "ci.yml"
+        assert ci_path.exists()
+        initial_content = ci_path.read_text()
+        assert "# requires-python: >= 3.11" in initial_content
+
+        # Simulate user customization: add a comment at the end (non-adjacent)
+        user_content = initial_content.rstrip("\n") + "\n      # user customization\n"
+        ci_path.write_text(user_content)
+
+        # Template v2: same version comment, but a different line changed elsewhere
+        tpl_v2 = tpl_v1.replace("actions/checkout@v6", "actions/checkout@v7")
+        (tpl_dir / "ci.yml.tpl").write_text(tpl_v2)
+
+        # Scaffold --update (three-way merge)
+        created2, skipped2, warnings2, hashes2 = process_mappings(
+            str(tpl_dir), mappings, vars_dict, force=False,
+        )
+
+        merged_content = ci_path.read_text()
+        # Version-reference comment must survive
+        assert "# requires-python: >= 3.11" in merged_content
+        # User customization must survive
+        assert "# user customization" in merged_content
+        # Template update must be applied
+        assert "actions/checkout@v7" in merged_content
