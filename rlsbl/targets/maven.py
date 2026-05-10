@@ -26,8 +26,11 @@ class MavenTarget(BaseTarget):
     def name(self):
         return "maven"
 
-    def read_name(self, dir_path):
-        """Read the project name (groupId:artifactId or group) from build files."""
+    def _read_project_name(self, dir_path):
+        """Extract project name from pom.xml, build.gradle.kts, or build.gradle.
+
+        Returns the name string if found, or None.
+        """
         # Try pom.xml for groupId:artifactId
         pom_path = os.path.join(dir_path, "pom.xml")
         if os.path.exists(pom_path):
@@ -70,6 +73,10 @@ class MavenTarget(BaseTarget):
                 return group_m.group(1)
 
         return None
+
+    def read_name(self, dir_path):
+        """Read the project name (groupId:artifactId or group) from build files."""
+        return self._read_project_name(dir_path)
 
     def read_metadata(self, dir_path):
         """Maven/Gradle metadata extraction not yet implemented."""
@@ -238,49 +245,7 @@ class MavenTarget(BaseTarget):
 
     def template_vars(self, dir_path):
         """Extract template variables from the project."""
-        name = ""
-        # Try pom.xml for groupId:artifactId
-        pom_path = os.path.join(dir_path, "pom.xml")
-        if os.path.exists(pom_path):
-            ns = {"m": "http://maven.apache.org/POM/4.0.0"}
-            try:
-                tree = ET.parse(pom_path)
-                root = tree.getroot()
-                group = root.find("m:groupId", ns)
-                if group is None:
-                    group = root.find("groupId")
-                artifact = root.find("m:artifactId", ns)
-                if artifact is None:
-                    artifact = root.find("artifactId")
-                parts = []
-                if group is not None and group.text:
-                    parts.append(group.text.strip())
-                if artifact is not None and artifact.text:
-                    parts.append(artifact.text.strip())
-                if parts:
-                    name = ":".join(parts)
-            except ET.ParseError:
-                pass
-
-        # Try build.gradle.kts for group + name
-        if not name:
-            kts = os.path.join(dir_path, "build.gradle.kts")
-            if os.path.exists(kts):
-                with open(kts, "r", encoding="utf-8") as f:
-                    content = f.read()
-                group_m = re.search(r'group\s*=\s*"([^"]+)"', content)
-                if group_m:
-                    name = group_m.group(1)
-
-        # Try build.gradle for group
-        if not name:
-            groovy = os.path.join(dir_path, "build.gradle")
-            if os.path.exists(groovy):
-                with open(groovy, "r", encoding="utf-8") as f:
-                    content = f.read()
-                group_m = re.search(r"""group\s*=?\s*['"]([^'"]+)['"]""", content)
-                if group_m:
-                    name = group_m.group(1)
+        name = self._read_project_name(dir_path) or ""
 
         # Author from git config
         author = ""
