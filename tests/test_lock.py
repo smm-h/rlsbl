@@ -4,6 +4,7 @@ import fcntl
 import os
 import multiprocessing
 import time
+from unittest.mock import patch
 
 from rlsbl.lock import acquire_lock, release_lock, rlsbl_lock
 
@@ -89,6 +90,18 @@ def test_context_manager(tmp_path, monkeypatch):
         assert False, "Lock should be free after context manager exits"
     finally:
         fd.close()
+
+
+def test_atexit_registered_on_acquire(tmp_path, monkeypatch):
+    """acquire_lock registers release_lock with atexit."""
+    monkeypatch.chdir(tmp_path)
+
+    with patch("rlsbl.lock.atexit.register") as mock_register:
+        acquire_lock()
+        try:
+            mock_register.assert_called_once_with(release_lock)
+        finally:
+            release_lock()
 
 
 def _child_acquire(lock_dir, result_queue):

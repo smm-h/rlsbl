@@ -4,6 +4,7 @@ Uses fcntl.flock on .rlsbl/lock to ensure only one rlsbl process
 (release, scaffold, etc.) mutates project state at a time.
 """
 
+import atexit
 import fcntl
 import os
 import sys
@@ -39,6 +40,8 @@ def acquire_lock():
         # Another process holds the lock -- inform user and wait
         print("Another rlsbl process is running. Waiting...", file=sys.stderr)
         fcntl.flock(_lock_fd, fcntl.LOCK_EX)
+
+    atexit.register(release_lock)
 
 
 def release_lock():
