@@ -11,7 +11,11 @@ from .base import BaseTarget
 
 
 class SpecTarget(BaseTarget):
-    """Release target for specification projects (version.json)."""
+    """Release target for specification projects (version.json).
+
+    Expects version.json with at least {"version": "X.Y.Z"}.
+    Extra fields are preserved on version bumps.
+    """
 
     @property
     def name(self):
