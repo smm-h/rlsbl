@@ -303,6 +303,39 @@ class TestRewriteTrigger:
         captured = capsys.readouterr()
         assert "Warning" in captured.err
 
+    def test_preserves_intermediate_top_level_keys(self):
+        """Rewrite only replaces the on: block, preserving keys between on: and jobs:."""
+        content = (
+            "name: Publish\n"
+            "\n"
+            "on:\n"
+            "  release:\n"
+            "    types: [published]\n"
+            "\n"
+            "permissions:\n"
+            "  contents: read\n"
+            "  id-token: write\n"
+            "\n"
+            "env:\n"
+            "  REGISTRY: ghcr.io\n"
+            "\n"
+            "jobs:\n"
+            "  publish:\n"
+            "    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            "      - uses: actions/checkout@v4\n"
+        )
+        result = _rewrite_trigger(content)
+        # on: block replaced with workflow_call
+        assert "on:\n  workflow_call:" in result
+        assert "release:" not in result
+        assert "types: [published]" not in result
+        # Intermediate top-level keys preserved intact
+        assert "permissions:\n  contents: read\n  id-token: write\n" in result
+        assert "env:\n  REGISTRY: ghcr.io\n" in result
+        # jobs: preserved intact
+        assert "jobs:\n  publish:\n    runs-on: ubuntu-latest\n" in result
+
 
 class TestRouterWatchPaths:
     """Tests for watch path support in CI router generation."""
