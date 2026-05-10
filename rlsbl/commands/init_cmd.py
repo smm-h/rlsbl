@@ -859,6 +859,28 @@ def _generate_merged_publish(targets, template_vars):
     return result
 
 
+def _merge_template_vars(registries_list, primary, dir_path):
+    """Build a merged template vars dict with namespaced keys from all targets.
+
+    The primary target's vars are included un-namespaced (as the base).
+    Every target's vars are also included with a namespace prefix:
+    ``{target_name}.{key}`` so templates can reference target-specific values
+    like ``{{pypi.minRequiredPython}}``.
+    """
+    merged = {}
+    # Primary target's vars as base (un-namespaced)
+    primary_target = TARGETS[primary]
+    primary_vars = primary_target.get_template_vars(dir_path)
+    merged.update(primary_vars)
+    # All targets' vars namespaced
+    for target_name in registries_list:
+        target = TARGETS[target_name]
+        target_vars = target.get_template_vars(dir_path)
+        for key, value in target_vars.items():
+            merged[f"{target_name}.{key}"] = value
+    return merged
+
+
 def run_cmd_multi(registries_list, args, flags):
     """Scaffold for multiple registries with a merged publish workflow.
 
@@ -896,7 +918,7 @@ def run_cmd_multi(registries_list, args, flags):
         else:
             print("Scaffolding with merged publish workflow.")
 
-        vars_dict = reg.get_template_vars(".")
+        vars_dict = _merge_template_vars(registries_list, primary, ".")
         from datetime import datetime
         vars_dict["year"] = str(datetime.now().year)
 
