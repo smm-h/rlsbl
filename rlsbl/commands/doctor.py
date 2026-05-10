@@ -173,6 +173,39 @@ def _apply_fixes(results, tag, version):
     return fixed
 
 
+def _check_workflows_synced(root, projects):
+    """Check that each project has a synced CI workflow at the repo root."""
+    missing = []
+    for proj in projects:
+        name = proj["name"]
+        workflow = os.path.join(root, ".github", "workflows", f"{name}-ci.yml")
+        if not os.path.isfile(workflow):
+            missing.append(name)
+    if missing:
+        return ("WARN", f"missing workflows: {', '.join(missing)}")
+    return ("PASS", f"all {len(projects)} project(s) have synced workflows")
+
+
+def _check_router_exists(root):
+    """Check that ci-router.yml exists at the repo root."""
+    router = os.path.join(root, ".github", "workflows", "ci-router.yml")
+    if os.path.isfile(router):
+        return ("PASS", "ci-router.yml exists")
+    return ("WARN", "ci-router.yml not found")
+
+
+def _check_project_targets(projects):
+    """Check that each project has at least one detectable target."""
+    missing = []
+    for proj in projects:
+        targets = detect_targets(proj["path"])
+        if not targets:
+            missing.append(proj["name"])
+    if missing:
+        return ("WARN", f"no targets detected: {', '.join(missing)}")
+    return ("PASS", f"all {len(projects)} project(s) have targets")
+
+
 def run_cmd(registry, args, flags):
     """Run diagnostic checks on the release state."""
     target_names = detect_targets(".")
@@ -227,6 +260,31 @@ def run_cmd(registry, args, flags):
         print("All checks passed.")
     else:
         print(f"{issues} issue(s) found.")
+
+    # Monorepo workspace checks
+    try:
+        from ..workspace import find_workspace_root, load_workspace
+
+        ws_root = find_workspace_root(".")
+        if ws_root:
+            projects = load_workspace(ws_root)
+            print()
+            print("Monorepo:")
+            mono_results = {}
+            mono_results["CI router"] = _check_router_exists(ws_root)
+            mono_results["Synced workflows"] = _check_workflows_synced(
+                ws_root, projects
+            )
+            mono_results["Project targets"] = _check_project_targets(projects)
+
+            mono_label_width = max(len(label) for label in mono_results)
+            for label, (status, message) in mono_results.items():
+                padded_label = f"{label}:".ljust(mono_label_width + 1)
+                print(f"{padded_label}  {status} -- {message}")
+                if status in ("WARN", "FAIL"):
+                    issues += 1
+    except Exception:
+        pass  # not in a monorepo, skip
 
     # Auto-fix if requested
     if flags.get("fix") and issues > 0 and tag and version:

@@ -12,6 +12,9 @@ from rlsbl.commands.doctor import (
     _check_local_tag,
     _check_stale_lock,
     _check_version_consistency,
+    _check_workflows_synced,
+    _check_router_exists,
+    _check_project_targets,
     _apply_fixes,
 )
 
@@ -114,3 +117,88 @@ class TestDoctorRegistration:
         """'doctor' should appear in the HELP text."""
         from rlsbl import HELP
         assert "doctor" in HELP
+
+
+class TestDoctorMonorepo:
+    """Tests for monorepo workspace checks in doctor."""
+
+    def _setup_monorepo(self, root, projects, create_workflows=True,
+                        create_router=True, create_targets=True):
+        """Helper to set up a monorepo structure.
+
+        Creates workspace.toml, project dirs, and optionally workflows/targets.
+        """
+        ws_dir = root / ".rlsbl-monorepo"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+
+        # Build workspace.toml content
+        lines = []
+        for proj in projects:
+            lines.append("[[projects]]")
+            lines.append(f'path = "{proj["path"]}"')
+            lines.append(f'name = "{proj["name"]}"')
+            lines.append("")
+        (ws_dir / "workspace.toml").write_text("\n".join(lines))
+
+        # Create project directories and optional target files
+        for proj in projects:
+            proj_dir = root / proj["path"]
+            proj_dir.mkdir(parents=True, exist_ok=True)
+            if create_targets:
+                pkg = {"name": proj["name"], "version": "1.0.0"}
+                (proj_dir / "package.json").write_text(json.dumps(pkg))
+
+        # Create workflow files
+        if create_workflows:
+            wf_dir = root / ".github" / "workflows"
+            wf_dir.mkdir(parents=True, exist_ok=True)
+            for proj in projects:
+                (wf_dir / f"{proj['name']}-ci.yml").write_text("on: push\n")
+
+        if create_router:
+            wf_dir = root / ".github" / "workflows"
+            wf_dir.mkdir(parents=True, exist_ok=True)
+            (wf_dir / "ci-router.yml").write_text("on: push\n")
+
+    def test_monorepo_synced_pass(self, tmp_project):
+        """All projects have synced workflows -- should PASS."""
+        projects = [
+            {"path": "packages/alpha", "name": "alpha"},
+            {"path": "packages/beta", "name": "beta"},
+        ]
+        self._setup_monorepo(tmp_project, projects)
+
+        proj_dicts = [{"path": str(tmp_project / p["path"]), "name": p["name"]}
+                      for p in projects]
+
+        status, message = _check_workflows_synced(str(tmp_project), proj_dicts)
+        assert status == "PASS"
+        assert "2 project(s)" in message
+
+    def test_monorepo_missing_router_warn(self, tmp_project):
+        """No ci-router.yml -- should WARN."""
+        projects = [{"path": "packages/alpha", "name": "alpha"}]
+        self._setup_monorepo(tmp_project, projects, create_router=False)
+
+        status, message = _check_router_exists(str(tmp_project))
+        assert status == "WARN"
+        assert "not found" in message
+
+    def test_no_monorepo_skips_checks(self, mock_git_repo, capsys):
+        """When not in a monorepo, monorepo checks should not appear."""
+        # mock_git_repo has no .rlsbl-monorepo/, so monorepo checks should be skipped
+        pkg = {"name": "solo", "version": "1.0.0"}
+        (mock_git_repo / "package.json").write_text(json.dumps(pkg))
+
+        # We need to mock out the network-dependent checks
+        with patch("rlsbl.commands.doctor._check_remote_tag",
+                    return_value=("PASS", "v1.0.0 on origin")), \
+             patch("rlsbl.commands.doctor._check_github_release",
+                    return_value=("PASS", "v1.0.0 exists")), \
+             patch("rlsbl.commands.doctor._check_branch_sync",
+                    return_value=("PASS", "up to date")):
+            from rlsbl.commands.doctor import run_cmd
+            run_cmd(None, [], {})
+
+        captured = capsys.readouterr()
+        assert "Monorepo:" not in captured.out
