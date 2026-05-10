@@ -24,6 +24,12 @@ class BaseTarget:
         )
         return templates
 
+    def read_name(self, dir_path):
+        return None
+
+    def read_metadata(self, dir_path):
+        return {}
+
     def template_vars(self, dir_path):
         return {}
 

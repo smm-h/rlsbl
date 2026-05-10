@@ -24,6 +24,14 @@ class ReleaseTarget(Protocol):
         """Read the current version from the target's manifest file."""
         ...
 
+    def read_name(self, dir_path: str) -> str | None:
+        """Read the project's package name from the manifest, or None."""
+        return None
+
+    def read_metadata(self, dir_path: str) -> dict[str, str]:
+        """Read optional metadata (license, description) from the manifest."""
+        return {}
+
     def write_version(self, dir_path: str, version: str) -> None:
         """Write a new version to the target's manifest file (atomic)."""
         ...
