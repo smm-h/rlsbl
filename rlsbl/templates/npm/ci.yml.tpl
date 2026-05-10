@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        # engines.node: >= {{npm.minRequiredNode}}
         node-version: [20, 22, 24]
     steps:
       - uses: actions/checkout@v6
