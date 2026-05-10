@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.0
+
+- **7 new release targets.** swift (SPM), cargo (Rust/crates.io), deno (JSR), hex (Elixir/hex.pm), maven (Gradle/Maven), docker, spec (versioned specifications). Each with CI/publish templates and hybrid publish support.
+- **Opt-in target config.** Projects declare targets in `.rlsbl/config.json` `"targets"` array. Auto-detection remains as fallback for existing projects.
+- **Hybrid publish.** `rlsbl release` publishes locally when ecosystem token is available (NPM_TOKEN, CARGO_REGISTRY_TOKEN, HEX_API_KEY, etc.). Falls back to CI otherwise.
+- **Private registry workflow.** `rlsbl scaffold --private` (or auto-detected) skips publish.yml, generates a post-release hook that uploads artifacts to GitHub Releases. Prints consumer install instructions.
+- **tomlkit replaces TOML regex.** `pyproject.toml` editing (version bumps, keyword injection) now uses tomlkit for correct round-trip editing with comment preservation. Fixes edge cases with `[project.urls]` sub-tables.
+- **REGISTRIES renamed to TARGETS.** Internal refactor: all command files use the targets module directly. `rlsbl/registries/` is a backward-compat shim only.
+- **detect_targets() covers all targets.** Auto-detection now finds all 11 registered targets, not just npm/pypi/go.
+- **Regression tests for --force USER_OWNED.** LICENSE, CHANGELOG.md, and hooks are verified protected under --force.
+
 ## 0.11.3
 
 - **`--include`/`--exclude` release flags.** Control which targets run during release. Replaces `--skip-docs`.
