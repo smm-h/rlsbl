@@ -164,8 +164,8 @@ def _cmd_remove(args, flags):
     new_projects = [p for p in projects if p["path"].rstrip("/") != norm_path]
 
     if len(new_projects) == len(projects):
-        print(f"Error: Project at '{path}' not found in workspace.", file=sys.stderr)
-        sys.exit(1)
+        print(f"Warning: Project at '{path}' not found in workspace.", file=sys.stderr)
+        return
 
     save_workspace(root, new_projects)
     print(f"Removed project at {path}")
