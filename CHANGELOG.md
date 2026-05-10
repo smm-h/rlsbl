@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.1
+
+- **npm scaffold: lockfile warning.** `rlsbl scaffold` now warns when an npm project has no lockfile (`package-lock.json`, `pnpm-lock.yaml`, or `yarn.lock`) and adds a "run npm install" step to the next steps output. Prevents broken CI from `npm ci` failing on first push.
+
 ## 0.16.0
 
 - **`rlsbl doctor` command.** Diagnoses release state with 7 checks: stale lock file, version consistency across targets, local/remote tag existence, GitHub Release existence, branch sync, changelog coverage. `--fix` auto-repairs safe issues (stale locks, missing remote tags, missing GitHub Releases).
