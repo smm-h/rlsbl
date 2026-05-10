@@ -813,6 +813,61 @@ class TestGoRootMainDetection:
         assert target._has_cmd_main(str(tmp_project)) is False
 
 
+class TestNpmPackageManagerDetection:
+    """Tests for NpmTarget._detect_package_manager() and dynamic template selection."""
+
+    def test_detect_npm_from_package_lock(self, tmp_project):
+        target = NpmTarget()
+        (tmp_project / "package-lock.json").write_text("{}")
+        assert target._detect_package_manager(str(tmp_project)) == "npm"
+
+    def test_detect_pnpm_from_lockfile(self, tmp_project):
+        target = NpmTarget()
+        (tmp_project / "pnpm-lock.yaml").write_text("")
+        assert target._detect_package_manager(str(tmp_project)) == "pnpm"
+
+    def test_detect_yarn_from_lockfile(self, tmp_project):
+        target = NpmTarget()
+        (tmp_project / "yarn.lock").write_text("")
+        assert target._detect_package_manager(str(tmp_project)) == "yarn"
+
+    def test_detect_ancestor_search(self, mock_git_repo):
+        target = NpmTarget()
+        # Lock file at git root
+        (mock_git_repo / "pnpm-lock.yaml").write_text("")
+        # Subdirectory with package.json
+        subdir = mock_git_repo / "packages" / "foo"
+        subdir.mkdir(parents=True)
+        (subdir / "package.json").write_text('{"name": "foo", "version": "1.0.0"}')
+        assert target._detect_package_manager(str(subdir)) == "pnpm"
+
+    def test_detect_fallback_npm(self, tmp_project):
+        target = NpmTarget()
+        # No lock files anywhere
+        assert target._detect_package_manager(str(tmp_project)) == "npm"
+
+    def test_template_mappings_npm(self, tmp_project):
+        target = NpmTarget()
+        (tmp_project / "package-lock.json").write_text("{}")
+        mappings = target.template_mappings()
+        ci_templates = [m["template"] for m in mappings if m["target"].endswith("ci.yml")]
+        assert ci_templates == ["ci.yml.tpl"]
+
+    def test_template_mappings_pnpm(self, tmp_project):
+        target = NpmTarget()
+        (tmp_project / "pnpm-lock.yaml").write_text("")
+        mappings = target.template_mappings()
+        ci_templates = [m["template"] for m in mappings if m["target"].endswith("ci.yml")]
+        assert ci_templates == ["ci-pnpm.yml.tpl"]
+
+    def test_template_mappings_yarn(self, tmp_project):
+        target = NpmTarget()
+        (tmp_project / "yarn.lock").write_text("")
+        mappings = target.template_mappings()
+        ci_templates = [m["template"] for m in mappings if m["target"].endswith("ci.yml")]
+        assert ci_templates == ["ci-yarn.yml.tpl"]
+
+
 class TestDetectTargetsAutoDetection:
     """Parametrized test that verifies detect_targets() auto-detects all 11 auto-detectable targets."""
 
