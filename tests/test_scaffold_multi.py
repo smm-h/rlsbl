@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from rlsbl.commands.init_cmd import run_cmd_multi
+from rlsbl.commands.init_cmd import run_cmd_multi, _generate_merged_publish
 
 
 @pytest.fixture
@@ -160,3 +160,67 @@ class TestRunCmdMulti:
         # Should be overwritten back to template content
         assert "# user modified" not in content
         assert "CI" in content
+
+
+class TestMergedPublishCombinations:
+    """Unit tests for _generate_merged_publish with diverse target combinations."""
+
+    TEMPLATE_VARS = {"repoName": "user/repo", "name": "test", "version": "1.0.0"}
+
+    def test_npm_cargo_merged(self):
+        """Merged publish contains both an npm job and a cargo job."""
+        result = _generate_merged_publish(["npm", "cargo"], self.TEMPLATE_VARS)
+
+        # Both jobs present as top-level job keys under jobs:
+        assert "\n  npm:" in result
+        assert "\n  cargo:" in result
+
+        # npm-specific content
+        assert "npm publish" in result
+        assert "NPM_TOKEN" in result
+
+        # cargo-specific content
+        assert "cargo publish" in result
+        assert "CARGO_REGISTRY_TOKEN" in result
+
+    def test_pypi_deno_merged(self):
+        """Merged publish contains both a pypi job and a deno job."""
+        result = _generate_merged_publish(["pypi", "deno"], self.TEMPLATE_VARS)
+
+        assert "\n  pypi:" in result
+        assert "\n  deno:" in result
+
+        # pypi-specific content
+        assert "uv build" in result
+
+        # deno-specific content
+        assert "deno publish" in result
+
+    def test_single_target_merged(self):
+        """Merged publish with a single target produces one job."""
+        result = _generate_merged_publish(["npm"], self.TEMPLATE_VARS)
+
+        assert "\n  npm:" in result
+        assert "npm publish" in result
+
+        # No other registry jobs
+        assert "\n  pypi:" not in result
+        assert "\n  cargo:" not in result
+        assert "\n  go:" not in result
+        assert "\n  deno:" not in result
+
+    def test_permissions_merged(self):
+        """Merged permissions use the most permissive value for each key.
+
+        npm has contents: read, id-token: write.
+        go has contents: write.
+        The merged result should have contents: write (most permissive)
+        and id-token: write (only from npm).
+        """
+        result = _generate_merged_publish(["npm", "go"], self.TEMPLATE_VARS)
+
+        # contents should be escalated to write (go needs write, npm only needs read)
+        assert "contents: write" in result
+
+        # id-token: write should be preserved from npm
+        assert "id-token: write" in result
