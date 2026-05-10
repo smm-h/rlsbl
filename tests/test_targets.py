@@ -729,7 +729,7 @@ import pytest
 
 
 class TestDetectTargetsAutoDetection:
-    """Parametrized test that verifies detect_targets() auto-detects all 11 registered targets."""
+    """Parametrized test that verifies detect_targets() auto-detects all 11 auto-detectable targets."""
 
     @pytest.mark.parametrize("target_name,filename,content", [
         ("npm", "package.json", '{"name": "test", "version": "0.1.0"}'),
