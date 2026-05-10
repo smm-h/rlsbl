@@ -40,7 +40,7 @@ def _detect_version():
 __version__ = _detect_version()
 
 COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover", "watch",
-            "pre-push-check", "prs", "record-gif", "unreleased", "targets")
+            "pre-push-check", "prs", "record-gif", "unreleased", "targets", "monorepo")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -60,6 +60,7 @@ Usage:
   rlsbl pre-push-check                                     Verify CHANGELOG entry for current version
   rlsbl unreleased [--json]                                 Audit changelog coverage for unreleased commits
   rlsbl targets                                             List available release targets
+  rlsbl monorepo [init|add|remove|list|sync|status]    Manage monorepo workspaces
   rlsbl record-gif [--width N] [--height N] [--font-size N] [--duration N]
                                                             Record a demo GIF with vhs
 
@@ -93,7 +94,7 @@ def parse_args(argv):
     (e.g. --registry npm). All other --flags are boolean.
     """
     VALUE_FLAGS = ("registry", "target", "scope", "width", "height", "font-size", "duration",
-                   "include", "exclude")
+                   "include", "exclude", "name")
     raw = argv[1:]
     positional = []
     flags = {}
@@ -135,6 +136,7 @@ def _get_command_module(command):
         "record-gif": "record_gif",
         "unreleased": "unreleased",
         "targets": "targets_cmd",
+        "monorepo": "monorepo",
     }
     module_name = module_map.get(command)
     if not module_name:
@@ -269,7 +271,7 @@ def main():
         elif command == "watch":
             # watch: monitors CI runs, no registry needed
             handler.run_cmd(registry, args, flags)
-        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "targets"):
+        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "targets", "monorepo"):
             # Standalone commands, no registry needed
             handler.run_cmd(registry, args, flags)
         else:
