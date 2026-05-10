@@ -73,13 +73,17 @@ def save_workspace(root, projects):
     os.makedirs(ws_dir, exist_ok=True)
 
     doc = tomlkit.document()
-    aot = tomlkit.aot()
-    for proj in projects:
-        table = tomlkit.table()
-        table.add("path", proj["path"])
-        table.add("name", proj["name"])
-        aot.append(table)
-    doc.add("projects", aot)
+    if not projects:
+        # Empty AoT produces no output in tomlkit; use inline array instead
+        doc.add("projects", tomlkit.array())
+    else:
+        aot = tomlkit.aot()
+        for proj in projects:
+            table = tomlkit.table()
+            table.add("path", proj["path"])
+            table.add("name", proj["name"])
+            aot.append(table)
+        doc.add("projects", aot)
 
     target = os.path.join(ws_dir, WORKSPACE_FILE)
     tmp = target + ".tmp"

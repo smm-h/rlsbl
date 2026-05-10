@@ -1,6 +1,10 @@
 """Monorepo workspace management commands."""
 
+import os
 import sys
+
+from ..workspace import find_workspace_root, load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
+from ..targets import detect_targets
 
 MONOREPO_HELP = """\
 Usage: rlsbl monorepo <subcommand>
@@ -41,20 +45,95 @@ def run_cmd(registry, args, flags):
 
 
 def _cmd_init(flags):
-    print("monorepo init: not yet implemented", file=sys.stderr)
-    sys.exit(1)
+    ws_file = os.path.join(".", WORKSPACE_DIR, WORKSPACE_FILE)
+    if os.path.isfile(ws_file):
+        print("Error: Workspace already initialized.", file=sys.stderr)
+        sys.exit(1)
+    save_workspace(".", [])
+    print("Initialized monorepo workspace in .rlsbl-monorepo/")
+
 
 def _cmd_add(args, flags):
-    print("monorepo add: not yet implemented", file=sys.stderr)
-    sys.exit(1)
+    if not args:
+        print("Error: Usage: rlsbl monorepo add <path> [--name <name>]", file=sys.stderr)
+        sys.exit(1)
+
+    path = args[0]
+    if not os.path.isdir(path):
+        print(f"Error: '{path}' is not a directory.", file=sys.stderr)
+        sys.exit(1)
+
+    targets = detect_targets(path)
+    if not targets:
+        print(f"Error: No release target detected in '{path}'. Initialize a project first.", file=sys.stderr)
+        sys.exit(1)
+
+    name = flags.get("name") or os.path.basename(path.rstrip("/"))
+
+    root = find_workspace_root(".")
+    if root is None:
+        print("Error: No workspace found. Run 'rlsbl monorepo init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    projects = load_workspace(root)
+
+    norm_path = path.rstrip("/")
+    for proj in projects:
+        if proj["path"].rstrip("/") == norm_path:
+            print(f"Error: Project at '{path}' already exists in workspace.", file=sys.stderr)
+            sys.exit(1)
+        if proj["name"] == name:
+            print(f"Error: Project named '{name}' already exists in workspace.", file=sys.stderr)
+            sys.exit(1)
+
+    projects.append({"path": path, "name": name})
+    save_workspace(root, projects)
+    print(f"Added project '{name}' at {path}")
+
 
 def _cmd_remove(args, flags):
-    print("monorepo remove: not yet implemented", file=sys.stderr)
-    sys.exit(1)
+    if not args:
+        print("Error: Usage: rlsbl monorepo remove <path>", file=sys.stderr)
+        sys.exit(1)
+
+    path = args[0]
+
+    root = find_workspace_root(".")
+    if root is None:
+        print("Error: No workspace found. Run 'rlsbl monorepo init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    projects = load_workspace(root)
+
+    norm_path = path.rstrip("/")
+    new_projects = [p for p in projects if p["path"].rstrip("/") != norm_path]
+
+    if len(new_projects) == len(projects):
+        print(f"Error: Project at '{path}' not found in workspace.", file=sys.stderr)
+        sys.exit(1)
+
+    save_workspace(root, new_projects)
+    print(f"Removed project at {path}")
+
 
 def _cmd_list(flags):
-    print("monorepo list: not yet implemented", file=sys.stderr)
-    sys.exit(1)
+    root = find_workspace_root(".")
+    if root is None:
+        print("Error: No workspace found. Run 'rlsbl monorepo init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    projects = load_workspace(root)
+
+    if not projects:
+        print("No projects in workspace.")
+        return
+
+    name_width = max(len("Name"), max(len(p["name"]) for p in projects))
+    header_name = "Name".ljust(name_width)
+    print(f"{header_name}  Path")
+    for proj in projects:
+        name_col = proj["name"].ljust(name_width)
+        print(f"{name_col}  {proj['path']}")
 
 def _cmd_sync(flags):
     print("monorepo sync: not yet implemented", file=sys.stderr)
