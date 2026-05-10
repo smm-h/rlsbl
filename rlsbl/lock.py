@@ -61,6 +61,33 @@ def release_lock():
             pass
 
 
+def is_stale(lock_path=None):
+    """Check if a lock file exists but no process holds it.
+
+    Returns True if the file exists and is not held (stale).
+    Returns False if the file doesn't exist or is actively held.
+    """
+    if lock_path is None:
+        lock_path = os.path.join(".rlsbl", "lock")
+
+    if not os.path.exists(lock_path):
+        return False
+
+    fd = None
+    try:
+        fd = open(lock_path, "w")
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # Lock acquired means no one holds it -- stale
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return True
+    except (OSError, BlockingIOError):
+        # Another process holds the lock -- not stale
+        return False
+    finally:
+        if fd is not None:
+            fd.close()
+
+
 @contextmanager
 def rlsbl_lock():
     """Context manager that acquires the lock on enter and releases on exit."""
