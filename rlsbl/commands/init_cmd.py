@@ -622,6 +622,218 @@ def run_cmd(registry, args, flags):
         release_lock()
 
 
+def _extract_top_level_block(lines, key):
+    """Extract a top-level YAML block (e.g., 'permissions:', 'env:') from template lines.
+
+    Returns (block_lines, remaining_lines) where block_lines are the key + its
+    indented children, and remaining_lines are everything else.
+    """
+    block = []
+    remaining = []
+    in_block = False
+    for line in lines:
+        if not in_block:
+            stripped = line.rstrip()
+            if stripped == f"{key}:" or stripped.startswith(f"{key}: "):
+                in_block = True
+                block.append(line)
+                continue
+            remaining.append(line)
+        else:
+            # Still in block if line is blank or starts with whitespace
+            stripped = line.rstrip()
+            if stripped == "" or line[0] in (" ", "\t"):
+                block.append(line)
+            else:
+                in_block = False
+                remaining.append(line)
+    return block, remaining
+
+
+def _parse_permissions(block_lines):
+    """Parse permission key-value pairs from a permissions block.
+
+    Returns a dict like {"contents": "write", "id-token": "write"}.
+    """
+    perms = {}
+    for line in block_lines:
+        stripped = line.strip()
+        if stripped.startswith("permissions") or not stripped or stripped.startswith("#"):
+            continue
+        if ":" in stripped:
+            k, v = stripped.split(":", 1)
+            perms[k.strip()] = v.strip()
+    return perms
+
+
+def _parse_env(block_lines):
+    """Parse env key-value pairs from an env block.
+
+    Returns a list of (key, full_line) tuples to preserve formatting.
+    Keys are used for deduplication; full lines are used for output.
+    """
+    entries = []
+    for line in block_lines:
+        stripped = line.strip()
+        if stripped.startswith("env") or not stripped or stripped.startswith("#"):
+            continue
+        if ":" in stripped:
+            k = stripped.split(":", 1)[0].strip()
+            entries.append((k, line))
+    return entries
+
+
+def _merge_permissions(perm_dicts):
+    """Merge multiple permission dicts, choosing the most permissive value for each key.
+
+    Permission escalation order: read < write.
+    """
+    merged = {}
+    order = {"read": 0, "write": 1}
+    for d in perm_dicts:
+        for k, v in d.items():
+            if k not in merged:
+                merged[k] = v
+            else:
+                # Pick the more permissive value
+                if order.get(v, 0) > order.get(merged[k], 0):
+                    merged[k] = v
+    return merged
+
+
+def _extract_jobs_section(lines):
+    """Extract the content under the 'jobs:' key from template lines.
+
+    Returns lines starting from the first job definition (the indented content
+    after 'jobs:'), not including the 'jobs:' line itself.
+    """
+    in_jobs = False
+    job_lines = []
+    for line in lines:
+        stripped = line.rstrip()
+        if not in_jobs:
+            if stripped == "jobs:":
+                in_jobs = True
+                continue
+        else:
+            job_lines.append(line)
+    return job_lines
+
+
+def _generate_merged_publish(targets, template_vars):
+    """Generate a merged publish.yml from individual target publish templates.
+
+    Reads each target's publish.yml.tpl, extracts jobs/permissions/env,
+    and composes a single workflow with all jobs merged.
+    """
+    templates_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
+
+    all_permissions = []
+    all_env_entries = []
+    all_jobs = []
+    seen_env_keys = set()
+
+    for target_name in targets:
+        tpl_path = os.path.join(templates_root, target_name, "publish.yml.tpl")
+        if not os.path.exists(tpl_path):
+            continue
+
+        with open(tpl_path, "r", encoding="utf-8") as f:
+            raw = f.read()
+
+        # Process template variables
+        content, _ = process_template(raw, template_vars)
+        lines = content.splitlines(keepends=True)
+
+        # Extract top-level permissions block
+        perm_block, lines = _extract_top_level_block(lines, "permissions")
+        if perm_block:
+            all_permissions.append(_parse_permissions(perm_block))
+
+        # Extract top-level env block
+        env_block, lines = _extract_top_level_block(lines, "env")
+        if env_block:
+            for k, full_line in _parse_env(env_block):
+                if k not in seen_env_keys:
+                    seen_env_keys.add(k)
+                    all_env_entries.append(full_line)
+
+        # Extract jobs section
+        job_lines = _extract_jobs_section(lines)
+        if not job_lines:
+            continue
+
+        # Find the job key name (first non-blank, non-comment line at 2-space indent)
+        original_job_key = None
+        for jl in job_lines:
+            stripped = jl.rstrip()
+            if stripped and not stripped.startswith("#"):
+                # Should be like "  jobname:" at 2-space indent
+                match = re.match(r"^  (\S+):\s*$", stripped)
+                if match:
+                    original_job_key = match.group(1)
+                break
+
+        if original_job_key is None:
+            continue
+
+        # Rename the job key to the target name for uniqueness
+        renamed_lines = []
+        key_replaced = False
+        for jl in job_lines:
+            if not key_replaced:
+                stripped = jl.rstrip()
+                if stripped and not stripped.startswith("#"):
+                    # Replace original job key with target name
+                    jl = jl.replace(f"  {original_job_key}:", f"  {target_name}:", 1)
+                    key_replaced = True
+            renamed_lines.append(jl)
+
+        all_jobs.append(renamed_lines)
+
+    # Compose the merged workflow
+    output_lines = []
+    output_lines.append("name: Publish\n")
+    output_lines.append("\n")
+    output_lines.append("on:\n")
+    output_lines.append("  release:\n")
+    output_lines.append("    types: [published]\n")
+
+    # Merged permissions
+    merged_perms = _merge_permissions(all_permissions)
+    if merged_perms:
+        output_lines.append("\n")
+        output_lines.append("permissions:\n")
+        for k in sorted(merged_perms):
+            output_lines.append(f"  {k}: {merged_perms[k]}\n")
+
+    # Merged env
+    if all_env_entries:
+        output_lines.append("\n")
+        output_lines.append("env:\n")
+        for entry in all_env_entries:
+            # Ensure the line is properly indented (should already be 2-space)
+            line = entry if entry.endswith("\n") else entry + "\n"
+            output_lines.append(line)
+
+    # Jobs
+    output_lines.append("\n")
+    output_lines.append("jobs:\n")
+    for i, job_lines in enumerate(all_jobs):
+        # Strip trailing blank lines from previous job
+        if i > 0:
+            # Add a blank line between jobs
+            output_lines.append("\n")
+        for jl in job_lines:
+            line = jl if jl.endswith("\n") else jl + "\n"
+            output_lines.append(line)
+
+    # Remove trailing blank lines
+    result = "".join(output_lines)
+    result = result.rstrip("\n") + "\n"
+    return result
+
+
 def run_cmd_multi(registries_list, args, flags):
     """Scaffold for multiple registries with a merged publish workflow.
 
@@ -673,19 +885,63 @@ def run_cmd_multi(registries_list, args, flags):
             existing_hashes,
         )
 
-        # Process merged publish workflow template (skip for private repos)
+        # Generate and write merged publish workflow (skip for private repos)
         merged_created, merged_skipped, merged_warnings, merged_hashes = [], [], [], {}
         if not private:
-            merged_tpl_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                          "templates", "merged")
-            merged_created, merged_skipped, merged_warnings, merged_hashes = process_mappings(
-                merged_tpl_dir,
-                [{"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"}],
-                vars_dict,
-                force,
-                update,
-                existing_hashes,
-            )
+            publish_target = os.path.join(".github", "workflows", "publish.yml")
+            merged_content = _generate_merged_publish(registries_list, vars_dict)
+
+            target_dir = os.path.dirname(publish_target)
+            if target_dir:
+                os.makedirs(target_dir, exist_ok=True)
+
+            is_overwrite = os.path.exists(publish_target)
+            if not is_overwrite or force:
+                with open(publish_target, "w", encoding="utf-8") as f:
+                    f.write(merged_content)
+                _save_base(publish_target, merged_content)
+                merged_hashes[publish_target] = file_hash(publish_target)
+                status = "overwritten" if is_overwrite else "created"
+                merged_created.append((publish_target, status))
+            elif update:
+                # Three-way merge for updates
+                with open(publish_target, "r", encoding="utf-8") as f:
+                    ours = f.read()
+                base = _load_base(publish_target)
+                if base is None:
+                    _save_base(publish_target, merged_content)
+                    if ours == merged_content:
+                        merged_skipped.append((publish_target, "unchanged, base seeded"))
+                    else:
+                        merged_warnings.append(
+                            f"{publish_target}: no base stored, cannot merge; "
+                            "run scaffold --force to reset"
+                        )
+                        merged_skipped.append((publish_target,
+                                               "no base -- run scaffold --force to enable merging"))
+                elif ours == base:
+                    with open(publish_target, "w", encoding="utf-8") as f:
+                        f.write(merged_content)
+                    _save_base(publish_target, merged_content)
+                    merged_hashes[publish_target] = file_hash(publish_target)
+                    merged_created.append((publish_target, "updated"))
+                elif base == merged_content or ours == merged_content:
+                    merged_skipped.append((publish_target, "unchanged"))
+                else:
+                    merged_text, has_conflicts = _three_way_merge(ours, base, merged_content)
+                    with open(publish_target, "w", encoding="utf-8") as f:
+                        f.write(merged_text)
+                    _save_base(publish_target, merged_content)
+                    merged_hashes[publish_target] = file_hash(publish_target)
+                    if has_conflicts:
+                        merged_created.append((publish_target,
+                                               "CONFLICTS -- resolve manually"))
+                        merged_warnings.append(
+                            f"{publish_target}: merge conflicts detected, resolve manually")
+                    else:
+                        merged_created.append((publish_target, "merged"))
+            else:
+                merged_skipped.append((publish_target, "exists"))
 
         # Process shared templates (once)
         shared_mappings = reg.get_shared_template_mappings()
