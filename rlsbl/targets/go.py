@@ -184,6 +184,7 @@ class GoTarget(BaseTarget):
             mappings.extend([
                 {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
                 {"template": "goreleaser.yml.tpl", "target": ".goreleaser.yml"},
+                {"template": "version.go.tpl", "target": "version.go"},
             ])
         return mappings
 
