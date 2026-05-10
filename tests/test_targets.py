@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+from unittest.mock import patch
 
 from rlsbl.targets.protocol import ReleaseTarget
 from rlsbl.targets.npm import NpmTarget
@@ -153,10 +154,10 @@ class TestTargetRegistryIntegration:
             TARGETS["npm"].build(d, "1.0.0")
 
     def test_publish_noop(self):
-        """TARGETS['npm'].publish() is a no-op that doesn't raise."""
+        """TARGETS['go'].publish() without go.mod is effectively a no-op (prints warning)."""
         with tempfile.TemporaryDirectory() as d:
-            # Should complete without raising
-            TARGETS["npm"].publish(d, "1.0.0")
+            # Should complete without raising (prints warning about missing go.mod)
+            TARGETS["go"].publish(d, "1.0.0")
 
 
 class TestDetectTargetsConfig:
@@ -211,6 +212,81 @@ class TestDetectTargetsConfig:
             captured = capsys.readouterr()
             assert "nonexistent" in captured.err
             assert "Warning" in captured.err
+
+
+class TestNpmPublish:
+    """Tests for NpmTarget.publish() hybrid behavior."""
+
+    def test_publish_with_token(self, capsys):
+        """NpmTarget.publish() calls npm publish when NPM_TOKEN is set."""
+        target = NpmTarget()
+        with patch.dict(os.environ, {"NPM_TOKEN": "fake-token"}):
+            with patch("rlsbl.targets.npm.run") as mock_run:
+                target.publish(".", "1.2.3")
+                mock_run.assert_called_once()
+                call_args = mock_run.call_args
+                assert call_args[0][0] == "npm"
+                assert call_args[0][1] == ["publish", "--provenance", "--access", "public"]
+                assert call_args[1]["env"]["NPM_TOKEN"] == "fake-token"
+        captured = capsys.readouterr()
+        assert "Published to npm: 1.2.3" in captured.out
+
+    def test_publish_without_token(self, capsys):
+        """NpmTarget.publish() prints skip message when NPM_TOKEN is absent."""
+        target = NpmTarget()
+        env = os.environ.copy()
+        env.pop("NPM_TOKEN", None)
+        with patch.dict(os.environ, env, clear=True):
+            target.publish(".", "1.2.3")
+        captured = capsys.readouterr()
+        assert "Skipping local npm publish (no NPM_TOKEN). CI will handle it." in captured.out
+
+
+class TestPypiPublish:
+    """Tests for PypiTarget.publish() hybrid behavior."""
+
+    def test_publish_with_pypi_token(self, capsys):
+        """PypiTarget.publish() calls uv build + uv publish when PYPI_TOKEN is set."""
+        target = PypiTarget()
+        with patch.dict(os.environ, {"PYPI_TOKEN": "fake-pypi-token"}, clear=False):
+            with patch("rlsbl.targets.pypi.run") as mock_run:
+                target.publish(".", "2.0.0")
+                assert mock_run.call_count == 2
+                # First call: uv build
+                first_call = mock_run.call_args_list[0]
+                assert first_call[0][0] == "uv"
+                assert first_call[0][1] == ["build"]
+                # Second call: uv publish
+                second_call = mock_run.call_args_list[1]
+                assert second_call[0][0] == "uv"
+                assert second_call[0][1] == ["publish"]
+                assert second_call[1]["env"]["UV_PUBLISH_TOKEN"] == "fake-pypi-token"
+        captured = capsys.readouterr()
+        assert "Published to PyPI: 2.0.0" in captured.out
+
+    def test_publish_with_twine_password(self, capsys):
+        """PypiTarget.publish() also works with TWINE_PASSWORD as fallback."""
+        target = PypiTarget()
+        env = os.environ.copy()
+        env.pop("PYPI_TOKEN", None)
+        env["TWINE_PASSWORD"] = "twine-secret"
+        with patch.dict(os.environ, env, clear=True):
+            with patch("rlsbl.targets.pypi.run") as mock_run:
+                target.publish(".", "2.0.0")
+                assert mock_run.call_count == 2
+                second_call = mock_run.call_args_list[1]
+                assert second_call[1]["env"]["UV_PUBLISH_TOKEN"] == "twine-secret"
+
+    def test_publish_without_token(self, capsys):
+        """PypiTarget.publish() prints skip message when no token is set."""
+        target = PypiTarget()
+        env = os.environ.copy()
+        env.pop("PYPI_TOKEN", None)
+        env.pop("TWINE_PASSWORD", None)
+        with patch.dict(os.environ, env, clear=True):
+            target.publish(".", "2.0.0")
+        captured = capsys.readouterr()
+        assert "Skipping local PyPI publish (no PYPI_TOKEN). CI will handle it." in captured.out
 
 
 class TestBackwardCompat:

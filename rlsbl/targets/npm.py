@@ -3,8 +3,10 @@
 import json
 import os
 import re
+import subprocess
 
 from .base import BaseTarget
+from ..utils import run
 
 
 class NpmTarget(BaseTarget):
@@ -100,6 +102,22 @@ class NpmTarget(BaseTarget):
             {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
             {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
         ]
+
+    def publish(self, dir_path, version):
+        """Publish to npm if NPM_TOKEN is available, otherwise defer to CI."""
+        token = os.environ.get("NPM_TOKEN")
+        if not token:
+            print("Skipping local npm publish (no NPM_TOKEN). CI will handle it.")
+            return
+
+        try:
+            run("npm", ["publish", "--provenance", "--access", "public"], env={
+                **os.environ,
+                "NPM_TOKEN": token,
+            })
+            print(f"Published to npm: {version}")
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(f"npm publish failed: {exc}") from exc
 
     def check_project_exists(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "package.json"))

@@ -2,6 +2,7 @@
 
 import os
 import re
+import subprocess
 import tomllib
 
 from .base import BaseTarget
@@ -151,6 +152,23 @@ class PypiTarget(BaseTarget):
             {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
             {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
         ]
+
+    def publish(self, dir_path, version):
+        """Publish to PyPI if a token is available, otherwise defer to CI."""
+        token = os.environ.get("PYPI_TOKEN") or os.environ.get("TWINE_PASSWORD")
+        if not token:
+            print("Skipping local PyPI publish (no PYPI_TOKEN). CI will handle it.")
+            return
+
+        try:
+            run("uv", ["build"], env=os.environ)
+            run("uv", ["publish"], env={
+                **os.environ,
+                "UV_PUBLISH_TOKEN": token,
+            })
+            print(f"Published to PyPI: {version}")
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(f"PyPI publish failed: {exc}") from exc
 
     def check_project_exists(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "pyproject.toml"))
