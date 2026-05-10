@@ -1,0 +1,101 @@
+"""Spec release target for rlsbl.
+
+Spec projects use a version.json file as the source of truth. Publishing is
+tag-based -- the tagged release is the publication.
+"""
+
+import json
+import os
+
+from .base import BaseTarget
+
+
+class SpecTarget(BaseTarget):
+    """Release target for specification projects (version.json)."""
+
+    @property
+    def name(self):
+        return "spec"
+
+    @property
+    def scope(self):
+        return "root"
+
+    def detect(self, dir_path):
+        """True if version.json exists in root or spec/ subdir."""
+        return (
+            os.path.exists(os.path.join(dir_path, "version.json"))
+            or os.path.exists(os.path.join(dir_path, "spec", "version.json"))
+        )
+
+    def _version_json_path(self, dir_path):
+        """Resolve the actual path to version.json."""
+        root_path = os.path.join(dir_path, "version.json")
+        if os.path.exists(root_path):
+            return root_path
+        spec_path = os.path.join(dir_path, "spec", "version.json")
+        if os.path.exists(spec_path):
+            return spec_path
+        return root_path  # default to root for creation
+
+    def read_version(self, dir_path):
+        """Read version from version.json."""
+        path = self._version_json_path(dir_path)
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                "No version.json file found. Run 'rlsbl scaffold' first."
+            )
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data["version"]
+
+    def write_version(self, dir_path, version):
+        """Write the new version to version.json atomically."""
+        path = self._version_json_path(dir_path)
+        # Read existing data to preserve other fields
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {}
+        data["version"] = version
+        tmp_path = path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, path)
+
+    def version_file(self):
+        return "version.json"
+
+    def tag_format(self, name, version):
+        return f"spec-v{version}"
+
+    def publish(self, dir_path, version):
+        """No-op: the git tag IS the publication."""
+        pass
+
+    def template_dir(self):
+        return os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "templates", "spec"
+        )
+
+    def template_vars(self, dir_path):
+        """Extract template variables."""
+        # Name from directory
+        dir_name = os.path.basename(os.path.abspath(dir_path))
+
+        try:
+            version = self.read_version(dir_path)
+        except (FileNotFoundError, KeyError):
+            version = "0.0.0"
+
+        return {
+            "name": dir_name,
+            "version": version,
+        }
+
+    def template_mappings(self):
+        return [
+            {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
+        ]

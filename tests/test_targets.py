@@ -9,6 +9,8 @@ from rlsbl.targets.protocol import ReleaseTarget
 from rlsbl.targets.npm import NpmTarget
 from rlsbl.targets.pypi import PypiTarget
 from rlsbl.targets.go import GoTarget
+from rlsbl.targets.swift import SwiftTarget
+from rlsbl.targets.spec import SpecTarget
 from rlsbl.targets import TARGETS, detect_targets
 
 
@@ -339,6 +341,49 @@ class TestPypiPublish:
             target.publish(".", "2.0.0")
         captured = capsys.readouterr()
         assert "Skipping local PyPI publish (no PYPI_TOKEN). CI will handle it." in captured.out
+
+
+class TestSwiftTarget:
+    def test_protocol_conformance(self):
+        assert isinstance(SwiftTarget(), ReleaseTarget)
+
+    def test_detection(self, tmp_path):
+        # No Package.swift -> not detected
+        assert not SwiftTarget().detect(str(tmp_path))
+        # With Package.swift -> detected
+        (tmp_path / "Package.swift").write_text("// swift package")
+        assert SwiftTarget().detect(str(tmp_path))
+
+    def test_version_read_write(self, tmp_path):
+        target = SwiftTarget()
+        (tmp_path / "VERSION").write_text("1.2.3\n")
+        assert target.read_version(str(tmp_path)) == "1.2.3"
+        target.write_version(str(tmp_path), "2.0.0")
+        assert (tmp_path / "VERSION").read_text().strip() == "2.0.0"
+
+    def test_tag_format(self):
+        assert SwiftTarget().tag_format("pkg", "1.2.3") == "v1.2.3"
+
+
+class TestSpecTarget:
+    def test_protocol_conformance(self):
+        assert isinstance(SpecTarget(), ReleaseTarget)
+
+    def test_detection(self, tmp_path):
+        assert not SpecTarget().detect(str(tmp_path))
+        (tmp_path / "version.json").write_text('{"version": "1.0.0"}')
+        assert SpecTarget().detect(str(tmp_path))
+
+    def test_version_read_write(self, tmp_path):
+        target = SpecTarget()
+        (tmp_path / "version.json").write_text('{"version": "1.2.3"}')
+        assert target.read_version(str(tmp_path)) == "1.2.3"
+        target.write_version(str(tmp_path), "2.0.0")
+        data = json.loads((tmp_path / "version.json").read_text())
+        assert data["version"] == "2.0.0"
+
+    def test_tag_format(self):
+        assert SpecTarget().tag_format("myspec", "1.2.3") == "spec-v1.2.3"
 
 
 class TestBackwardCompat:

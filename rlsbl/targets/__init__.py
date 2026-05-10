@@ -7,6 +7,8 @@ from .npm import NpmTarget
 from .pypi import PypiTarget
 from .go import GoTarget
 from .docs import DocsTarget
+from .swift import SwiftTarget
+from .spec import SpecTarget
 from .protocol import ReleaseTarget
 from .base import BaseTarget
 from ..config import read_json_config
@@ -17,6 +19,8 @@ TARGETS = {
     "pypi": PypiTarget(),
     "go": GoTarget(),
     "docs": DocsTarget(),
+    "swift": SwiftTarget(),
+    "spec": SpecTarget(),
 }
 
 

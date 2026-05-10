@@ -1,0 +1,100 @@
+"""Swift release target for rlsbl.
+
+Swift packages use a VERSION file as the source of truth. Publishing is
+tag-based -- SPM resolves packages by git tag, so the tag IS the publication.
+"""
+
+import os
+import re
+
+from .base import BaseTarget
+from ..utils import run
+
+VERSION_FILE = "VERSION"
+
+
+class SwiftTarget(BaseTarget):
+    """Release target for Swift packages (Package.swift + VERSION file)."""
+
+    @property
+    def name(self):
+        return "swift"
+
+    @property
+    def scope(self):
+        return "root"
+
+    def detect(self, dir_path):
+        return os.path.exists(os.path.join(dir_path, "Package.swift"))
+
+    def read_version(self, dir_path):
+        """Read version from the VERSION file."""
+        version_path = os.path.join(dir_path, VERSION_FILE)
+        if not os.path.exists(version_path):
+            raise FileNotFoundError(
+                f"No {VERSION_FILE} file found. Run 'rlsbl scaffold' first."
+            )
+        with open(version_path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+
+    def write_version(self, dir_path, version):
+        """Write the new version to the VERSION file atomically."""
+        version_path = os.path.join(dir_path, VERSION_FILE)
+        tmp_path = version_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(version + "\n")
+        os.replace(tmp_path, version_path)
+
+    def version_file(self):
+        return VERSION_FILE
+
+    def tag_format(self, name, version):
+        return f"v{version}"
+
+    def publish(self, dir_path, version):
+        """No-op: the git tag IS the publication for SPM."""
+        pass
+
+    def template_dir(self):
+        return os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "templates", "swift"
+        )
+
+    def template_vars(self, dir_path):
+        """Extract template variables from Package.swift."""
+        package_name = ""
+        package_path = os.path.join(dir_path, "Package.swift")
+        if os.path.exists(package_path):
+            with open(package_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            match = re.search(r'name:\s*"([^"]+)"', content)
+            if match:
+                package_name = match.group(1)
+
+        author = ""
+        try:
+            author = run("git", ["config", "user.name"])
+        except Exception:
+            pass
+
+        try:
+            version = self.read_version(dir_path)
+        except FileNotFoundError:
+            version = "0.0.0"
+
+        return {
+            "name": package_name,
+            "version": version,
+            "author": author,
+        }
+
+    def template_mappings(self):
+        return [
+            {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
+        ]
+
+    def check_project_exists(self, dir_path):
+        return os.path.exists(os.path.join(dir_path, "Package.swift"))
+
+    def get_project_init_hint(self):
+        return 'Run "swift package init" first'
