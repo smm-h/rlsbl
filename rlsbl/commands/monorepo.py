@@ -193,20 +193,36 @@ def _cmd_list(flags):
 def _rewrite_trigger(content):
     """Replace the on: trigger block with workflow_call.
 
-    Finds the line starting with 'on:' and the line starting with 'jobs:',
-    replaces everything between them with a workflow_call trigger.
+    Handles both multi-line triggers (on: alone on a line, with indented
+    sub-keys up to jobs:) and single-line triggers (on: push, on: [push, ...]).
     """
     lines = content.splitlines()
     on_idx = None
+    single_line = False
+    for i, line in enumerate(lines):
+        stripped = line.rstrip()
+        if on_idx is None and (stripped == "on:" or stripped.startswith("on: ")):
+            on_idx = i
+            single_line = stripped.startswith("on: ")
+            break
+
+    if on_idx is None:
+        print("Warning: no 'on:' trigger found in workflow, skipping rewrite", file=sys.stderr)
+        return content
+
+    if single_line:
+        new_lines = lines[:on_idx] + ["on:", "  workflow_call:", ""] + lines[on_idx + 1:]
+        return "\n".join(new_lines) + "\n"
+
+    # Multi-line: find the jobs: line after on:
     jobs_idx = None
     for i, line in enumerate(lines):
-        if line.rstrip() == "on:" and on_idx is None:
-            on_idx = i
-        if line.rstrip() == "jobs:" and on_idx is not None:
+        if line.rstrip() == "jobs:" and i > on_idx:
             jobs_idx = i
             break
 
-    if on_idx is None or jobs_idx is None:
+    if jobs_idx is None:
+        print("Warning: no 'jobs:' found after 'on:' in workflow, skipping rewrite", file=sys.stderr)
         return content
 
     new_lines = lines[:on_idx] + ["on:", "  workflow_call:", ""] + lines[jobs_idx:]
