@@ -41,7 +41,7 @@ __version__ = _detect_version()
 
 COMMANDS = ("release", "status", "scaffold", "check", "undo", "discover", "watch",
             "pre-push-check", "prs", "record-gif", "unreleased", "targets", "monorepo",
-            "migrate")
+            "migrate", "doctor")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -63,6 +63,7 @@ Usage:
   rlsbl targets                                             List available release targets
   rlsbl monorepo [init|add|remove|list|sync|status]    Manage monorepo workspaces
   rlsbl migrate [--dry-run] [--status]              Run config migrations (via migrable)
+  rlsbl doctor [--fix]                                 Diagnose and repair release state
   rlsbl record-gif [--width N] [--height N] [--font-size N] [--duration N]
                                                             Record a demo GIF with vhs
 
@@ -138,6 +139,7 @@ def _get_command_module(command):
         "targets": "targets_cmd",
         "monorepo": "monorepo",
         "migrate": "migrate",
+        "doctor": "doctor",
     }
     module_name = module_map.get(command)
     if not module_name:
@@ -267,7 +269,7 @@ def main():
         elif command == "watch":
             # watch: monitors CI runs, no registry needed
             handler.run_cmd(registry, args, flags)
-        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "targets", "monorepo", "migrate"):
+        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "targets", "monorepo", "migrate", "doctor"):
             # Standalone commands, no registry needed
             handler.run_cmd(registry, args, flags)
         else:
