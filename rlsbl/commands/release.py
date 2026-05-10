@@ -459,6 +459,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     log(f"Pushed to origin/{branch}")
 
     # Create GitHub Release using a temp notes file
+    # Notes file cleanup is deferred until after subtree publishing (which reuses it)
     notes_file = f".rlsbl-notes-{int(time.time() * 1000)}.tmp"
     writing_file = notes_file + ".writing"
     try:
@@ -467,40 +468,48 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         os.rename(writing_file, notes_file)
         run("gh", ["release", "create", tag, "--title", tag, "--notes-file", notes_file])
         log(f"Created GitHub Release: {tag}")
+
+        # Subtree publishing for monorepo projects with subtree_remote configured
+        if monorepo_name and monorepo_project_path:
+            try:
+                projects = load_workspace(".")
+                proj_dict = None
+                for p in projects:
+                    if p["name"] == monorepo_name:
+                        proj_dict = p
+                        break
+                subtree_remote = proj_dict.get("subtree_remote") if proj_dict else None
+            except Exception:
+                subtree_remote = None
+
+            if subtree_remote:
+                plain_tag = target.tag_format(new_version)
+                log(f"Publishing subtree to {subtree_remote}...")
+                try:
+                    run("git", ["subtree", "split", f"--prefix={monorepo_project_path}", "-b", "_rlsbl-subtree-tmp"])
+                    run("git", ["push", subtree_remote, f"_rlsbl-subtree-tmp:refs/tags/{plain_tag}"])
+                    run("git", ["push", subtree_remote, "_rlsbl-subtree-tmp:refs/heads/main"])
+                    log(f"Subtree published: {plain_tag} -> {subtree_remote}")
+                except Exception as e:
+                    print(f"Warning: subtree push failed: {e}", file=sys.stderr)
+                finally:
+                    try:
+                        run("git", ["branch", "-D", "_rlsbl-subtree-tmp"])
+                    except Exception:
+                        pass
+
+                # Create GitHub Release on the mirror repo (non-fatal)
+                try:
+                    run("gh", ["release", "create", plain_tag, "--repo", subtree_remote,
+                         "--title", plain_tag, "--notes-file", notes_file])
+                    log(f"Created mirror GitHub Release: {plain_tag} on {subtree_remote}")
+                except Exception as e:
+                    print(f"Warning: mirror GitHub Release failed: {e}", file=sys.stderr)
     finally:
-        # Clean up temp files even if gh release fails
+        # Clean up temp files after both main and mirror releases
         for tmp in (notes_file, writing_file):
             if os.path.exists(tmp):
                 os.unlink(tmp)
-
-    # Subtree publishing for monorepo projects with subtree_remote configured
-    if monorepo_name and monorepo_project_path:
-        try:
-            projects = load_workspace(".")
-            proj_dict = None
-            for p in projects:
-                if p["name"] == monorepo_name:
-                    proj_dict = p
-                    break
-            subtree_remote = proj_dict.get("subtree_remote") if proj_dict else None
-        except Exception:
-            subtree_remote = None
-
-        if subtree_remote:
-            plain_tag = target.tag_format(new_version)
-            log(f"Publishing subtree to {subtree_remote}...")
-            try:
-                run("git", ["subtree", "split", f"--prefix={monorepo_project_path}", "-b", "_rlsbl-subtree-tmp"])
-                run("git", ["push", subtree_remote, f"_rlsbl-subtree-tmp:refs/tags/{plain_tag}"])
-                run("git", ["push", subtree_remote, "_rlsbl-subtree-tmp:refs/heads/main"])
-                log(f"Subtree published: {plain_tag} -> {subtree_remote}")
-            except Exception as e:
-                print(f"Warning: subtree push failed: {e}", file=sys.stderr)
-            finally:
-                try:
-                    run("git", ["branch", "-D", "_rlsbl-subtree-tmp"])
-                except Exception:
-                    pass
 
     # Publish step (no-op for npm/pypi/go targets)
     try:
