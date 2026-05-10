@@ -25,15 +25,15 @@ def _check_stale_lock():
 
 def _check_version_consistency():
     """Check that all detected targets report the same version."""
-    target_names = detect_targets(".")
-    if not target_names:
+    target_entries = detect_targets(".")
+    if not target_entries:
         return ("WARN", "no targets detected")
 
     versions = {}
-    for name in target_names:
+    for name, path in target_entries:
         target = TARGETS[name]
         try:
-            v = target.read_version(".")
+            v = target.read_version(path)
             versions[name] = v
         except Exception:
             versions[name] = None
@@ -46,7 +46,7 @@ def _check_version_consistency():
         return ("FAIL", f"version mismatch: {detail}")
 
     version = unique.pop()
-    return ("PASS", f"{version} across {len(target_names)} target(s)")
+    return ("PASS", f"{version} across {len(target_entries)} target(s)")
 
 
 def _normalize_name(target_name, raw_name):
@@ -62,15 +62,15 @@ def _normalize_name(target_name, raw_name):
 
 def _check_name_consistency():
     """Check that all detected targets report the same package name."""
-    target_names = detect_targets(".")
-    if not target_names:
+    target_entries = detect_targets(".")
+    if not target_entries:
         return ("WARN", "no targets detected")
 
     names = {}
-    for name in target_names:
+    for name, path in target_entries:
         target = TARGETS[name]
         try:
-            n = target.read_name(".")
+            n = target.read_name(path)
             names[name] = n
         except Exception:
             names[name] = None
@@ -88,7 +88,7 @@ def _check_name_consistency():
 
     if len(unique) == 1:
         raw_name = next(iter(have_name.values()))
-        msg = f"{raw_name} across {len(target_names)} target(s)"
+        msg = f"{raw_name} across {len(target_entries)} target(s)"
         if missing:
             msg += f" (no name from: {', '.join(missing)})"
         return ("PASS", msg)
@@ -99,15 +99,15 @@ def _check_name_consistency():
 
 def _check_license_consistency():
     """Check that all detected targets report the same license."""
-    target_names = detect_targets(".")
-    if not target_names:
+    target_entries = detect_targets(".")
+    if not target_entries:
         return ("PASS", "no targets declare a license")
 
     licenses = {}
-    for name in target_names:
+    for name, path in target_entries:
         target = TARGETS[name]
         try:
-            meta = target.read_metadata(".")
+            meta = target.read_metadata(path)
             if "license" in meta:
                 licenses[name] = meta["license"]
         except Exception:
@@ -129,15 +129,15 @@ def _check_license_consistency():
 
 def _check_description_consistency():
     """Check that all detected targets report the same description."""
-    target_names = detect_targets(".")
-    if not target_names:
+    target_entries = detect_targets(".")
+    if not target_entries:
         return ("PASS", "no targets declare a description")
 
     descriptions = {}
-    for name in target_names:
+    for name, path in target_entries:
         target = TARGETS[name]
         try:
-            meta = target.read_metadata(".")
+            meta = target.read_metadata(path)
             if "description" in meta:
                 descriptions[name] = meta["description"]
         except Exception:
@@ -317,15 +317,16 @@ def _check_project_targets(projects):
 
 def run_cmd(registry, args, flags):
     """Run diagnostic checks on the release state."""
-    target_names = detect_targets(".")
-    if not target_names:
+    target_entries = detect_targets(".")
+    if not target_entries:
         print("Warning: no targets detected.", file=sys.stderr)
         version = None
         tag = None
     else:
-        target = TARGETS[target_names[0]]
+        first_name, first_path = target_entries[0]
+        target = TARGETS[first_name]
         try:
-            version = target.read_version(".")
+            version = target.read_version(first_path)
         except Exception:
             version = None
         if version:
