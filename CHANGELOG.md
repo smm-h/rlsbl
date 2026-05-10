@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.0
+
+- **Deleted built-in config migration engine.** Removed `rlsbl/lib/` (ConfigMigrator, schema_loader, ~440 LOC), the `rlsbl config` subcommand tree, and all associated tests (~1,500 LOC). Config migrations are now handled by the external `migrable` tool.
+- **`rlsbl migrate` command.** Shells out to `migrable migrate --config-dir .rlsbl`. Supports `--dry-run` and `--status`. Gives install instructions if migrable is not found.
+- **`--json` flag for `rlsbl status`.** Outputs structured JSON with name, version, target, branch, tag, clean, changelog, ci, publish.
+- **Documented hidden flags.** `--no-commit` and `--skip-shared` now appear in `rlsbl scaffold --help`.
+- **Go root main detection.** `rlsbl scaffold` warns when a Go project has its main package in `cmd/<name>/` instead of the project root, since `go install module@latest` won't work.
+- **selfdoc documentation.** Set up selfdoc with live directive-based docs for CLI reference, targets, monorepo guide, and configuration.
+- **Trigger rewrite regression test.** Verifies `permissions:` and `env:` blocks between `on:` and `jobs:` are preserved during monorepo sync.
+
 ## 0.14.0
 
 - **Router watch paths.** Projects in a monorepo can declare extra file patterns to watch via `--watch` on `monorepo add` or the `watch` key in `workspace.toml`. The CI router generates multi-line path filters including both the project directory and all watch entries.
