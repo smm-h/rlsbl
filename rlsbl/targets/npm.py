@@ -8,7 +8,7 @@ import subprocess
 from .base import BaseTarget
 from ..utils import run
 
-_MIN_VERSION_RE = re.compile(r">=\s*(\d+\.\d+(?:\.\d+)?)")
+_MIN_VERSION_RE = re.compile(r">=\s*(\d+(?:\.\d+)*)")
 
 
 class NpmTarget(BaseTarget):
