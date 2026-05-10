@@ -768,6 +768,17 @@ class TestGoScaffoldTemplates:
         targets = [m["target"] for m in mappings]
         assert "version.go" in targets
 
+    def test_version_go_skipped_when_var_exists(self, tmp_project):
+        """Go binary project with existing version var skips version.go template."""
+        target = GoTarget()
+        (tmp_project / "go.mod").write_text("module github.com/user/myapp\n\ngo 1.21\n")
+        (tmp_project / "main.go").write_text(
+            "package main\n\nvar Version string\n\nfunc main() {}\n"
+        )
+        mappings = target.template_mappings()
+        targets = [m["target"] for m in mappings]
+        assert "version.go" not in targets
+
     def test_version_go_not_in_library_mappings(self, tmp_project):
         """Go library project does NOT include version.go in template_mappings."""
         target = GoTarget()

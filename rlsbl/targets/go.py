@@ -58,6 +58,15 @@ class GoTarget(BaseTarget):
             first_line = f.readline()
         return bool(re.match(r"^package\s+main\b", first_line))
 
+    def _has_version_var(self, dir_path):
+        """Return True if any root-level .go file declares a Version variable."""
+        for go_file in glob.glob(os.path.join(dir_path, "*.go")):
+            with open(go_file, encoding="utf-8") as f:
+                for line in f:
+                    if re.match(r"^var\s+[Vv]ersion\b", line):
+                        return True
+        return False
+
     def _has_cmd_main(self, dir_path):
         """Return True if there's a single cmd/*/main.go with `package main`.
 
@@ -184,8 +193,11 @@ class GoTarget(BaseTarget):
             mappings.extend([
                 {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
                 {"template": "goreleaser.yml.tpl", "target": ".goreleaser.yml"},
-                {"template": "version.go.tpl", "target": "version.go"},
             ])
+            if not self._has_version_var("."):
+                mappings.append(
+                    {"template": "version.go.tpl", "target": "version.go"},
+                )
         return mappings
 
     def check_project_exists(self, dir_path):
