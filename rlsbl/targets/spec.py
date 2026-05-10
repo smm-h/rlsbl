@@ -67,9 +67,6 @@ class SpecTarget(BaseTarget):
     def tag_format(self, version):
         return f"spec-v{version}"
 
-    def monorepo_tag_format(self, name, version):
-        return f"{name}@v{version}"
-
     def publish(self, dir_path, version):
         """No-op: the git tag IS the publication."""
         pass
