@@ -10,7 +10,7 @@ import tempfile
 
 from ..config import should_tag, read_project_config, write_project_config
 from ..lock import acquire_lock, release_lock
-from ..targets import TARGETS
+from ..targets import TARGETS, detect_targets
 from ..tagging import ensure_tags
 from ..utils import find_commit_tool, is_private_repo
 
@@ -80,7 +80,14 @@ def _ensure_target_in_config(registry_name):
     targets = config.get("targets", [])
     if not isinstance(targets, list):
         targets = []
-    if registry_name not in targets:
+    # Check if name is already in targets (as string or dict)
+    existing_names = []
+    for t in targets:
+        if isinstance(t, str):
+            existing_names.append(t)
+        elif isinstance(t, dict):
+            existing_names.append(t.get("name", ""))
+    if registry_name not in existing_names:
         targets.append(registry_name)
     write_project_config("targets", targets)
 
@@ -859,23 +866,25 @@ def _generate_merged_publish(targets, template_vars):
     return result
 
 
-def _merge_template_vars(registries_list, primary, dir_path):
+def _merge_template_vars(registries_list, primary, target_paths):
     """Build a merged template vars dict with namespaced keys from all targets.
 
     The primary target's vars are included un-namespaced (as the base).
     Every target's vars are also included with a namespace prefix:
     ``{target_name}.{key}`` so templates can reference target-specific values
     like ``{{pypi.minRequiredPython}}``.
+
+    target_paths is a dict mapping target name to its directory path.
     """
     merged = {}
     # Primary target's vars as base (un-namespaced)
     primary_target = TARGETS[primary]
-    primary_vars = primary_target.get_template_vars(dir_path)
+    primary_vars = primary_target.get_template_vars(target_paths.get(primary, "."))
     merged.update(primary_vars)
     # All targets' vars namespaced
     for target_name in registries_list:
         target = TARGETS[target_name]
-        target_vars = target.get_template_vars(dir_path)
+        target_vars = target.get_template_vars(target_paths.get(target_name, "."))
         for key, value in target_vars.items():
             merged[f"{target_name}.{key}"] = value
     return merged
@@ -918,7 +927,10 @@ def run_cmd_multi(registries_list, args, flags):
         else:
             print("Scaffolding with merged publish workflow.")
 
-        vars_dict = _merge_template_vars(registries_list, primary, ".")
+        # Build per-target path mapping from detect_targets or default to "."
+        target_entries = detect_targets(".")
+        target_paths = {entry.name: entry.path for entry in target_entries}
+        vars_dict = _merge_template_vars(registries_list, primary, target_paths)
         from datetime import datetime
         vars_dict["year"] = str(datetime.now().year)
 
