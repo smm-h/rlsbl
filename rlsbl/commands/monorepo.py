@@ -1,10 +1,11 @@
 """Monorepo workspace management commands."""
 
 import os
+import subprocess
 import sys
 
 from ..workspace import find_workspace_root, load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
-from ..targets import detect_targets
+from ..targets import detect_targets, TARGETS
 
 MONOREPO_HELP = """\
 Usage: rlsbl monorepo <subcommand>
@@ -140,5 +141,74 @@ def _cmd_sync(flags):
     sys.exit(1)
 
 def _cmd_status(flags):
-    print("monorepo status: not yet implemented", file=sys.stderr)
-    sys.exit(1)
+    root = find_workspace_root(".")
+    if root is None:
+        print("Error: No workspace found. Run 'rlsbl monorepo init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    projects = load_workspace(root)
+
+    if not projects:
+        print("No projects in workspace.")
+        return
+
+    rows = []
+    for proj in projects:
+        name = proj["name"]
+        path = proj["path"]
+
+        # Detect target
+        targets = detect_targets(path)
+        target_name = targets[0] if targets else "none"
+
+        # Read version
+        version = "?"
+        if target_name != "none" and target_name in TARGETS:
+            try:
+                version = TARGETS[target_name].read_version(path)
+            except Exception:
+                version = "?"
+
+        # Find latest tag
+        latest_tag = "(none)"
+        latest_tag_version = None
+        try:
+            result = subprocess.run(
+                ["git", "tag", "-l", f"{name}@v*", "--sort=-v:refname"],
+                capture_output=True, text=True, check=True,
+            )
+            first_line = result.stdout.strip().split("\n")[0].strip() if result.stdout.strip() else ""
+            if first_line:
+                latest_tag = first_line
+                # Extract version from tag like "name@v1.2.3"
+                prefix = f"{name}@v"
+                if first_line.startswith(prefix):
+                    latest_tag_version = first_line[len(prefix):]
+        except Exception:
+            pass
+
+        # Determine status
+        if latest_tag_version is None:
+            status = "unreleased"
+        elif version != latest_tag_version:
+            status = "unreleased"
+        else:
+            status = "released"
+
+        rows.append((name, path, target_name, version, latest_tag, status))
+
+    # Calculate column widths
+    headers = ("Project", "Path", "Target", "Version", "Tag", "Status")
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(cell))
+
+    # Print header
+    header_line = "  ".join(h.ljust(widths[i]) for i, h in enumerate(headers))
+    print(header_line)
+
+    # Print rows
+    for row in rows:
+        line = "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row))
+        print(line)

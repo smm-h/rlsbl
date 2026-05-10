@@ -10,6 +10,7 @@ from ..utils import (
     is_clean_tree,
     run,
 )
+from ..workspace import find_workspace_root, load_workspace, resolve_project
 
 
 def run_cmd(registry, args, flags):
@@ -74,3 +75,17 @@ def run_cmd(registry, args, flags):
     )
     print(f"CI:        {'yes' if ci_exists else 'missing'}")
     print(f"Publish:   {'yes' if publish_exists else 'missing'}")
+
+    # Monorepo awareness
+    try:
+        ws_root = find_workspace_root(".")
+        if ws_root is not None:
+            projects = load_workspace(ws_root)
+            project = resolve_project(ws_root, ".")
+            if project is not None:
+                mono_tag = f"{project['name']}@v{version}"
+                print(f"Mono tag:  {mono_tag}")
+            count = len(projects)
+            print(f"Part of monorepo ({count} project{'s' if count != 1 else ''}). Run 'rlsbl monorepo status' for all.")
+    except Exception:
+        pass
