@@ -82,6 +82,7 @@ def _cmd_add(args, flags):
     targets = detect_targets(path)
     if not targets:
         print(f"Error: No release target detected in '{path}'. Initialize a project first.", file=sys.stderr)
+        print("Hint: create a project manifest (e.g., package.json, pyproject.toml, go.mod, version.json) in the directory.", file=sys.stderr)
         sys.exit(1)
 
     name = flags.get("name") or os.path.basename(path.rstrip("/"))
