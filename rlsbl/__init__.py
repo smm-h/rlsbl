@@ -51,7 +51,8 @@ Usage:
   rlsbl release [patch|minor|major] [--dry-run] [--yes] [--quiet] [--skip-remote-check]
                                                             Orchestrate a release
   rlsbl status                                              Show project status
-  rlsbl scaffold [--force] [--update] [--private]           Scaffold release infrastructure
+  rlsbl scaffold [--force] [--update] [--private] [--no-commit] [--skip-shared]
+                                                            Scaffold release infrastructure
   rlsbl check <name>                                        Check name availability
   rlsbl undo [--yes]                                        Revert the last release
   rlsbl discover [--mine]                                   List rlsbl ecosystem projects
