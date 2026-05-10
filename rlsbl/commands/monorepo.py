@@ -82,8 +82,8 @@ def _cmd_add(args, flags):
         print(f"Error: '{path}' is not a directory.", file=sys.stderr)
         sys.exit(1)
 
-    targets = detect_targets(path)
-    if not targets:
+    target_entries = detect_targets(path)
+    if not target_entries:
         print(f"Error: No release target detected in '{path}'. Initialize a project first.", file=sys.stderr)
         print("Hint: create a project manifest (e.g., package.json, pyproject.toml, go.mod, version.json) in the directory.", file=sys.stderr)
         sys.exit(1)
@@ -425,7 +425,7 @@ def _cmd_sync(flags):
     # Warn about Swift projects without subtree_remote
     for proj in projects:
         proj_targets = detect_targets(proj["path"])
-        if any(t in ("swift", "swift-apple") for t in proj_targets):
+        if any(te.name in ("swift", "swift-apple") for te in proj_targets):
             if not proj.get("subtree_remote"):
                 print(
                     f"Warning: Swift project '{proj['name']}' has no subtree_remote configured. "
@@ -451,14 +451,15 @@ def _cmd_status(flags):
         path = proj["path"]
 
         # Detect target
-        targets = detect_targets(path)
-        target_name = targets[0] if targets else "none"
+        target_entries = detect_targets(path)
+        target_name = target_entries[0].name if target_entries else "none"
 
         # Read version
         version = "?"
         if target_name != "none" and target_name in TARGETS:
+            target_path = target_entries[0].path if target_entries else path
             try:
-                version = TARGETS[target_name].read_version(path)
+                version = TARGETS[target_name].read_version(target_path)
             except Exception:
                 version = "?"
 

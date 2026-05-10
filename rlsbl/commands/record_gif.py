@@ -21,15 +21,16 @@ def _parse_int_flag(flags, name, default):
 
 def _get_bin_command():
     """Auto-detect the project's binary command name via registry template vars."""
-    regs = detect_targets()
-    if not regs:
+    target_entries = detect_targets()
+    if not target_entries:
         return None
     # Use the first detected target
-    registry_module = TARGETS.get(regs[0])
+    first_name, first_path = target_entries[0]
+    registry_module = TARGETS.get(first_name)
     if not registry_module:
         return None
     try:
-        tvars = registry_module.get_template_vars(".")
+        tvars = registry_module.get_template_vars(first_path)
         return tvars.get("binCommand") or None
     except Exception:
         return None

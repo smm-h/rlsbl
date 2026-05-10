@@ -81,12 +81,12 @@ Options:
 def detect_registries():
     """Detect all registries/targets applicable in the current directory.
 
-    Returns a list, e.g. ["npm"], ["pypi"], or ["npm", "pypi"].
+    Returns a list of name strings, e.g. ["npm"], ["pypi"], or ["npm", "pypi"].
     Delegates to detect_targets() so all registered targets (including docker,
     cargo, deno, hex, maven, etc.) are auto-detected when no config exists.
     """
     from .targets import detect_targets
-    return detect_targets(".")
+    return [entry.name for entry in detect_targets(".")]
 
 
 def parse_args(argv):
