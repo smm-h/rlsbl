@@ -11,6 +11,7 @@ from rlsbl.targets.npm import NpmTarget
 from rlsbl.targets.pypi import PypiTarget
 from rlsbl.targets.go import GoTarget
 from rlsbl.targets.swift import SwiftTarget
+from rlsbl.targets.swift_apple import SwiftAppleTarget
 from rlsbl.targets.spec import SpecTarget
 from rlsbl.targets.hex import HexTarget
 from rlsbl.targets.deno import DenoTarget
@@ -355,6 +356,36 @@ class TestSwiftTarget:
 
     def test_tag_format(self):
         assert SwiftTarget().tag_format("1.2.3") == "v1.2.3"
+
+
+class TestSwiftAppleTarget:
+    def test_detect_returns_false(self, tmp_path):
+        """SwiftAppleTarget.detect() always returns False, even with Package.swift."""
+        target = SwiftAppleTarget()
+        (tmp_path / "Package.swift").write_text("// swift-tools-version:5.9")
+        assert target.detect(str(tmp_path)) is False
+
+    def test_name(self):
+        assert SwiftAppleTarget().name == "swift-apple"
+
+    def test_version_read_write(self, tmp_project):
+        target = SwiftAppleTarget()
+        (tmp_project / "VERSION").write_text("1.2.3\n")
+        assert target.read_version(str(tmp_project)) == "1.2.3"
+        target.write_version(str(tmp_project), "2.0.0")
+        assert (tmp_project / "VERSION").read_text().strip() == "2.0.0"
+
+    def test_config_based_detection(self, tmp_project):
+        """detect_targets returns swift-apple when declared in config."""
+        (tmp_project / "Package.swift").write_text("// swift-tools-version:5.9")
+        rlsbl_dir = tmp_project / ".rlsbl"
+        rlsbl_dir.mkdir()
+        (rlsbl_dir / "config.json").write_text(json.dumps({"targets": ["swift-apple"]}))
+        result = detect_targets(".")
+        assert result == ["swift-apple"]
+
+    def test_tag_format(self):
+        assert SwiftAppleTarget().tag_format("1.2.3") == "v{version}".format(version="1.2.3")
 
 
 class TestSpecTarget:

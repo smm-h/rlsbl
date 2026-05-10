@@ -8,6 +8,7 @@ from .pypi import PypiTarget
 from .go import GoTarget
 from .docs import DocsTarget
 from .swift import SwiftTarget
+from .swift_apple import SwiftAppleTarget
 from .spec import SpecTarget
 from .hex import HexTarget
 from .deno import DenoTarget
@@ -25,6 +26,7 @@ TARGETS = {
     "go": GoTarget(),
     "docs": DocsTarget(),
     "swift": SwiftTarget(),
+    "swift-apple": SwiftAppleTarget(),
     "spec": SpecTarget(),
     "hex": HexTarget(),
     "deno": DenoTarget(),
