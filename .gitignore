@@ -14,3 +14,4 @@ coverage/
 .env.local
 *.local-only
 .rlsbl/lock
+docs/_build/

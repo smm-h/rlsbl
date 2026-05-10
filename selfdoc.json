@@ -1,0 +1,6 @@
+{
+  "language": "python",
+  "source": ["rlsbl/"],
+  "docs": "docs/",
+  "output": "docs/_build/"
+}
