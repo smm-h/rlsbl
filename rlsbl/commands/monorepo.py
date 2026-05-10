@@ -218,6 +218,23 @@ def _rewrite_trigger(content):
     return "\n".join(new_lines) + "\n"
 
 
+def _inject_working_directory(content, path):
+    """Insert a defaults.run.working-directory block before the jobs: line."""
+    lines = content.splitlines()
+    for i, line in enumerate(lines):
+        if line.rstrip() == "jobs:":
+            block = [
+                "defaults:",
+                "  run:",
+                f"    working-directory: {path}",
+                "",
+            ]
+            new_lines = lines[:i] + block + lines[i:]
+            return "\n".join(new_lines) + "\n"
+    # No jobs: line found; return content unchanged
+    return content
+
+
 def _generate_router(projects):
     """Generate ci-router.yml content from project list."""
     lines = []
@@ -315,8 +332,9 @@ def _cmd_sync(flags):
             with open(src, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            # Rewrite trigger
+            # Rewrite trigger and inject working directory
             rewritten = _rewrite_trigger(content)
+            rewritten = _inject_working_directory(rewritten, path)
 
             # Prepend header
             header = (
