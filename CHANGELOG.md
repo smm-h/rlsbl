@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.13.0
+
+- **Monorepo support.** New `rlsbl monorepo` command family for managing multi-project repos with independent versioning. Projects remain fully standalone — extracting to a solo repo requires zero config changes.
+  - `monorepo init` creates a `.rlsbl-monorepo/workspace.toml` workspace manifest.
+  - `monorepo add <path>` registers a project (auto-detects target, auto-scaffolds, auto-syncs CI).
+  - `monorepo remove <path>` unregisters a project.
+  - `monorepo list` shows all registered projects.
+  - `monorepo status` shows version, latest tag, target, and unreleased changelog entries per project.
+  - `monorepo sync` copies per-project CI workflows to root, rewrites triggers to `workflow_call`, generates a CI router (paths-filter dispatch) and publish router (tag-prefix dispatch), sets copies read-only with source header.
+- **Scoped releases in monorepos.** `rlsbl release` inside a monorepo project automatically prefixes tags (`name@vX.Y.Z`), scopes version reads/writes and changelog to the project subdirectory, and uses a scoped commit message.
+- **`monorepo_tag_format` protocol method.** Targets can customize their monorepo tag format. Base default: `{name}@v{version}`.
+- **Monorepo-aware `rlsbl status`.** Shows monorepo tag format and project count hint when inside a monorepo project.
+- **Scaffold triggers monorepo sync.** Running `rlsbl scaffold` inside a monorepo project automatically syncs workflows to root.
+- **Removed dead `--scope` flag.** The unused `--scope` CLI flag and all associated dead code in `release.py`, the `scope` target property, and the `name` parameter on `tag_format()` have been removed. `tag_format(version)` is now the clean signature.
+
 ## 0.12.0
 
 - **7 new release targets.** swift (SPM), cargo (Rust/crates.io), deno (JSR), hex (Elixir/hex.pm), maven (Gradle/Maven), docker, spec (versioned specifications). Each with CI/publish templates and hybrid publish support.
