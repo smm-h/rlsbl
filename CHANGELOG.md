@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.0
+
+- **Cross-target metadata in templates.** Multi-target projects now merge template variables from all targets during scaffold, not just the primary. Variables are namespaced by target (`{{pypi.minRequiredPython}}`, `{{npm.minRequiredNode}}`). CI templates include runtime version references from project manifests (`requires-python`, `engines.node`, `go` directive, `rust-version`).
+- **`rlsbl doctor`: metadata consistency checks.** Three new checks validate that package name, license, and description are consistent across targets. Names are normalized per registry conventions (npm scope stripping, PyPI PEP 503, Go module path). Mismatches produce warnings, not failures.
+- **Per-target subdirectory paths.** Targets can now live in subdirectories. Configure with `{"name": "npm", "path": "npm/"}` in the `targets` array (plain strings still default to project root). Version sync, build, publish, doctor, status, and scaffold all resolve per-target paths. Useful for projects that ship wrapper packages alongside the main artifact.
+
 ## 0.16.1
 
 - **npm scaffold: lockfile warning.** `rlsbl scaffold` now warns when an npm project has no lockfile (`package-lock.json`, `pnpm-lock.yaml`, or `yarn.lock`) and adds a "run npm install" step to the next steps output. Prevents broken CI from `npm ci` failing on first push.
