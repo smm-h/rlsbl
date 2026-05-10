@@ -118,7 +118,7 @@ def process_template(template_content, vars_dict):
         unreplaced.append(var_name)
         return match.group(0)
 
-    content = re.sub(r"\{\{(\w+)\}\}", replacer, template_content)
+    content = re.sub(r"\{\{(\w+(?:\.\w+)*)\}\}", replacer, template_content)
     return content, unreplaced
 
 
