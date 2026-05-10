@@ -576,10 +576,21 @@ class TestDockerTarget:
         from rlsbl.targets.docker import DockerTarget
         assert DockerTarget().tag_format("app", "1.2.3") == "v1.2.3"
 
+    def test_publish_without_token(self, tmp_path, monkeypatch, capsys):
+        from rlsbl.targets.docker import DockerTarget
+        monkeypatch.delenv("DOCKER_USERNAME", raising=False)
+        monkeypatch.delenv("DOCKER_PASSWORD", raising=False)
+        target = DockerTarget()
+        target.publish(str(tmp_path), "1.0.0")
+        captured = capsys.readouterr()
+        assert "Skipping local docker publish (no DOCKER_USERNAME/DOCKER_PASSWORD)" in captured.out
+
     def test_publish_reads_config(self, tmp_path, monkeypatch):
         from rlsbl.targets.docker import DockerTarget
         monkeypatch.chdir(tmp_path)
-        # No config -> should warn/error
+        monkeypatch.setenv("DOCKER_USERNAME", "user")
+        monkeypatch.setenv("DOCKER_PASSWORD", "pass")
+        # No config -> should warn/error about missing docker config
         os.makedirs(tmp_path / ".rlsbl", exist_ok=True)
         (tmp_path / ".rlsbl" / "config.json").write_text('{}')
         (tmp_path / "Dockerfile").write_text("FROM python:3.12\n")
@@ -596,6 +607,8 @@ class TestDockerTarget:
         from rlsbl.targets.docker import DockerTarget
         import shutil
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("DOCKER_USERNAME", "user")
+        monkeypatch.setenv("DOCKER_PASSWORD", "pass")
         os.makedirs(tmp_path / ".rlsbl", exist_ok=True)
         config = {"docker": {"image": "myapp", "registry": "ghcr.io"}}
         (tmp_path / ".rlsbl" / "config.json").write_text(json.dumps(config))

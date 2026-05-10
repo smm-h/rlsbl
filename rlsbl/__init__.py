@@ -75,18 +75,14 @@ Options:
 
 
 def detect_registries():
-    """Detect all registries that have a project file in the current directory.
+    """Detect all registries/targets applicable in the current directory.
 
     Returns a list, e.g. ["npm"], ["pypi"], or ["npm", "pypi"].
+    Delegates to detect_targets() so all registered targets (including docker,
+    cargo, deno, hex, maven, etc.) are auto-detected when no config exists.
     """
-    found = []
-    if os.path.exists("package.json"):
-        found.append("npm")
-    if os.path.exists("pyproject.toml"):
-        found.append("pypi")
-    if os.path.exists("go.mod"):
-        found.append("go")
-    return found
+    from .targets import detect_targets
+    return detect_targets(".")
 
 
 def parse_args(argv):

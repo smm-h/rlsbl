@@ -55,6 +55,13 @@ class DockerTarget(BaseTarget):
 
     def publish(self, dir_path, version):
         """Build and push Docker image to the configured registry."""
+        # Token gating: require DOCKER_USERNAME and DOCKER_PASSWORD env vars
+        username = os.environ.get("DOCKER_USERNAME")
+        password = os.environ.get("DOCKER_PASSWORD")
+        if not username or not password:
+            print("Skipping local docker publish (no DOCKER_USERNAME/DOCKER_PASSWORD). CI will handle it.")
+            return
+
         config = read_project_config()
         docker_config = config.get("docker", {})
         image = docker_config.get("image")
@@ -113,6 +120,7 @@ class DockerTarget(BaseTarget):
 
     def template_mappings(self):
         return [
+            {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
             {"template": "publish.yml.tpl", "target": ".github/workflows/docker-publish.yml"},
         ]
 
