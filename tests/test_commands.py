@@ -898,6 +898,27 @@ class TestResolveReleaseTargets(unittest.TestCase):
         self.assertNotIn("nonexistent", result)
 
 
+class TestMigrateCommand(unittest.TestCase):
+    """Tests for rlsbl.commands.migrate."""
+
+    @patch("rlsbl.commands.migrate.subprocess.run")
+    def test_migrate_no_migrable(self, mock_subprocess_run):
+        """When migrable is not installed, print install instructions and exit 1."""
+        mock_subprocess_run.side_effect = FileNotFoundError("migrable not found")
+
+        from rlsbl.commands.migrate import run_cmd
+
+        with self.assertRaises(SystemExit) as ctx:
+            run_cmd(None, [], {})
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_migrate_shows_help_text(self):
+        """The migrate command should appear in HELP text."""
+        from rlsbl import HELP
+
+        self.assertIn("migrate", HELP)
+
+
 class TestScaffoldAutoDetection:
     """Tests for scaffold auto-detection writing targets to config."""
 
