@@ -24,7 +24,10 @@ Usage: rlsbl monorepo <subcommand>
 
 Subcommands:
   init                      Initialize a monorepo workspace
-  add <path> [--name <n>]   Add a project to the workspace
+  add <path> [options]      Add a project to the workspace
+                              --name <n>         Project name (default: dirname)
+                              --watch <globs>    Extra paths to watch (comma-separated)
+                              --subtree-remote <url>  Mirror repo for subtree publishing
   remove <path>             Remove a project from the workspace
   list                      List all projects in the workspace
   sync                      Sync CI workflows to repo root
