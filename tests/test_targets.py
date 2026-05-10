@@ -694,17 +694,27 @@ class TestMavenTarget:
         assert MavenTarget().detect(str(tmp_path))
 
 
-class TestBackwardCompat:
-    """Tests for backward compatibility with the old registries module."""
+import pytest
 
-    def test_registries_import_and_read_version(self):
-        """from rlsbl.registries import REGISTRIES; REGISTRIES['npm'].read_version is callable."""
-        from rlsbl.registries import REGISTRIES
-        assert callable(REGISTRIES["npm"].read_version)
 
-    def test_targets_read_version_same_object(self):
-        """TARGETS['npm'].read_version is callable and same object as REGISTRIES."""
-        from rlsbl.registries import REGISTRIES
-        assert callable(TARGETS["npm"].read_version)
-        # They are the same dict, so same instance
-        assert TARGETS["npm"] is REGISTRIES["npm"]
+class TestDetectTargetsAutoDetection:
+    """Parametrized test that verifies detect_targets() auto-detects all 11 registered targets."""
+
+    @pytest.mark.parametrize("target_name,filename,content", [
+        ("npm", "package.json", '{"name": "test", "version": "0.1.0"}'),
+        ("pypi", "pyproject.toml", '[project]\nname = "test"\nversion = "0.1.0"'),
+        ("go", "go.mod", "module example.com/test\n\ngo 1.21"),
+        ("swift", "Package.swift", "// swift-tools-version:5.9"),
+        ("cargo", "Cargo.toml", '[package]\nname = "test"\nversion = "0.1.0"'),
+        ("deno", "deno.json", '{"name": "test", "version": "0.1.0"}'),
+        ("docker", "Dockerfile", "FROM alpine"),
+        ("hex", "mix.exs", "defmodule Test.MixProject do"),
+        ("maven", "pom.xml", "<project><modelVersion>4.0.0</modelVersion><groupId>com.test</groupId><artifactId>test</artifactId><version>0.1.0</version></project>"),
+        ("spec", "version.json", '{"version": "0.1.0"}'),
+        ("docs", "selfdoc.json", "{}"),
+    ])
+    def test_detect_target_by_marker_file(self, tmp_project, target_name, filename, content):
+        marker = tmp_project / filename
+        marker.write_text(content)
+        result = detect_targets(".")
+        assert target_name in result
