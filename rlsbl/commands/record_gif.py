@@ -6,8 +6,7 @@ import subprocess
 import sys
 import tempfile
 
-from .. import detect_registries
-from ..registries import REGISTRIES
+from ..targets import TARGETS, detect_targets
 
 
 def _parse_int_flag(flags, name, default):
@@ -22,11 +21,11 @@ def _parse_int_flag(flags, name, default):
 
 def _get_bin_command():
     """Auto-detect the project's binary command name via registry template vars."""
-    regs = detect_registries()
+    regs = detect_targets()
     if not regs:
         return None
-    # Use the first detected registry
-    registry_module = REGISTRIES.get(regs[0])
+    # Use the first detected target
+    registry_module = TARGETS.get(regs[0])
     if not registry_module:
         return None
     try:

@@ -10,7 +10,7 @@ import tempfile
 
 from ..config import should_tag
 from ..lock import acquire_lock, release_lock
-from ..registries import REGISTRIES
+from ..targets import TARGETS
 from ..tagging import ensure_tags
 from ..utils import find_commit_tool
 
@@ -461,7 +461,7 @@ def run_cmd(registry, args, flags):
     Scaffolds release infrastructure (CI, publish workflows, changelog, etc.)
     from templates.
     """
-    reg = REGISTRIES[registry]
+    reg = TARGETS[registry]
 
     # Check that a project file exists
     if not reg.check_project_exists("."):
@@ -525,7 +525,7 @@ def run_cmd_multi(registries_list, args, flags):
     publish.yml that contains jobs for all detected registries.
     """
     primary = registries_list[0]
-    reg = REGISTRIES[primary]
+    reg = TARGETS[primary]
 
     if not reg.check_project_exists("."):
         print(f"Error: no {primary} project found in current directory.", file=sys.stderr)

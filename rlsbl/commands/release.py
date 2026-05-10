@@ -6,7 +6,7 @@ import time
 
 from ..config import read_json_config, should_tag
 from ..lock import acquire_lock, release_lock
-from ..registries import REGISTRIES
+from ..targets import TARGETS
 from ..tagging import ensure_github_topic, ensure_npm_keyword, ensure_pypi_keyword
 from ..utils import (
     bump_version,
@@ -104,7 +104,7 @@ def run_cmd(registry, args, flags):
         if not quiet:
             print(msg)
 
-    reg = REGISTRIES[registry]
+    reg = TARGETS[registry]
 
     # Check prerequisites
     if not check_gh_installed():
@@ -149,7 +149,6 @@ def run_cmd(registry, args, flags):
     scope_name = os.path.basename(scope.rstrip("/")) if scope else None
 
     # Get target instance for tag_format/build/publish
-    from ..targets import TARGETS
     target = TARGETS[registry]
 
     # Determine if this is a scoped (subdir) release
@@ -267,7 +266,7 @@ def run_cmd(registry, args, flags):
         # Show other version files that would be synced (skip for scoped releases)
         if not is_scoped:
             other_files = []
-            for name, other_reg in REGISTRIES.items():
+            for name, other_reg in TARGETS.items():
                 if name == registry:
                     continue
                 if other_reg.check_project_exists("."):
@@ -313,7 +312,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
             files_to_commit.append(version_file)
     # Sync version to other registries only for non-scoped releases
     if not is_scoped:
-        for name, other_reg in REGISTRIES.items():
+        for name, other_reg in TARGETS.items():
             if name == registry:
                 continue
             if other_reg.check_project_exists("."):
@@ -357,7 +356,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
         # Sync version to all other recognized version files (skip for scoped releases)
         if not is_scoped:
-            for name, other_reg in REGISTRIES.items():
+            for name, other_reg in TARGETS.items():
                 if name == registry:
                     continue
                 if other_reg.check_project_exists("."):
@@ -369,14 +368,14 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     # Ecosystem tagging: add keyword to manifests if enabled (skip for scoped releases)
     if should_tag(flags) and not is_scoped:
         try:
-            if REGISTRIES["npm"].check_project_exists("."):
+            if TARGETS["npm"].check_project_exists("."):
                 if ensure_npm_keyword(".", quiet=quiet):
                     if "package.json" not in files_to_commit:
                         files_to_commit.append("package.json")
         except Exception:
             pass
         try:
-            if REGISTRIES["pypi"].check_project_exists("."):
+            if TARGETS["pypi"].check_project_exists("."):
                 if ensure_pypi_keyword(".", quiet=quiet):
                     if "pyproject.toml" not in files_to_commit:
                         files_to_commit.append("pyproject.toml")

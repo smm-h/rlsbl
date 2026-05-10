@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from ..config import _project_config, USER_CONFIG, read_json_config, should_tag
-from ..registries import REGISTRIES
+from ..targets import TARGETS
 
 
 CONFIG_HELP = """\
@@ -217,7 +217,7 @@ def _cmd_status(flags):
 def _show_config(registry, flags):
     """Show resolved project configuration (original behavior)."""
     print("Detected registries:")
-    for name, reg in REGISTRIES.items():
+    for name, reg in TARGETS.items():
         if reg.check_project_exists("."):
             version = reg.read_version(".")
             vfile = reg.get_version_file() or "git tag"

@@ -15,9 +15,6 @@ TARGETS = {
     "docs": DocsTarget(),
 }
 
-# Backward compat alias
-REGISTRIES = TARGETS
-
 
 def detect_targets(dir_path="."):
     """Detect which targets are applicable in the given directory.

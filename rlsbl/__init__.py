@@ -39,7 +39,6 @@ def _detect_version():
 
 __version__ = _detect_version()
 
-REGISTRIES = ("npm", "pypi", "go")
 COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover", "watch",
             "pre-push-check", "prs", "record-gif", "unreleased", "targets")
 COMMAND_ALIASES = {"init": "scaffold"}

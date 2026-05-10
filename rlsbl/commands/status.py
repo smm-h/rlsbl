@@ -3,7 +3,7 @@
 import os
 import sys
 
-from ..registries import REGISTRIES
+from ..targets import TARGETS
 from ..utils import (
     extract_changelog_entry,
     get_current_branch,
@@ -17,7 +17,7 @@ def run_cmd(registry, args, flags):
 
     Shows a quick 'where am I' summary: package info, git state, changelog, CI.
     """
-    reg = REGISTRIES[registry]
+    reg = TARGETS[registry]
 
     if not reg.check_project_exists("."):
         print(f"No {registry} project found in current directory.", file=sys.stderr)
@@ -30,7 +30,7 @@ def run_cmd(registry, args, flags):
     print(f"Package:   {name}")
 
     # Show version info for all detected registries
-    for r_name, r_mod in REGISTRIES.items():
+    for r_name, r_mod in TARGETS.items():
         if r_mod.check_project_exists("."):
             ver = r_mod.read_version(".")
             file = r_mod.get_version_file() or "git tag"

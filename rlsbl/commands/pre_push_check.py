@@ -4,7 +4,7 @@ import os
 import re
 import sys
 
-from ..registries import REGISTRIES
+from ..targets import TARGETS
 
 
 def _detect_version():
@@ -13,7 +13,7 @@ def _detect_version():
     Returns (version_string, registry_name) or (None, None) if undetectable.
     """
     for name in ("go", "npm", "pypi"):
-        reg = REGISTRIES[name]
+        reg = TARGETS[name]
         if reg.check_project_exists("."):
             return reg.read_version("."), name
     return None, None
