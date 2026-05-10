@@ -21,8 +21,6 @@
 - **`--json` flag for `rlsbl status`.** Outputs structured JSON with name, version, target, branch, tag, clean, changelog, ci, publish.
 - **Documented hidden flags.** `--no-commit` and `--skip-shared` now appear in `rlsbl scaffold --help`.
 - **Go root main detection.** `rlsbl scaffold` warns when a Go project has its main package in `cmd/<name>/` instead of the project root, since `go install module@latest` won't work.
-- **selfdoc documentation.** Set up selfdoc with live directive-based docs for CLI reference, targets, monorepo guide, and configuration.
-- **Trigger rewrite regression test.** Verifies `permissions:` and `env:` blocks between `on:` and `jobs:` are preserved during monorepo sync.
 
 ## 0.14.0
 
@@ -30,7 +28,6 @@
 - **Swift target split.** New `swift-apple` target for Apple-platform Swift projects (macOS-only CI). The existing `swift` target keeps macOS+ubuntu for server-side Swift. `swift-apple` requires explicit declaration in `.rlsbl/config.json` (no auto-detection).
 - **Subtree publishing.** Monorepo projects with `subtree_remote` configured get automatic git subtree pushes after release. The project's subdirectory is split and pushed to a mirror repo with plain semver tags, enabling SPM consumption. A GitHub Release is also created on the mirror. Failures are non-fatal.
 - **Explicit target enforcement.** `rlsbl scaffold` now warns when using auto-detected targets and always writes the detected target to `.rlsbl/config.json`, ensuring subsequent runs use explicit config.
-- **Workspace schema extended.** `save_workspace()` preserves all project keys (not just path/name), enabling `watch` and `subtree_remote` round-trips.
 - **`monorepo status` enhanced.** Optional Watch column (path count) and Remote column (subtree URL) appear when projects use these features.
 - **`monorepo sync` warns for Swift projects** without `subtree_remote`, since SPM can't resolve monorepo-style prefixed tags.
 - **12 registered targets.** swift-apple joins npm, pypi, go, swift, cargo, deno, docker, hex, maven, spec, docs.
@@ -40,10 +37,6 @@
 - **Monorepo sync adds `working-directory`.** Synced CI workflows now include `defaults: run: working-directory: {path}` so steps run in the correct project subdirectory.
 - **Monorepo add shows guidance.** When no target is detected, the error now suggests which manifest files to create.
 - **Dynamic merged publish workflows.** Multi-target projects now get dynamically generated publish workflows composed from each target's individual template. Supports all 11 targets, replaces the static npm+pypi+go-only merged template.
-- **Deleted deprecated `rlsbl/registries/` shim modules.** The backward-compat shim from the REGISTRIES-to-TARGETS rename is removed. All code uses `rlsbl.targets` directly.
-- **Pinned `tomlkit>=0.12`** in dependencies.
-- **CI installs safegit** for monorepo auto-commit tests.
-- **Test fixes.** Monorepo tests work on CI runners. Added parametrized `detect_targets()` auto-detection test covering all 11 targets.
 
 ## 0.13.0
 
@@ -55,10 +48,8 @@
   - `monorepo status` shows version, latest tag, target, and unreleased changelog entries per project.
   - `monorepo sync` copies per-project CI workflows to root, rewrites triggers to `workflow_call`, generates a CI router (paths-filter dispatch) and publish router (tag-prefix dispatch), sets copies read-only with source header.
 - **Scoped releases in monorepos.** `rlsbl release` inside a monorepo project automatically prefixes tags (`name@vX.Y.Z`), scopes version reads/writes and changelog to the project subdirectory, and uses a scoped commit message.
-- **`monorepo_tag_format` protocol method.** Targets can customize their monorepo tag format. Base default: `{name}@v{version}`.
 - **Monorepo-aware `rlsbl status`.** Shows monorepo tag format and project count hint when inside a monorepo project.
 - **Scaffold triggers monorepo sync.** Running `rlsbl scaffold` inside a monorepo project automatically syncs workflows to root.
-- **Removed dead `--scope` flag.** The unused `--scope` CLI flag and all associated dead code in `release.py`, the `scope` target property, and the `name` parameter on `tag_format()` have been removed. `tag_format(version)` is now the clean signature.
 
 ## 0.12.0
 
@@ -67,16 +58,12 @@
 - **Hybrid publish.** `rlsbl release` publishes locally when ecosystem token is available (NPM_TOKEN, CARGO_REGISTRY_TOKEN, HEX_API_KEY, etc.). Falls back to CI otherwise.
 - **Private registry workflow.** `rlsbl scaffold --private` (or auto-detected) skips publish.yml, generates a post-release hook that uploads artifacts to GitHub Releases. Prints consumer install instructions.
 - **tomlkit replaces TOML regex.** `pyproject.toml` editing (version bumps, keyword injection) now uses tomlkit for correct round-trip editing with comment preservation. Fixes edge cases with `[project.urls]` sub-tables.
-- **REGISTRIES renamed to TARGETS.** Internal refactor: all command files use the targets module directly. `rlsbl/registries/` is a backward-compat shim only.
 - **detect_targets() covers all targets.** Auto-detection now finds all 11 registered targets, not just npm/pypi/go.
-- **Regression tests for --force USER_OWNED.** LICENSE, CHANGELOG.md, and hooks are verified protected under --force.
 
 ## 0.11.3
 
 - **`--include`/`--exclude` release flags.** Control which targets run during release. Replaces `--skip-docs`.
 - **`release_targets` config.** Declare baseline targets in `.rlsbl/config.json` to avoid auto-detect surprises.
-- **README updated** for v0.11.x changes.
-- Removed stale `docs/_build/` build artifacts from repo.
 
 ## 0.11.2
 
@@ -99,11 +86,9 @@
 - **Plugin validation.** Release validates `plugin.json` has required fields (name, version, description) and valid semver.
 - **`rlsbl register` command.** Prints the JSON registry entry for the current plugin repo (name, repo URL, description, plugins provided).
 - **Scaffold template for codehome.** `rlsbl scaffold --target codehome` creates CI workflow that validates plugin.json.
-- **Batch detection generalized.** Uses `target.version_file()` instead of hardcoded filename.
 
 ## 0.10.0
 
-- **Release target abstraction.** Registries refactored into a formal `ReleaseTarget` Protocol with `BaseTarget` class. Targets support optional build/publish lifecycle steps and subdirectory scoping.
 - **Codehome plugin target.** `--target codehome --scope plugins/<name>` releases individual plugins from a monorepo. Reads/writes `plugin.toml`, creates namespaced tags (`name@v1.2.3`).
 - **Docs target.** Auto-generate documentation from Python docstrings and deploy to Cloudflare Pages or GitHub Pages. `rlsbl docs init/build/serve/deploy` commands. Zero external dependencies (stdlib `ast` + built-in MD/HTML converter).
 - **`rlsbl targets` command.** Lists all available targets with detection status, scope type, and version file.
@@ -115,19 +100,13 @@
 ## 0.9.1
 
 - **`rlsbl config show` subcommand.** Bare `rlsbl config` now prints help; use `config show` for project info.
-- **Migration prefix enforcement.** Schema loader raises an error if filename prefix doesn't match the version attribute inside.
-- **Lock guard.** Prevents fd leak on double-acquire.
 - **Race condition parsing fix.** Porcelain parser handles stripped leading whitespace correctly.
-- **README rewrite.** Full rewrite documenting all commands and v0.9.0 features.
-- Added `.rlsbl/lock` to `.gitignore`.
-- Added `prs` command to 0.9.0 changelog retroactively.
 
 ## 0.9.0
 
 - **`rlsbl unreleased` command.** Lists commits since last tag, cross-references CHANGELOG entries, reports coverage status. Supports `--json` for machine-readable output.
 - **`rlsbl prs` command.** Lists open GitHub pull requests for the current repo.
 - **Config management system.** `rlsbl config init/migrate/status` subcommands for managing project config with schema-driven migration (deep merge, flat merge, list-by-key merge strategies, versioned migrations, atomic writes).
-- **Public library API.** `from rlsbl.lib import ConfigMigrator, load_schema, migrate` for Python projects wanting startup migration.
 - **Scaffold auto-commits.** Created files are committed automatically (use `--no-commit` to opt out). Runs config migrations when `.rlsbl/config-schema.json` exists.
 - **Parallel watch.** `rlsbl watch` polls CI runs concurrently (total time = max of all runs, not sum).
 - **Parallel variant checking.** `rlsbl check` uses ThreadPoolExecutor for concurrent registry queries.
@@ -142,8 +121,6 @@
 - **`record-gif` validates flags.** Clear error message on non-integer flag values.
 - **npm check timeout.** Variant checking has 10-second subprocess timeout.
 - **Release prompt mentions ecosystem tagging** when enabled.
-- **Test suite expanded.** Split test_tagging.py into focused modules; added shared fixtures in conftest.py. 117 → 260 tests.
-- Fixed stale `.rlsbl/version` and `package.json` metadata (description, files array).
 
 ## 0.8.3
 
@@ -158,9 +135,6 @@
 - Escape AppleScript strings in watch notifications (prevents injection via git tags)
 - Clear error when `--registry` is missing a value
 - Resolve project config path at call time (not module import time)
-- Refactor pre-push check to use registry adapters (DRY)
-- Add Go registry adapter tests
-- Add tests for release, undo, check, and pre_push_check commands (117 total)
 - Add `--width`, `--height`, `--font-size`, `--duration` flags to record-gif
 
 ## 0.8.1
@@ -212,7 +186,6 @@
 
 - **Post-release hooks.** `scripts/post-release.sh` runs after a successful release with `RLSBL_VERSION` env var set. Non-fatal (release is already complete). Scaffolded via `rlsbl scaffold`.
 - **CI watcher.** After pushing, rlsbl spawns a background process that watches CI via `gh run watch` and sends a desktop notification (notify-send on Linux, osascript on macOS) when CI passes or fails.
-- `run()` utility accepts optional `env` parameter for subprocess environment
 - Ecosystem discoverability: `rlsbl discover` command lists all rlsbl-tagged projects via GitHub topics
 - Auto-tagging: `scaffold` and `release` inject `"rlsbl"` keyword into package.json/pyproject.toml and add the `rlsbl` GitHub topic
 - Opt-out via `--no-tag` flag, project config (`.rlsbl/config.json`), or user config (`~/.rlsbl/config.json`)
@@ -223,21 +196,15 @@
 ## 0.4.2
 
 - Configurable push timeout via `RLSBL_PUSH_TIMEOUT` env var (default 120s), fixing timeouts on repos with slow pre-push hooks
-- Bump `run()` default subprocess timeout from 30s to 120s
-- All `git push` call sites (release, undo, push_if_needed) use the configurable push timeout
 - Print a note when `RLSBL_PUSH_TIMEOUT` overrides the default
-- Remove dead `run_silent` function (identical to `run`, zero callers)
 - Fix own pre-push hook missing VERSION file detection for Go projects
-- Document `RLSBL_PUSH_TIMEOUT` in README
 
 ## 0.4.1
 
 - Go adapter uses VERSION file as version source (not git tags)
 - First release bootstraps from VERSION without bumping
-- find_commit_tool returns "safegit" not full path
 - Pre-release.sh template auto-detects Go/npm/Python and runs appropriate checks
 - Pre-push hook template supports Go VERSION file
-- README documents Go support
 - GoReleaser NEXT_STEPS clarified (CI handles it, no local install needed)
 
 ## 0.4.0
@@ -275,6 +242,5 @@
 - Context-aware scaffold: appends CLAUDE.md, merges .gitignore, preserves custom CI
 - Hash-based `--update` mode detects customized files
 - Pre-release hook, pre-push changelog enforcement
-- 63 tests
 - Dual-publish CI: npm (token) + PyPI (OIDC Trusted Publishing)
 - Also installable via npm (thin Node wrapper)
