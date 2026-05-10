@@ -14,7 +14,7 @@ except ImportError:
     _HAS_THREADS = False
 
 
-from rlsbl.targets.utils import normalize_npm, normalize_pypi  # noqa: E402
+from rlsbl.targets.utils import normalize_pypi  # noqa: E402
 
 
 def check_npm_availability(name):
