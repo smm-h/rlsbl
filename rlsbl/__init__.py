@@ -237,6 +237,15 @@ def main():
                 if not regs:
                     print("Error: no package.json, pyproject.toml, or go.mod found.", file=sys.stderr)
                     sys.exit(1)
+                # Warn when auto-detection is used without explicit config
+                from .config import read_project_config
+                cfg = read_project_config()
+                if "targets" not in cfg:
+                    print(
+                        f"Note: Auto-detected target(s): {', '.join(regs)}. "
+                        "Run 'rlsbl scaffold' again after reviewing .rlsbl/config.json.",
+                        file=sys.stderr,
+                    )
                 if len(regs) > 1:
                     handler.run_cmd_multi(regs, args, flags)
                 else:
