@@ -14,6 +14,7 @@ from rlsbl.targets.swift import SwiftTarget
 from rlsbl.targets.spec import SpecTarget
 from rlsbl.targets.hex import HexTarget
 from rlsbl.targets.deno import DenoTarget
+from rlsbl.targets.cargo import CargoTarget
 from rlsbl.targets import TARGETS, detect_targets
 
 
@@ -476,6 +477,79 @@ class TestDenoTarget:
         target.publish(str(tmp_path), "1.0.0")
         captured = capsys.readouterr()
         assert "Skipping local Deno publish (no DENO_TOKEN/JSR_TOKEN)" in captured.out
+
+
+class TestCargoTarget:
+    def test_protocol_conformance(self):
+        assert isinstance(CargoTarget(), ReleaseTarget)
+
+    def test_detection_with_package(self, tmp_path):
+        target = CargoTarget()
+        # No Cargo.toml -> not detected
+        assert not target.detect(str(tmp_path))
+        # With [package] -> detected
+        (tmp_path / "Cargo.toml").write_text('[package]\nname = "myapp"\nversion = "1.0.0"\n')
+        assert target.detect(str(tmp_path))
+
+    def test_detection_workspace_only(self, tmp_path):
+        # Workspace root without [package] -> NOT detected
+        (tmp_path / "Cargo.toml").write_text('[workspace]\nmembers = ["crates/*"]\n')
+        assert not CargoTarget().detect(str(tmp_path))
+
+    def test_version_read_write(self, tmp_path):
+        target = CargoTarget()
+        content = '[package]\nname = "myapp"\nversion = "1.2.3"\nedition = "2021"\n'
+        (tmp_path / "Cargo.toml").write_text(content)
+        assert target.read_version(str(tmp_path)) == "1.2.3"
+        target.write_version(str(tmp_path), "2.0.0")
+        import tomlkit
+        doc = tomlkit.parse((tmp_path / "Cargo.toml").read_text())
+        assert doc["package"]["version"] == "2.0.0"
+
+    def test_version_preserves_comments(self, tmp_path):
+        content = '# My crate\n[package]\nname = "myapp"\nversion = "1.0.0"  # current\nedition = "2021"\n'
+        (tmp_path / "Cargo.toml").write_text(content)
+        CargoTarget().write_version(str(tmp_path), "2.0.0")
+        result = (tmp_path / "Cargo.toml").read_text()
+        assert "# My crate" in result
+        assert "# current" in result or "2.0.0" in result
+
+    def test_tag_format(self):
+        assert CargoTarget().tag_format("myapp", "1.2.3") == "v1.2.3"
+
+    def test_publish_with_token(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CARGO_REGISTRY_TOKEN", "test-token")
+        target = CargoTarget()
+        with unittest.mock.patch("rlsbl.targets.cargo.run") as mock_run:
+            target.publish(str(tmp_path), "1.0.0")
+            mock_run.assert_called_once()
+
+    def test_publish_without_token(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.delenv("CARGO_REGISTRY_TOKEN", raising=False)
+        CargoTarget().publish(str(tmp_path), "1.0.0")
+        assert "Skipping" in capsys.readouterr().out
+
+    def test_is_library_with_lib_section(self, tmp_path):
+        target = CargoTarget()
+        content = '[package]\nname = "mylib"\nversion = "1.0.0"\n\n[lib]\n'
+        (tmp_path / "Cargo.toml").write_text(content)
+        assert target._is_library(str(tmp_path))
+
+    def test_is_library_no_main_rs(self, tmp_path):
+        target = CargoTarget()
+        content = '[package]\nname = "mylib"\nversion = "1.0.0"\n'
+        (tmp_path / "Cargo.toml").write_text(content)
+        os.makedirs(tmp_path / "src")
+        (tmp_path / "src" / "lib.rs").write_text("pub fn hello() {}")
+        assert target._is_library(str(tmp_path))
+
+    def test_is_not_library_with_main_rs(self, tmp_path):
+        target = CargoTarget()
+        content = '[package]\nname = "myapp"\nversion = "1.0.0"\n'
+        (tmp_path / "Cargo.toml").write_text(content)
+        os.makedirs(tmp_path / "src")
+        (tmp_path / "src" / "main.rs").write_text("fn main() {}")
+        assert not target._is_library(str(tmp_path))
 
 
 class TestBackwardCompat:
