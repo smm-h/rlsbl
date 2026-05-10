@@ -1,5 +1,7 @@
 # rlsbl
 
+Release orchestration and project scaffolding CLI for npm, PyPI, and Go projects. Handles version bumping, changelog validation, tagging, GitHub Releases, CI scaffolding, and CI monitoring.
+
 ## Release workflow
 
 This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestration.
