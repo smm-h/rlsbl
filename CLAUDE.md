@@ -1,6 +1,19 @@
 # rlsbl
 
-Release orchestration and project scaffolding CLI for npm, PyPI, and Go projects. Handles version bumping, changelog validation, tagging, GitHub Releases, CI scaffolding, and CI monitoring.
+Release orchestration and project scaffolding CLI. Automates the full release lifecycle for npm, PyPI, and Go projects: version bumping, changelog validation, git tagging, GitHub Release creation, CI/CD scaffolding, and CI monitoring.
+
+Built in Python 3.11+ (one dependency: tomlkit), also distributed as an npm wrapper package. Current version: check `package.json`.
+
+Key commands:
+
+- `rlsbl release [patch|minor|major]` -- bump version, tag, push, create GitHub Release
+- `rlsbl scaffold [--update|--force]` -- generate/update CI/CD workflows, hooks, changelog, license
+- `rlsbl status` -- show version, branch, last tag, changelog coverage
+- `rlsbl watch <sha>` -- poll CI status for a commit
+- `rlsbl undo` -- revert the last release (delete tag, GH release, revert commit)
+- `rlsbl check <name> --registry <r>` -- check name availability on npm/PyPI
+- `rlsbl config` -- show/migrate project configuration
+- `rlsbl discover` -- list rlsbl ecosystem projects via GitHub topics
 
 ## Release workflow
 
