@@ -17,6 +17,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
-      - run: npm ci
-      - run: npm test --if-present
-      - run: npm audit --audit-level=moderate || true
+      - run: yarn install --frozen-lockfile
+      - run: yarn test
+      - run: yarn audit --audit-level=moderate || true

@@ -14,9 +14,10 @@ jobs:
         node-version: [20, 22, 24]
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
-      - run: npm ci
-      - run: npm test --if-present
-      - run: npm audit --audit-level=moderate || true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm audit --audit-level=moderate || true

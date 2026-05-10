@@ -125,8 +125,15 @@ class NpmTarget(BaseTarget):
         }
 
     def template_mappings(self):
+        pm = self._detect_package_manager(".")
+        if pm == "pnpm":
+            ci_template = "ci-pnpm.yml.tpl"
+        elif pm == "yarn":
+            ci_template = "ci-yarn.yml.tpl"
+        else:
+            ci_template = "ci.yml.tpl"
         return [
-            {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
+            {"template": ci_template, "target": ".github/workflows/ci.yml"},
             {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
         ]
 
