@@ -1,5 +1,9 @@
 # Private Registry Workflow
 
+## Decision
+
+**A+B+C selected.** Scaffold detects/is-told private, skips publish workflow, generates post-release hook for wheel/tarball upload as GitHub Release assets, and documents the pattern.
+
 ## Context
 
 rlsbl currently scaffolds CI workflows that publish to public registries (PyPI via OIDC trusted publishing, npm via `NPM_TOKEN`). But many projects need versioning, tagged releases, and installability without publishing to a public registry -- they want to stay private.

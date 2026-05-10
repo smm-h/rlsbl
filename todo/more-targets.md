@@ -125,7 +125,7 @@ The publish step is the most complex of any target. Maven Central requires GPG s
 
 **Version source:** `Cargo.toml` (`[package].version`).
 
-**Version write:** TOML edit on `Cargo.toml`. Rust has `cargo-edit` (`cargo set-version`) but relying on an external tool is fragile. Use regex replace within `[package]` section (same approach as PyPI target for pyproject.toml).
+**Version write:** TOML edit on `Cargo.toml`. Rust has `cargo-edit` (`cargo set-version`) but relying on an external tool is fragile. Use `tomlkit` for round-trip TOML editing (same dependency being added for `pyproject.toml` editing in the PyPI target).
 
 **Tag format:** `v{version}` or `{name}-v{version}` for workspace crates.
 
@@ -204,6 +204,30 @@ registry = "ghcr.io"  # or "docker.io" or private
 
 ---
 
+### 7. `deno` -- Deno/JSR
+
+**Registry:** JSR (JavaScript Registry)
+
+**Detection:** `deno.json` or `deno.jsonc` exists.
+
+**Version source:** `deno.json` has a `"version"` field (JSON).
+
+**Version write:** JSON edit on `deno.json`.
+
+**Tag format:** `v{version}`.
+
+**Build step:** `deno check` (type checking).
+
+**Publish step:** `deno publish` (requires JSR credentials).
+
+**Scaffold templates:**
+- `deno-ci.yml.tpl` (deno check, deno test)
+- `deno-publish.yml.tpl`
+
+**Effort:** Small. Single-command publish, JSON version field, well-standardized.
+
+---
+
 ## Priority and Ordering
 
 | Target | Demand Signal | Effort | Recommendation |
@@ -212,8 +236,9 @@ registry = "ghcr.io"  # or "docker.io" or private
 | `maven` | High (Android/Kotlin ecosystem is large) | Medium-High | Build second, start with GitHub Packages |
 | `spec` | Medium (specification-driven projects) | Small | Build alongside swift |
 | `cargo` | Medium (Rust is growing, crates.io is well-designed) | Small-Medium | Third priority |
-| `docker` | Medium (every backend project ships containers) | Medium | Fourth priority |
-| `hex` | Low (smaller ecosystem) | Small | Opportunistic |
+| `deno` | Medium (Deno/JSR ecosystem growing rapidly) | Small | Fifth priority |
+| `docker` | Medium (every backend project ships containers) | Medium | Fifth priority |
+| `hex` | Low (smaller ecosystem) | Small | Sixth priority |
 
 ## Implementation Notes
 
