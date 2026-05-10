@@ -128,13 +128,16 @@ class NpmTarget(BaseTarget):
         pm = self._detect_package_manager(".")
         if pm == "pnpm":
             ci_template = "ci-pnpm.yml.tpl"
+            publish_template = "publish-pnpm.yml.tpl"
         elif pm == "yarn":
             ci_template = "ci-yarn.yml.tpl"
+            publish_template = "publish-yarn.yml.tpl"
         else:
             ci_template = "ci.yml.tpl"
+            publish_template = "publish.yml.tpl"
         return [
             {"template": ci_template, "target": ".github/workflows/ci.yml"},
-            {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
+            {"template": publish_template, "target": ".github/workflows/publish.yml"},
         ]
 
     def publish(self, dir_path, version):
