@@ -8,6 +8,7 @@ from ..config import read_json_config, should_tag
 from ..lock import acquire_lock, release_lock
 from ..targets import TARGETS
 from ..tagging import ensure_github_topic, ensure_npm_keyword, ensure_pypi_keyword
+from ..workspace import find_workspace_root, resolve_project
 from ..utils import (
     bump_version,
     check_gh_auth,
@@ -144,15 +145,39 @@ def run_cmd(registry, args, flags):
                 )
                 sys.exit(1)
 
+    # Monorepo context detection
+    monorepo_root = find_workspace_root(".")
+    monorepo_name = None
+    monorepo_project_path = None
+
+    if monorepo_root:
+        project = resolve_project(monorepo_root, ".")
+        if project is None:
+            print("Error: current directory is inside a monorepo but not inside any project.", file=sys.stderr)
+            print("Run 'rlsbl monorepo status' to see registered projects.", file=sys.stderr)
+            sys.exit(1)
+        monorepo_name = project["name"]
+        monorepo_project_path = project["path"]
+        # Change to monorepo root so all paths (git and filesystem) are
+        # relative to the repo root, matching git's expectations.
+        os.chdir(monorepo_root)
+        log(f"Monorepo project: {monorepo_name} ({monorepo_project_path})")
+
+    # Scoped version directory: project subdir in monorepo, repo root otherwise
+    version_dir = monorepo_project_path if monorepo_name else "."
+
     # Get target instance for tag_format/build/publish
     target = TARGETS[registry]
 
     # Current version
-    current_version = reg.read_version(".")
+    current_version = reg.read_version(version_dir)
     log(f"Current version: {current_version}")
 
     # If the current version has never been tagged, release it as-is (bootstrap)
-    current_tag = target.tag_format(current_version)
+    if monorepo_name:
+        current_tag = target.monorepo_tag_format(monorepo_name, current_version)
+    else:
+        current_tag = target.tag_format(current_version)
     current_tag_exists = len(run("git", ["tag", "-l", current_tag])) > 0
 
     if not current_tag_exists:
@@ -173,7 +198,10 @@ def run_cmd(registry, args, flags):
             sys.exit(1)
 
         new_version = bump_version(current_version, bump_type)
-        tag = target.tag_format(new_version)
+        if monorepo_name:
+            tag = target.monorepo_tag_format(monorepo_name, new_version)
+        else:
+            tag = target.tag_format(new_version)
         log(f"New version: {new_version} ({bump_type})")
 
     # Check tag doesn't already exist
@@ -183,7 +211,7 @@ def run_cmd(registry, args, flags):
         sys.exit(1)
 
     # Validate changelog entry
-    changelog_path = os.path.join(".", "CHANGELOG.md")
+    changelog_path = os.path.join(version_dir, "CHANGELOG.md")
     if not os.path.exists(changelog_path):
         print(
             f"Error: CHANGELOG.md not found. Create one with a ## {new_version} section.",
@@ -205,7 +233,7 @@ def run_cmd(registry, args, flags):
         )
 
     # Run pre-release hook if present
-    pre_release_script = os.path.join(".", ".rlsbl", "hooks", "pre-release.sh")
+    pre_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-release.sh")
     if os.path.exists(pre_release_script):
         log("Running pre-release hook...")
         try:
@@ -216,22 +244,28 @@ def run_cmd(registry, args, flags):
             print("Error: pre-release hook failed. Fix the issues and try again.", file=sys.stderr)
             sys.exit(1)
 
+    # Commit message: scoped in monorepo mode, plain tag otherwise
+    commit_msg = f"{monorepo_name}: release v{new_version}" if monorepo_name else tag
+
     # Dry run: print summary and return
     if flags.get("dry-run", False):
         log("\n--- Dry run summary ---")
         log(f"Registry:  {registry}")
+        if monorepo_name:
+            log(f"Project:   {monorepo_name} ({monorepo_project_path})")
         if bump_type:
             log(f"Bump:      {current_version} -> {new_version} ({bump_type})")
         else:
             log(f"Version:   {new_version} (first release)")
         log(f"Tag:       {tag}")
+        log(f"Commit:    {commit_msg}")
         log(f"Branch:    {branch}")
         # Show other version files that would be synced
         other_files = []
         for name, other_reg in TARGETS.items():
             if name == registry:
                 continue
-            if other_reg.check_project_exists("."):
+            if other_reg.check_project_exists(version_dir):
                 other_file = other_reg.get_version_file()
                 if other_file:
                     other_files.append(other_file)
@@ -252,6 +286,9 @@ def run_cmd(registry, args, flags):
             registry, reg, flags, quiet, log, new_version, current_version,
             bump_type, tag, branch, changelog_entry, target,
             secondary_targets=secondary_targets,
+            monorepo_name=monorepo_name,
+            version_dir=version_dir,
+            commit_msg=commit_msg,
         )
     finally:
         release_lock()
@@ -259,21 +296,29 @@ def run_cmd(registry, args, flags):
 
 def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current_version,
                           bump_type, tag, branch, changelog_entry, target,
-                          secondary_targets=None):
+                          secondary_targets=None, monorepo_name=None,
+                          version_dir=".", commit_msg=None):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
+    if commit_msg is None:
+        commit_msg = tag
+
+    def vpath(filename):
+        """Join filename with version_dir and normalize (e.g. './x' -> 'x')."""
+        return os.path.normpath(os.path.join(version_dir, filename))
+
     # Pre-compute which files will be modified
     version_file = reg.get_version_file()
     files_to_commit = []
     if version_file:
-        files_to_commit.append(version_file)
+        files_to_commit.append(vpath(version_file))
     # Sync version to other registries
     for name, other_reg in TARGETS.items():
         if name == registry:
             continue
-        if other_reg.check_project_exists("."):
+        if other_reg.check_project_exists(version_dir):
             other_file = other_reg.get_version_file()
             if other_file:
-                files_to_commit.append(other_file)
+                files_to_commit.append(vpath(other_file))
 
     # Confirmation prompt (skip with --yes)
     if not flags.get("yes"):
@@ -298,38 +343,40 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     # Write new version to version files (skip if version didn't change, e.g. first release)
     if new_version != current_version:
         if version_file:
-            reg.write_version(".", new_version)
-            log(f"Updated version in {version_file}")
+            reg.write_version(version_dir, new_version)
+            log(f"Updated version in {vpath(version_file)}")
 
         # Sync version to all other recognized version files
         for name, other_reg in TARGETS.items():
             if name == registry:
                 continue
-            if other_reg.check_project_exists("."):
+            if other_reg.check_project_exists(version_dir):
                 other_file = other_reg.get_version_file()
                 if other_file:
-                    other_reg.write_version(".", new_version)
-                    log(f"Synced version to {other_file}")
+                    other_reg.write_version(version_dir, new_version)
+                    log(f"Synced version to {vpath(other_file)}")
 
     # Ecosystem tagging: add keyword to manifests if enabled
     if should_tag(flags):
         try:
-            if TARGETS["npm"].check_project_exists("."):
-                if ensure_npm_keyword(".", quiet=quiet):
-                    if "package.json" not in files_to_commit:
-                        files_to_commit.append("package.json")
+            if TARGETS["npm"].check_project_exists(version_dir):
+                if ensure_npm_keyword(version_dir, quiet=quiet):
+                    pkg_path = vpath("package.json")
+                    if pkg_path not in files_to_commit:
+                        files_to_commit.append(pkg_path)
         except Exception:
             pass
         try:
-            if TARGETS["pypi"].check_project_exists("."):
-                if ensure_pypi_keyword(".", quiet=quiet):
-                    if "pyproject.toml" not in files_to_commit:
-                        files_to_commit.append("pyproject.toml")
+            if TARGETS["pypi"].check_project_exists(version_dir):
+                if ensure_pypi_keyword(version_dir, quiet=quiet):
+                    pyproject_path = vpath("pyproject.toml")
+                    if pyproject_path not in files_to_commit:
+                        files_to_commit.append(pyproject_path)
         except Exception:
             pass
 
     # Update .rlsbl/version marker so it's included in the release commit
-    rlsbl_version_marker = os.path.join(".rlsbl", "version")
+    rlsbl_version_marker = vpath(os.path.join(".rlsbl", "version"))
     if os.path.exists(os.path.dirname(rlsbl_version_marker)):
         try:
             from .. import __version__ as rlsbl_ver
@@ -342,7 +389,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
     # Build step (no-op for npm/pypi/go targets)
     try:
-        target.build(".", new_version)
+        target.build(version_dir, new_version)
     except Exception as e:
         print(f"Warning: target build step failed: {e}", file=sys.stderr)
 
@@ -378,11 +425,11 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     if files_to_commit and needs_commit:
         commit_tool = find_commit_tool()
         if commit_tool == "safegit":
-            run(commit_tool, ["commit", "-m", tag, "--", *files_to_commit])
+            run(commit_tool, ["commit", "-m", commit_msg, "--", *files_to_commit])
         else:
             run("git", ["add", *files_to_commit])
-            run("git", ["commit", "-m", tag])
-        log(f"Committed: {tag}")
+            run("git", ["commit", "-m", commit_msg])
+        log(f"Committed: {commit_msg}")
     elif not needs_commit:
         log("No changes to commit")
 
@@ -415,7 +462,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
     # Publish step (no-op for npm/pypi/go targets)
     try:
-        target.publish(".", new_version)
+        target.publish(version_dir, new_version)
     except Exception as e:
         print(f"Warning: target publish step failed: {e}", file=sys.stderr)
 
@@ -427,11 +474,11 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
             if sec_target is None:
                 continue
             try:
-                sec_target.build(".", new_version)
+                sec_target.build(version_dir, new_version)
             except Exception as e:
                 print(f"Warning: {sec_name} target build failed: {e}", file=sys.stderr)
             try:
-                sec_target.publish(".", new_version)
+                sec_target.publish(version_dir, new_version)
             except Exception as e:
                 print(f"Warning: {sec_name} target publish failed: {e}", file=sys.stderr)
 
@@ -440,7 +487,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         ensure_github_topic(quiet=quiet)
 
     # Run post-release hook if present (non-fatal: release is already complete)
-    post_release_script = os.path.join(".", ".rlsbl", "hooks", "post-release.sh")
+    post_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "post-release.sh")
     if os.path.exists(post_release_script):
         log("Running post-release hook...")
         try:
