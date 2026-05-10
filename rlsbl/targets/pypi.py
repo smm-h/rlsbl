@@ -10,6 +10,8 @@ import tomlkit
 from .base import BaseTarget
 from ..utils import run
 
+_MIN_VERSION_RE = re.compile(r">=\s*(\d+\.\d+(?:\.\d+)?)")
+
 
 class PypiTarget(BaseTarget):
     """Release target for Python projects (pyproject.toml)."""
@@ -20,6 +22,34 @@ class PypiTarget(BaseTarget):
 
     def detect(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "pyproject.toml"))
+
+    def read_name(self, dir_path):
+        """Read the project name from pyproject.toml."""
+        toml_path = os.path.join(dir_path, "pyproject.toml")
+        if not os.path.exists(toml_path):
+            return None
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+        return data.get("project", {}).get("name")
+
+    def read_metadata(self, dir_path):
+        """Read license and description from pyproject.toml."""
+        toml_path = os.path.join(dir_path, "pyproject.toml")
+        if not os.path.exists(toml_path):
+            return {}
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+        project = data.get("project", {})
+        result = {}
+        license_val = project.get("license")
+        if isinstance(license_val, str):
+            result["license"] = license_val
+        elif isinstance(license_val, dict) and license_val.get("text"):
+            result["license"] = license_val["text"]
+        description = project.get("description")
+        if description:
+            result["description"] = description
+        return result
 
     def read_version(self, dir_path):
         """Read the version from pyproject.toml in the given directory."""
@@ -107,7 +137,7 @@ class PypiTarget(BaseTarget):
             else:
                 import_name = underscored  # fallback to convention
 
-        return {
+        result = {
             "name": name,
             "version": version,
             "binCommand": bin_command,
@@ -116,6 +146,14 @@ class PypiTarget(BaseTarget):
             "importName": import_name,
             "publishSetup": "Configure Trusted Publishing on pypi.org for automated PyPI releases",
         }
+
+        requires_python = project.get("requires-python")
+        if requires_python:
+            m = _MIN_VERSION_RE.search(requires_python)
+            if m:
+                result["minRequiredPython"] = m.group(1)
+
+        return result
 
     def template_mappings(self):
         return [
