@@ -138,6 +138,42 @@ class TestSaveWorkspace:
         assert loaded == [{"path": "b", "name": "b"}]
 
 
+class TestWorkspaceExtraKeys:
+    """Tests for extra-key preservation in save_workspace round-trips."""
+
+    def test_extra_keys_survive_roundtrip(self, tmp_project):
+        projects = [
+            {
+                "path": "packages/foo",
+                "name": "foo",
+                "watch": ["Package.swift"],
+            }
+        ]
+        save_workspace(str(tmp_project), projects)
+        loaded = load_workspace(str(tmp_project))
+        assert loaded == projects
+        assert loaded[0]["watch"] == ["Package.swift"]
+
+    def test_save_preserves_key_order(self, tmp_project):
+        projects = [
+            {
+                "path": "libs/bar",
+                "name": "bar",
+                "watch": ["src/**"],
+                "subtree_remote": "git@example.com:bar.git",
+            }
+        ]
+        save_workspace(str(tmp_project), projects)
+        toml_path = tmp_project / ".rlsbl-monorepo" / "workspace.toml"
+        content = toml_path.read_text()
+        # path must come before name, name before extras, extras sorted
+        path_pos = content.index("path")
+        name_pos = content.index("name")
+        subtree_pos = content.index("subtree_remote")
+        watch_pos = content.index("watch")
+        assert path_pos < name_pos < subtree_pos < watch_pos
+
+
 class TestResolveProject:
     """Tests for resolve_project."""
 

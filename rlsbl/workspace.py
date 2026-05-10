@@ -82,6 +82,9 @@ def save_workspace(root, projects):
             table = tomlkit.table()
             table.add("path", proj["path"])
             table.add("name", proj["name"])
+            for key in sorted(proj.keys()):
+                if key not in ("path", "name"):
+                    table.add(key, proj[key])
             aot.append(table)
         doc.add("projects", aot)
 
