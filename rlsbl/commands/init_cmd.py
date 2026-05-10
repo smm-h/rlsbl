@@ -17,6 +17,33 @@ from ..utils import find_commit_tool, is_private_repo
 HASHES_FILE = os.path.join(".rlsbl", "hashes.json")
 BASES_DIR = os.path.join(".rlsbl", "bases")
 
+_NPM_LOCKFILES = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock")
+
+
+def _check_npm_lockfile_missing():
+    """Check if any npm lockfile exists from cwd up to the git root.
+
+    Returns True if no lockfile is found (i.e., lockfile is missing).
+    Prints a warning to stderr when missing.
+    """
+    current = os.path.abspath(".")
+    while True:
+        for lockfile in _NPM_LOCKFILES:
+            if os.path.exists(os.path.join(current, lockfile)):
+                return False
+        # Stop if we reached the git root
+        if os.path.isdir(os.path.join(current, ".git")):
+            break
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    print(
+        'Warning: no lockfile found. CI uses "npm ci" which requires package-lock.json.',
+        file=sys.stderr,
+    )
+    return True
+
 # Files owned by the user after initial scaffold -- never overwrite or merge
 USER_OWNED = {
     "CHANGELOG.md",
@@ -315,12 +342,14 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
 
 
 def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnings,
-                       registry=None, flags=None, registries=None):
+                       registry=None, flags=None, registries=None,
+                       npm_lockfile_missing=False):
     """Shared post-processing for scaffold: chmod, hooks, version marker, hashes, tagging, summary.
 
     all_hash_dicts is a list of dicts to merge into existing_hashes.
     flags is the CLI flags dict (used for tagging check).
     registries is a list of registry names (used for tagging).
+    npm_lockfile_missing: if True, prepend a lockfile step to npm next steps.
     """
     if flags is None:
         flags = {}
@@ -392,6 +421,9 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
     if registry:
         steps = NEXT_STEPS.get(registry)
         if steps:
+            steps = list(steps)
+            if npm_lockfile_missing:
+                steps.insert(0, 'Run "npm install" and commit package-lock.json before pushing')
             print("\nNext steps:")
             for i, step in enumerate(steps, 1):
                 print(f"  {i}. {step}")
@@ -530,6 +562,11 @@ def run_cmd(registry, args, flags):
         print(reg.get_project_init_hint(), file=sys.stderr)
         sys.exit(1)
 
+    # Check for npm lockfile
+    npm_lockfile_missing = False
+    if registry == "npm":
+        npm_lockfile_missing = _check_npm_lockfile_missing()
+
     # Acquire advisory lock to prevent concurrent rlsbl operations
     acquire_lock()
 
@@ -598,6 +635,7 @@ def run_cmd(registry, args, flags):
             existing_hashes, [reg_hashes, shared_hashes],
             created, skipped, warnings, registry=registry,
             flags=flags, registries=[registry],
+            npm_lockfile_missing=npm_lockfile_missing,
         )
 
         if private:
@@ -834,6 +872,11 @@ def run_cmd_multi(registries_list, args, flags):
         print(f"Error: no {primary} project found in current directory.", file=sys.stderr)
         sys.exit(1)
 
+    # Check for npm lockfile
+    npm_lockfile_missing = False
+    if "npm" in registries_list:
+        npm_lockfile_missing = _check_npm_lockfile_missing()
+
     # Acquire advisory lock to prevent concurrent rlsbl operations
     acquire_lock()
 
@@ -957,11 +1000,17 @@ def run_cmd_multi(registries_list, args, flags):
             _print_private_summary()
         else:
             # Show combined next steps for dual-registry
+            steps = [
+                "Add an NPM_TOKEN secret to your GitHub repo (Settings > Secrets > Actions)",
+                "Configure Trusted Publishing on pypi.org",
+                "Push to GitHub to activate the CI workflow",
+                "Run rlsbl release [patch|minor|major]",
+            ]
+            if npm_lockfile_missing:
+                steps.insert(0, 'Run "npm install" and commit package-lock.json before pushing')
             print("\nNext steps:")
-            print("  1. Add an NPM_TOKEN secret to your GitHub repo (Settings > Secrets > Actions)")
-            print("  2. Configure Trusted Publishing on pypi.org")
-            print("  3. Push to GitHub to activate the CI workflow")
-            print("  4. Run rlsbl release [patch|minor|major]")
+            for i, step in enumerate(steps, 1):
+                print(f"  {i}. {step}")
 
         # If inside a monorepo, sync root CI workflows
         _trigger_monorepo_sync()
