@@ -728,6 +728,41 @@ class TestMavenTarget:
 import pytest
 
 
+class TestGoRootMainDetection:
+    """Tests for GoTarget._has_root_main() and _has_cmd_main() detection."""
+
+    def test_has_root_main_true(self, tmp_project):
+        target = GoTarget()
+        (tmp_project / "main.go").write_text("package main\n\nfunc main() {}\n")
+        assert target._has_root_main(str(tmp_project)) is True
+
+    def test_has_root_main_false(self, tmp_project):
+        target = GoTarget()
+        # No main.go at root
+        assert target._has_root_main(str(tmp_project)) is False
+
+    def test_has_cmd_main_single_binary(self, tmp_project):
+        target = GoTarget()
+        cmd_dir = tmp_project / "cmd" / "myapp"
+        cmd_dir.mkdir(parents=True)
+        (cmd_dir / "main.go").write_text("package main\n\nfunc main() {}\n")
+        assert target._has_cmd_main(str(tmp_project)) is True
+
+    def test_has_cmd_main_multi_binary(self, tmp_project):
+        target = GoTarget()
+        for name in ("foo", "bar"):
+            cmd_dir = tmp_project / "cmd" / name
+            cmd_dir.mkdir(parents=True)
+            (cmd_dir / "main.go").write_text("package main\n\nfunc main() {}\n")
+        # Multi-binary: cmd/ is correct, should return False
+        assert target._has_cmd_main(str(tmp_project)) is False
+
+    def test_has_cmd_main_no_cmd(self, tmp_project):
+        target = GoTarget()
+        # No cmd/ directory at all
+        assert target._has_cmd_main(str(tmp_project)) is False
+
+
 class TestDetectTargetsAutoDetection:
     """Parametrized test that verifies detect_targets() auto-detects all 11 auto-detectable targets."""
 

@@ -49,6 +49,33 @@ class GoTarget(BaseTarget):
                         return False
         return True
 
+    def _has_root_main(self, dir_path):
+        """Return True if there's a main.go at the project root with `package main`."""
+        main_go = os.path.join(dir_path, "main.go")
+        if not os.path.exists(main_go):
+            return False
+        with open(main_go, encoding="utf-8") as f:
+            first_line = f.readline()
+        return bool(re.match(r"^package\s+main\b", first_line))
+
+    def _has_cmd_main(self, dir_path):
+        """Return True if there's a single cmd/*/main.go with `package main`.
+
+        Returns False if there are multiple cmd/ subdirectories (multi-binary
+        repos where cmd/ is the correct layout) or no cmd/ entries at all.
+        """
+        matches = glob.glob(os.path.join(dir_path, "cmd", "*", "main.go"))
+        if not matches:
+            return False
+        # Count distinct cmd/ subdirectories (not just main.go files)
+        cmd_dirs = set(os.path.dirname(m) for m in matches)
+        if len(cmd_dirs) > 1:
+            return False
+        # Verify the single match has `package main`
+        with open(matches[0], encoding="utf-8") as f:
+            first_line = f.readline()
+        return bool(re.match(r"^package\s+main\b", first_line))
+
     def publish(self, dir_path, version):
         """Notify the Go module proxy so the new version is immediately available."""
         module_path = self._read_module_path(dir_path)
