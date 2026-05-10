@@ -47,6 +47,91 @@ def test_force_does_not_overwrite_changelog(tmp_project):
     assert "CHANGELOG.md" not in created_targets
 
 
+def test_force_does_not_overwrite_license(tmp_project):
+    """--force must NOT overwrite LICENSE if it already exists (regression for 1a1fc61)."""
+    assert "LICENSE" in USER_OWNED
+
+    # Pre-existing user content
+    license_file = tmp_project / "LICENSE"
+    license_file.write_text("MIT License\n\nCopyright (c) 2025 Custom Author\n")
+
+    # Set up a template directory with a LICENSE template
+    tpl_dir = tmp_project / "templates"
+    tpl_dir.mkdir()
+    (tpl_dir / "license.tpl").write_text("MIT License\n\nCopyright (c) {{year}} {{author}}\n")
+
+    mappings = [{"template": "license.tpl", "target": "LICENSE"}]
+
+    created, skipped, warnings, _ = process_mappings(
+        str(tpl_dir), mappings, {"year": "2026", "author": "Template Author"},
+        force=True, update=False,
+    )
+
+    # LICENSE must be skipped as user-owned, not overwritten
+    assert license_file.read_text() == "MIT License\n\nCopyright (c) 2025 Custom Author\n"
+    skipped_targets = [t for t, _ in skipped]
+    assert "LICENSE" in skipped_targets
+    created_targets = [t for t, _ in created]
+    assert "LICENSE" not in created_targets
+
+
+def test_template_author_never_literal(tmp_project):
+    """Template variables like {{author}} must be substituted, never left literal."""
+    tpl_dir = tmp_project / "templates"
+    tpl_dir.mkdir()
+    (tpl_dir / "license.tpl").write_text(
+        "MIT License\n\nCopyright (c) 2026 {{author}}\n"
+    )
+
+    mappings = [{"template": "license.tpl", "target": "LICENSE"}]
+
+    # With a non-empty author value
+    created, skipped, warnings, _ = process_mappings(
+        str(tpl_dir), mappings, {"author": "Test User"}, force=False, update=False,
+    )
+    license_file = tmp_project / "LICENSE"
+    content = license_file.read_text()
+    assert "Test User" in content
+    assert "{{author}}" not in content
+
+    # Remove the file and test with empty author -- empty is fine, literal is not
+    license_file.unlink()
+    created, skipped, warnings, _ = process_mappings(
+        str(tpl_dir), mappings, {"author": ""}, force=False, update=False,
+    )
+    content = license_file.read_text()
+    assert "{{author}}" not in content
+
+
+def test_force_does_not_overwrite_hooks(tmp_project):
+    """--force must NOT overwrite hook files in .rlsbl/hooks/."""
+    hook_path = ".rlsbl/hooks/pre-release.sh"
+    assert hook_path in USER_OWNED
+
+    # Pre-existing user hook
+    hook_file = tmp_project / ".rlsbl" / "hooks" / "pre-release.sh"
+    hook_file.parent.mkdir(parents=True, exist_ok=True)
+    hook_file.write_text("#!/bin/bash\necho 'my custom hook'\n")
+
+    # Set up a template directory with a hook template
+    tpl_dir = tmp_project / "templates"
+    tpl_dir.mkdir()
+    (tpl_dir / "pre-release.sh.tpl").write_text("#!/bin/bash\necho 'template hook'\n")
+
+    mappings = [{"template": "pre-release.sh.tpl", "target": hook_path}]
+
+    created, skipped, warnings, _ = process_mappings(
+        str(tpl_dir), mappings, {}, force=True, update=False,
+    )
+
+    # Hook must be skipped as user-owned, not overwritten
+    assert hook_file.read_text() == "#!/bin/bash\necho 'my custom hook'\n"
+    skipped_targets = [t for t, _ in skipped]
+    assert hook_path in skipped_targets
+    created_targets = [t for t, _ in created]
+    assert hook_path not in created_targets
+
+
 def test_force_overwrites_non_user_owned(tmp_project):
     """--force DOES overwrite non-user-owned files that already exist."""
     target = ".github/workflows/ci.yml"
