@@ -1,5 +1,6 @@
 """Status command: show project status summary."""
 
+import json as _json
 import os
 import sys
 
@@ -13,10 +14,10 @@ from ..utils import (
 from ..workspace import find_workspace_root, load_workspace, resolve_project
 
 
-def run_cmd(registry, args, flags):
-    """Status command handler.
+def _collect_status(registry):
+    """Collect status data as a dict.
 
-    Shows a quick 'where am I' summary: package info, git state, changelog, CI.
+    Returns None and prints an error if the project does not exist.
     """
     reg = TARGETS[registry]
 
@@ -28,7 +29,64 @@ def run_cmd(registry, args, flags):
     vars_dict = reg.get_template_vars(".")
     name = vars_dict.get("name") or "(unknown)"
 
-    print(f"Package:   {name}")
+    # Git branch
+    try:
+        branch = get_current_branch()
+    except Exception:
+        branch = None
+
+    # Last tag
+    try:
+        tag = run("git", ["describe", "--tags", "--abbrev=0"])
+    except Exception:
+        tag = None
+
+    # Clean tree
+    try:
+        clean = is_clean_tree()
+    except Exception:
+        clean = None
+
+    # Changelog
+    changelog_path = "CHANGELOG.md"
+    if os.path.exists(changelog_path):
+        entry = extract_changelog_entry(changelog_path, version)
+        changelog = bool(entry)
+    else:
+        changelog = None
+
+    # CI workflows
+    ci = os.path.exists(".github/workflows/ci.yml")
+    publish = os.path.exists(".github/workflows/publish.yml") or os.path.exists(
+        ".github/workflows/workflow.yml"
+    )
+
+    return {
+        "name": name,
+        "version": version,
+        "target": registry,
+        "branch": branch,
+        "tag": tag,
+        "clean": clean,
+        "changelog": changelog,
+        "ci": ci,
+        "publish": publish,
+    }
+
+
+def run_cmd(registry, args, flags):
+    """Status command handler.
+
+    Shows a quick 'where am I' summary: package info, git state, changelog, CI.
+    With --json, outputs machine-readable JSON instead.
+    """
+    data = _collect_status(registry)
+
+    if flags.get("json"):
+        print(_json.dumps(data, indent=2))
+        return
+
+    print(f"Package:   {data['name']}")
 
     # Show version info for all detected registries
     for r_name, r_mod in TARGETS.items():
@@ -38,43 +96,34 @@ def run_cmd(registry, args, flags):
             print(f"Version:   {ver} ({r_name}, {file})")
 
     # Git info
-    try:
-        branch = get_current_branch()
-        print(f"Branch:    {branch}")
-    except Exception:
+    if data["branch"] is not None:
+        print(f"Branch:    {data['branch']}")
+    else:
         print("Branch:    (not a git repo)")
 
     # Last tag
-    try:
-        last_tag = run("git", ["describe", "--tags", "--abbrev=0"])
-        print(f"Last tag:  {last_tag}")
-    except Exception:
+    if data["tag"] is not None:
+        print(f"Last tag:  {data['tag']}")
+    else:
         print("Last tag:  (none)")
 
     # Clean tree
-    try:
-        print(f"Clean:     {'yes' if is_clean_tree() else 'no'}")
-    except Exception:
+    if data["clean"] is not None:
+        print(f"Clean:     {'yes' if data['clean'] else 'no'}")
+    else:
         print("Clean:     (unknown)")
 
     # Changelog
-    changelog_path = "CHANGELOG.md"
-    if os.path.exists(changelog_path):
-        entry = extract_changelog_entry(changelog_path, version)
-        if entry:
-            print(f"Changelog: has entry for {version}")
-        else:
-            print(f"Changelog: no entry for {version}")
-    else:
+    if data["changelog"] is None:
         print("Changelog: (not found)")
+    elif data["changelog"]:
+        print(f"Changelog: has entry for {data['version']}")
+    else:
+        print(f"Changelog: no entry for {data['version']}")
 
     # CI workflows
-    ci_exists = os.path.exists(".github/workflows/ci.yml")
-    publish_exists = os.path.exists(".github/workflows/publish.yml") or os.path.exists(
-        ".github/workflows/workflow.yml"
-    )
-    print(f"CI:        {'yes' if ci_exists else 'missing'}")
-    print(f"Publish:   {'yes' if publish_exists else 'missing'}")
+    print(f"CI:        {'yes' if data['ci'] else 'missing'}")
+    print(f"Publish:   {'yes' if data['publish'] else 'missing'}")
 
     # Monorepo awareness
     try:
@@ -83,7 +132,7 @@ def run_cmd(registry, args, flags):
             projects = load_workspace(ws_root)
             project = resolve_project(ws_root, ".")
             if project is not None:
-                mono_tag = f"{project['name']}@v{version}"
+                mono_tag = f"{project['name']}@v{data['version']}"
                 print(f"Mono tag:  {mono_tag}")
             count = len(projects)
             print(f"Part of monorepo ({count} project{'s' if count != 1 else ''}). Run 'rlsbl monorepo status' for all.")

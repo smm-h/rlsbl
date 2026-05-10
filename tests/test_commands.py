@@ -898,6 +898,49 @@ class TestResolveReleaseTargets(unittest.TestCase):
         self.assertNotIn("nonexistent", result)
 
 
+class TestStatusJson(unittest.TestCase):
+    """Tests for rlsbl.commands.status --json flag."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+        # Create a git repo
+        os.system("git init -q .")
+        os.system("git config user.email test@test.local")
+        os.system("git config user.name Test")
+        # Create minimal npm project
+        with open("package.json", "w") as f:
+            json.dump({"name": "test-pkg", "version": "0.1.0"}, f, indent=2)
+            f.write("\n")
+        with open("CHANGELOG.md", "w") as f:
+            f.write("# Changelog\n\n## 0.1.0\n\nInitial release.\n")
+        os.system("git add package.json CHANGELOG.md")
+        os.system("git commit -q -m initial")
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    def test_status_json_output(self):
+        """With --json, status should output valid JSON with expected keys."""
+        from rlsbl.commands.status import run_cmd
+
+        with patch("sys.stdout", new_callable=StringIO) as mock_out:
+            run_cmd("npm", [], {"json": True})
+
+        output = mock_out.getvalue()
+        data = json.loads(output)
+        expected_keys = {"name", "version", "target", "branch", "tag",
+                         "clean", "changelog", "ci", "publish"}
+        self.assertEqual(set(data.keys()), expected_keys)
+        self.assertEqual(data["name"], "test-pkg")
+        self.assertEqual(data["version"], "0.1.0")
+        self.assertEqual(data["target"], "npm")
+        self.assertTrue(data["clean"])
+        self.assertTrue(data["changelog"])
+
+
 class TestMigrateCommand(unittest.TestCase):
     """Tests for rlsbl.commands.migrate."""
 
