@@ -607,6 +607,16 @@ def run_cmd(registry, args, flags):
         skipped = reg_skipped + shared_skipped
         warnings = reg_warnings + shared_warnings
 
+        # Warn if Go project has main in cmd/ but not at root
+        if registry == "go":
+            if reg._has_cmd_main(".") and not reg._has_root_main("."):
+                print(
+                    "Warning: Go project has main package in cmd/ but not at root.\n"
+                    "'go install module@latest' won't work. Consider moving main.go "
+                    "to the project root.",
+                    file=sys.stderr,
+                )
+
         _finalize_scaffold(
             existing_hashes, [reg_hashes, shared_hashes],
             created, skipped, warnings, registry=registry,
