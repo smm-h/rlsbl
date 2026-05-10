@@ -50,6 +50,47 @@ During `rlsbl scaffold` for Go projects:
 | `rlsbl/commands/init_cmd.py` | Call detection during scaffold, print warning |
 | `tests/test_targets.py` | Tests for root main detection |
 
+## Additional gaps discovered (migrable project, 2026-05-10)
+
+The migrable project required three manual steps after `rlsbl scaffold` that should be automated:
+
+### 1. debug.ReadBuildInfo version detection
+
+Both safegit and migrable needed manual addition of `debug.ReadBuildInfo()` fallback for `go install` users. When installed via `go install module@latest`, ldflags aren't set, so the version shows "dev". The fix is a standard pattern:
+
+```go
+if version == "dev" {
+    if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "(devel)" {
+        version = strings.TrimPrefix(info.Main.Version, "v")
+    }
+}
+```
+
+rlsbl scaffold should inject this into the project's main.go or version file during Go target scaffolding.
+
+### 2. goreleaser ldflags for version injection
+
+The goreleaser template (`rlsbl/templates/go/goreleaser.yml.tpl`) does not include ldflags for version injection. Both safegit and migrable needed this manually:
+
+```yaml
+ldflags:
+  - -s -w -X main.version={{.Version}}
+```
+
+The template should include this by default for Go projects with a detected `version` variable.
+
+### 3. goreleaser `main` field
+
+When main.go is at the root, goreleaser defaults to `main: .` which is correct. But if the scaffold detects `cmd/<name>/`, the goreleaser config should explicitly set `main: ./cmd/<name>` (or warn that `go install` won't work).
+
+### Affected files (additional)
+
+| File | Change |
+|------|--------|
+| `rlsbl/templates/go/goreleaser.yml.tpl` | Add ldflags with `-X main.version={{.Version}}` |
+| `rlsbl/targets/go.py` | Detect version variable location for ldflags path |
+| `rlsbl/commands/init_cmd.py` | Scaffold ReadBuildInfo pattern into main.go |
+
 ## Effort estimate
 
-~0.5 session. Detection is simple (glob for files, read first line). The move logic is more involved but optional (can start with warning-only).
+~1 session. Detection is simple (glob for files, read first line). The move logic is more involved but optional (can start with warning-only). The version detection scaffolding and goreleaser ldflags are straightforward template additions.
