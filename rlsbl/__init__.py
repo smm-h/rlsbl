@@ -39,7 +39,7 @@ def _detect_version():
 
 __version__ = _detect_version()
 
-COMMANDS = ("release", "status", "scaffold", "check", "config", "undo", "discover", "watch",
+COMMANDS = ("release", "status", "scaffold", "check", "undo", "discover", "watch",
             "pre-push-check", "prs", "record-gif", "unreleased", "targets", "monorepo")
 COMMAND_ALIASES = {"init": "scaffold"}
 
@@ -52,7 +52,6 @@ Usage:
   rlsbl status                                              Show project status
   rlsbl scaffold [--force] [--update] [--private]           Scaffold release infrastructure
   rlsbl check <name>                                        Check name availability
-  rlsbl config [show|init|migrate|status]                    Manage project configuration
   rlsbl undo [--yes]                                        Revert the last release
   rlsbl discover [--mine]                                   List rlsbl ecosystem projects
   rlsbl watch [<commit-sha>]                                Watch CI runs for a commit
@@ -126,7 +125,6 @@ def _get_command_module(command):
         "status": "status",
         "scaffold": "init_cmd",
         "check": "check",
-        "config": "config",
         "undo": "undo",
         "discover": "discover",
         "watch": "watch",
@@ -250,10 +248,6 @@ def main():
                     handler.run_cmd_multi(regs, args, flags)
                 else:
                     handler.run_cmd(regs[0], args, flags)
-        elif command == "config":
-            # config: auto-detect, pass first registry or fallback
-            regs = detect_registries()
-            handler.run_cmd(registry or (regs[0] if regs else "npm"), args, flags)
         elif command == "undo":
             # undo: auto-detect like release
             if not registry:
