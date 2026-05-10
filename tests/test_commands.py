@@ -814,7 +814,7 @@ class TestResolveReleaseTargets(unittest.TestCase):
         self.assertNotIn("docs", result)
         # npm is primary, excluded from secondaries
         self.assertNotIn("npm", result)
-        self.assertEqual(result, set())
+        self.assertEqual(result, {})
 
     def test_config_release_targets_includes_docs(self):
         """release_targets listing docs includes it even without auto-detect."""

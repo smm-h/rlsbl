@@ -6,7 +6,7 @@ import time
 
 from ..config import read_json_config, should_tag
 from ..lock import acquire_lock, release_lock
-from ..targets import TARGETS
+from ..targets import TARGETS, detect_targets, _parse_target_entry
 from ..tagging import ensure_github_topic, ensure_npm_keyword, ensure_pypi_keyword
 from ..workspace import find_workspace_root, load_workspace, resolve_project
 from ..utils import (
@@ -45,40 +45,62 @@ def parse_porcelain_paths(porcelain_output):
     return dirty_files
 
 
-def resolve_release_targets(primary, flags):
-    """Compute the effective set of secondary target names for this release.
+def resolve_target_paths(version_dir="."):
+    """Build a dict mapping target names to their resolved paths.
+
+    Uses detect_targets() which reads .rlsbl/config.json "targets" (supporting
+    both plain strings and dicts with "name"/"path") and falls back to
+    auto-detection.
+
+    Returns dict[str, str] mapping target name -> resolved directory path.
+    """
+    entries = detect_targets(version_dir)
+    return {e.name: e.path for e in entries}
+
+
+def resolve_release_targets(primary, flags, version_dir="."):
+    """Compute the effective set of secondary targets for this release.
 
     Precedence:
       1. Start with the baseline from .rlsbl/config.json "release_targets" list.
          If absent, fall back to auto-detect (all targets that detect(".")).
+         Entries can be plain strings or dicts with "name" and optional "path".
       2. Apply --include to add targets, --exclude to remove targets.
       3. The primary target is always excluded from the secondary set
          (it's handled separately by the main release flow).
 
-    Returns a set of target name strings.
+    Returns a dict mapping target name -> resolved directory path.
+    Dict key membership supports the same `"name" in result` checks as the
+    old set-based return type.
     """
     from ..targets import TARGETS as ALL_TARGETS
 
-    config = read_json_config(os.path.join(".rlsbl", "config.json"))
+    config = read_json_config(os.path.join(version_dir, ".rlsbl", "config.json"))
     configured = config.get("release_targets")
 
+    # Build baseline: dict of name -> path
     if configured is not None:
-        # Baseline from config -- only include targets that actually exist
-        baseline = {t for t in configured if t in ALL_TARGETS}
+        baseline = {}
+        for entry in configured:
+            try:
+                te = _parse_target_entry(entry, version_dir)
+            except (ValueError, TypeError):
+                # Unparseable entry -- skip
+                continue
+            if te.name in ALL_TARGETS:
+                baseline[te.name] = te.path
     else:
-        # Auto-detect: all targets that are present
-        baseline = {
-            name for name, t in ALL_TARGETS.items()
-            if t.detect(".")
-        }
+        # Auto-detect: use detect_targets which handles config and fallback
+        baseline = resolve_target_paths(version_dir)
 
     # Apply --include (comma-separated or repeated)
+    # Included targets without explicit path default to version_dir
     include_raw = flags.get("include")
     if include_raw:
         for name in include_raw.split(","):
             name = name.strip()
             if name:
-                baseline.add(name)
+                baseline.setdefault(name, version_dir)
 
     # Apply --exclude (comma-separated or repeated)
     exclude_raw = flags.get("exclude")
@@ -86,10 +108,10 @@ def resolve_release_targets(primary, flags):
         for name in exclude_raw.split(","):
             name = name.strip()
             if name:
-                baseline.discard(name)
+                baseline.pop(name, None)
 
     # Never include the primary target in the secondary set
-    baseline.discard(primary)
+    baseline.pop(primary, None)
 
     return baseline
 
@@ -169,8 +191,14 @@ def run_cmd(registry, args, flags):
     # Get target instance for tag_format/build/publish
     target = TARGETS[registry]
 
+    # Resolve per-target paths from config (supports subdirectory targets)
+    target_paths = resolve_target_paths(version_dir)
+
+    # Primary target's path: from config if available, else version_dir
+    primary_path = target_paths.get(registry, version_dir)
+
     # Current version
-    current_version = reg.read_version(version_dir)
+    current_version = reg.read_version(primary_path)
     log(f"Current version: {current_version}")
 
     # If the current version has never been tagged, release it as-is (bootstrap)
@@ -260,15 +288,17 @@ def run_cmd(registry, args, flags):
         log(f"Tag:       {tag}")
         log(f"Commit:    {commit_msg}")
         log(f"Branch:    {branch}")
-        # Show other version files that would be synced
+        # Show other version files that would be synced (with per-target paths)
         other_files = []
-        for name, other_reg in TARGETS.items():
-            if name == registry:
+        for t_name, t_path in target_paths.items():
+            if t_name == registry:
                 continue
-            if other_reg.check_project_exists(version_dir):
+            other_reg = TARGETS.get(t_name)
+            if other_reg and other_reg.check_project_exists(t_path):
                 other_file = other_reg.get_version_file()
                 if other_file:
-                    other_files.append(other_file)
+                    rel = os.path.relpath(os.path.join(t_path, other_file), version_dir)
+                    other_files.append(os.path.normpath(rel))
         if other_files:
             log(f"Sync to:   {', '.join(other_files)}")
         # Show subtree publishing info in dry-run
@@ -287,7 +317,7 @@ def run_cmd(registry, args, flags):
         return
 
     # Resolve which secondary targets participate in this release
-    secondary_targets = resolve_release_targets(registry, flags)
+    secondary_targets = resolve_release_targets(registry, flags, version_dir=version_dir)
 
     # Acquire advisory lock to prevent concurrent rlsbl operations
     acquire_lock()
@@ -301,6 +331,8 @@ def run_cmd(registry, args, flags):
             monorepo_project_path=monorepo_project_path,
             version_dir=version_dir,
             commit_msg=commit_msg,
+            primary_path=primary_path,
+            target_paths=target_paths,
         )
     finally:
         release_lock()
@@ -310,28 +342,42 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
                           bump_type, tag, branch, changelog_entry, target,
                           secondary_targets=None, monorepo_name=None,
                           monorepo_project_path=None,
-                          version_dir=".", commit_msg=None):
+                          version_dir=".", commit_msg=None,
+                          primary_path=None, target_paths=None):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     if commit_msg is None:
         commit_msg = tag
+    if primary_path is None:
+        primary_path = version_dir
+    if target_paths is None:
+        target_paths = resolve_target_paths(version_dir)
 
     def vpath(filename):
         """Join filename with version_dir and normalize (e.g. './x' -> 'x')."""
         return os.path.normpath(os.path.join(version_dir, filename))
 
+    def target_vpath(t_path, filename):
+        """Join filename with a target's resolved path, normalized.
+
+        Target paths from detect_targets() are already resolved relative to
+        the repo root, so we just join and normalize.
+        """
+        return os.path.normpath(os.path.join(t_path, filename))
+
     # Pre-compute which files will be modified
     version_file = reg.get_version_file()
     files_to_commit = []
     if version_file:
-        files_to_commit.append(vpath(version_file))
-    # Sync version to other registries
-    for name, other_reg in TARGETS.items():
-        if name == registry:
+        files_to_commit.append(target_vpath(primary_path, version_file))
+    # Sync version to other configured/detected targets (per-target paths)
+    for t_name, t_path in target_paths.items():
+        if t_name == registry:
             continue
-        if other_reg.check_project_exists(version_dir):
+        other_reg = TARGETS.get(t_name)
+        if other_reg and other_reg.check_project_exists(t_path):
             other_file = other_reg.get_version_file()
             if other_file:
-                files_to_commit.append(vpath(other_file))
+                files_to_commit.append(target_vpath(t_path, other_file))
 
     # Confirmation prompt (skip with --yes)
     if not flags.get("yes"):
@@ -356,33 +402,36 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     # Write new version to version files (skip if version didn't change, e.g. first release)
     if new_version != current_version:
         if version_file:
-            reg.write_version(version_dir, new_version)
-            log(f"Updated version in {vpath(version_file)}")
+            reg.write_version(primary_path, new_version)
+            log(f"Updated version in {target_vpath(primary_path, version_file)}")
 
-        # Sync version to all other recognized version files
-        for name, other_reg in TARGETS.items():
-            if name == registry:
+        # Sync version to other configured/detected targets (per-target paths)
+        for t_name, t_path in target_paths.items():
+            if t_name == registry:
                 continue
-            if other_reg.check_project_exists(version_dir):
+            other_reg = TARGETS.get(t_name)
+            if other_reg and other_reg.check_project_exists(t_path):
                 other_file = other_reg.get_version_file()
                 if other_file:
-                    other_reg.write_version(version_dir, new_version)
-                    log(f"Synced version to {vpath(other_file)}")
+                    other_reg.write_version(t_path, new_version)
+                    log(f"Synced version to {target_vpath(t_path, other_file)}")
 
     # Ecosystem tagging: add keyword to manifests if enabled
     if should_tag(flags):
+        npm_path = target_paths.get("npm", version_dir)
         try:
-            if TARGETS["npm"].check_project_exists(version_dir):
-                if ensure_npm_keyword(version_dir, quiet=quiet):
-                    pkg_path = vpath("package.json")
+            if TARGETS["npm"].check_project_exists(npm_path):
+                if ensure_npm_keyword(npm_path, quiet=quiet):
+                    pkg_path = target_vpath(npm_path, "package.json")
                     if pkg_path not in files_to_commit:
                         files_to_commit.append(pkg_path)
         except Exception:
             pass
+        pypi_path = target_paths.get("pypi", version_dir)
         try:
-            if TARGETS["pypi"].check_project_exists(version_dir):
-                if ensure_pypi_keyword(version_dir, quiet=quiet):
-                    pyproject_path = vpath("pyproject.toml")
+            if TARGETS["pypi"].check_project_exists(pypi_path):
+                if ensure_pypi_keyword(pypi_path, quiet=quiet):
+                    pyproject_path = target_vpath(pypi_path, "pyproject.toml")
                     if pyproject_path not in files_to_commit:
                         files_to_commit.append(pyproject_path)
         except Exception:
@@ -402,7 +451,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
     # Build step (no-op for npm/pypi/go targets)
     try:
-        target.build(version_dir, new_version)
+        target.build(primary_path, new_version)
     except Exception as e:
         print(f"Warning: target build step failed: {e}", file=sys.stderr)
 
@@ -513,7 +562,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
     # Publish step (no-op for npm/pypi/go targets)
     try:
-        target.publish(version_dir, new_version)
+        target.publish(primary_path, new_version)
     except Exception as e:
         print(f"Warning: target publish step failed: {e}", file=sys.stderr)
 
@@ -524,12 +573,13 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
             sec_target = ALL_TARGETS.get(sec_name)
             if sec_target is None:
                 continue
+            sec_path = secondary_targets[sec_name]
             try:
-                sec_target.build(version_dir, new_version)
+                sec_target.build(sec_path, new_version)
             except Exception as e:
                 print(f"Warning: {sec_name} target build failed: {e}", file=sys.stderr)
             try:
-                sec_target.publish(version_dir, new_version)
+                sec_target.publish(sec_path, new_version)
             except Exception as e:
                 print(f"Warning: {sec_name} target publish failed: {e}", file=sys.stderr)
 
