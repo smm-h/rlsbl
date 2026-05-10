@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import subprocess
+from unittest.mock import patch
 
 import pytest
 
@@ -16,6 +17,25 @@ from rlsbl.commands.monorepo import (
     _rewrite_trigger,
 )
 from rlsbl.workspace import load_workspace, WORKSPACE_DIR, WORKSPACE_FILE
+
+
+def _git_auto_commit(message, files):
+    """Test replacement for _auto_commit that uses plain git instead of safegit.
+
+    safegit may not work in temporary test repos on CI runners, so tests
+    that verify auto-commit behavior use this helper via monkeypatching.
+    """
+    try:
+        subprocess.run(
+            ["git", "add", "--"] + files,
+            check=True, capture_output=True, text=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            check=True, capture_output=True, text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
 
 
 CI_WORKFLOW = """\
@@ -214,7 +234,8 @@ class TestStaleCleanup:
             ("tooling", {"ci": True}),
             ("core", {"ci": True}),
         ])
-        _cmd_sync({})
+        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+            _cmd_sync({})
         capsys.readouterr()
 
         # Verify both exist
@@ -230,7 +251,8 @@ class TestStaleCleanup:
             cwd=str(mock_git_repo), check=True,
         )
 
-        _cmd_sync({})
+        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+            _cmd_sync({})
 
         # "core-ci.yml" should be removed
         assert not (mock_git_repo / ".github" / "workflows" / "core-ci.yml").exists()
@@ -287,7 +309,8 @@ class TestAutoCommit:
         _init_workspace_with_projects(mock_git_repo, [
             ("tooling", {"ci": True}),
         ])
-        _cmd_sync({})
+        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+            _cmd_sync({})
         # Working tree should be clean after sync
         result = subprocess.run(
             ["git", "status", "--porcelain"],

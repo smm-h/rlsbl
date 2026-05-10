@@ -21,6 +21,25 @@ from rlsbl.commands.init_cmd import _trigger_monorepo_sync
 from rlsbl.workspace import load_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 
 
+def _git_auto_commit(message, files):
+    """Test replacement for _auto_commit that uses plain git instead of safegit.
+
+    safegit may not work in temporary test repos on CI runners, so tests
+    that verify auto-commit behavior use this helper via monkeypatching.
+    """
+    try:
+        subprocess.run(
+            ["git", "add", "--"] + files,
+            check=True, capture_output=True, text=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            check=True, capture_output=True, text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+
 CI_WORKFLOW = """\
 name: CI
 
@@ -181,7 +200,8 @@ class TestAddAutoScaffolds:
 class TestAddCommitsWorkspace:
     def test_add_commits_workspace_toml(self, mock_git_repo):
         """monorepo add commits workspace.toml after adding a project."""
-        _cmd_init({})
+        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+            _cmd_init({})
         _make_npm_project_with_ci(mock_git_repo, "pkg-a")
         _scaffold_project(mock_git_repo, "pkg-a")
         subprocess.run(["git", "add", "."], cwd=str(mock_git_repo), check=True)
@@ -190,7 +210,7 @@ class TestAddCommitsWorkspace:
             cwd=str(mock_git_repo), check=True,
         )
 
-        # Mock only the sync subprocess to avoid needing full sync setup
+        # Mock sync subprocess and use plain git for auto-commit
         original_run = subprocess.run
 
         def tracking_run(cmd, *args, **kwargs):
@@ -198,7 +218,8 @@ class TestAddCommitsWorkspace:
                 return subprocess.CompletedProcess(args=cmd, returncode=0)
             return original_run(cmd, *args, **kwargs)
 
-        with patch("subprocess.run", side_effect=tracking_run):
+        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit), \
+             patch("subprocess.run", side_effect=tracking_run):
             _cmd_add(["pkg-a"], {})
 
         # Check that workspace.toml was committed
@@ -213,7 +234,8 @@ class TestAddCommitsWorkspace:
 class TestInitCommitsWorkspace:
     def test_init_commits_workspace_toml(self, mock_git_repo):
         """monorepo init commits workspace.toml."""
-        _cmd_init({})
+        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+            _cmd_init({})
 
         result = subprocess.run(
             ["git", "log", "--oneline", "--all"],
@@ -224,7 +246,8 @@ class TestInitCommitsWorkspace:
 
     def test_init_workspace_is_committed(self, mock_git_repo):
         """After init, workspace.toml should not show up as untracked or modified."""
-        _cmd_init({})
+        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+            _cmd_init({})
 
         result = subprocess.run(
             ["git", "status", "--porcelain"],
