@@ -228,7 +228,8 @@ class TestMergeTemplateVars:
             '[project]\nname = "test"\nversion = "1.0.0"\n'
             'requires-python = ">=3.11"\n'
         )
-        merged = _merge_template_vars(["npm", "pypi"], "npm", str(tmp_path))
+        target_paths = {"npm": str(tmp_path), "pypi": str(tmp_path)}
+        merged = _merge_template_vars(["npm", "pypi"], "npm", target_paths)
         # Primary (npm) vars are un-namespaced
         assert "name" in merged
         # All vars are namespaced
@@ -240,7 +241,8 @@ class TestMergeTemplateVars:
         (tmp_path / "package.json").write_text(
             '{"name": "test", "version": "1.0.0"}'
         )
-        merged = _merge_template_vars(["npm"], "npm", str(tmp_path))
+        target_paths = {"npm": str(tmp_path)}
+        merged = _merge_template_vars(["npm"], "npm", target_paths)
         # year is added by the caller, not _merge_template_vars
         assert "year" not in merged
 

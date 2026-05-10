@@ -174,7 +174,8 @@ class TestDetectTargets:
             with open(pkg_path, "w") as f:
                 json.dump({"name": "test-pkg", "version": "1.0.0"}, f)
             result = detect_targets(d)
-            assert "npm" in result
+            result_names = [entry.name for entry in result]
+            assert "npm" in result_names
 
     def test_detect_targets_empty_directory(self):
         """detect_targets('.') in an empty dir returns []."""
@@ -222,7 +223,7 @@ class TestDetectTargetsConfig:
             with open(os.path.join(rlsbl_dir, "config.json"), "w") as f:
                 json.dump({"targets": ["npm"]}, f)
             result = detect_targets(d)
-            assert result == ["npm"]
+            assert [entry.name for entry in result] == ["npm"]
 
     def test_no_config_falls_back_to_autodetection(self):
         """Without config, detect_targets uses auto-detection (backward compat)."""
@@ -231,7 +232,8 @@ class TestDetectTargetsConfig:
             with open(pkg_path, "w") as f:
                 json.dump({"name": "test", "version": "1.0.0"}, f)
             result = detect_targets(d)
-            assert "npm" in result
+            result_names = [entry.name for entry in result]
+            assert "npm" in result_names
 
     def test_empty_targets_array_returns_empty(self):
         """Explicit empty targets array means no targets."""
@@ -255,7 +257,7 @@ class TestDetectTargetsConfig:
             with open(os.path.join(rlsbl_dir, "config.json"), "w") as f:
                 json.dump({"targets": ["npm", "nonexistent"]}, f)
             result = detect_targets(d)
-            assert result == ["npm"]
+            assert [entry.name for entry in result] == ["npm"]
             captured = capsys.readouterr()
             assert "nonexistent" in captured.err
             assert "Warning" in captured.err
@@ -382,7 +384,7 @@ class TestSwiftAppleTarget:
         rlsbl_dir.mkdir()
         (rlsbl_dir / "config.json").write_text(json.dumps({"targets": ["swift-apple"]}))
         result = detect_targets(".")
-        assert result == ["swift-apple"]
+        assert [entry.name for entry in result] == ["swift-apple"]
 
     def test_tag_format(self):
         assert SwiftAppleTarget().tag_format("1.2.3") == "v{version}".format(version="1.2.3")
@@ -923,4 +925,5 @@ class TestDetectTargetsAutoDetection:
         marker = tmp_project / filename
         marker.write_text(content)
         result = detect_targets(".")
-        assert target_name in result
+        result_names = [entry.name for entry in result]
+        assert target_name in result_names
