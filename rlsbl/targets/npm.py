@@ -8,6 +8,8 @@ import subprocess
 from .base import BaseTarget
 from ..utils import run
 
+_MIN_VERSION_RE = re.compile(r">=\s*(\d+\.\d+(?:\.\d+)?)")
+
 
 class NpmTarget(BaseTarget):
     """Release target for npm/Node.js projects (package.json)."""
@@ -18,6 +20,31 @@ class NpmTarget(BaseTarget):
 
     def detect(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "package.json"))
+
+    def read_name(self, dir_path):
+        """Read the package name from package.json."""
+        pkg_path = os.path.join(dir_path, "package.json")
+        if not os.path.exists(pkg_path):
+            return None
+        with open(pkg_path, "r", encoding="utf-8") as f:
+            pkg = json.load(f)
+        return pkg.get("name")
+
+    def read_metadata(self, dir_path):
+        """Read license and description from package.json."""
+        pkg_path = os.path.join(dir_path, "package.json")
+        if not os.path.exists(pkg_path):
+            return {}
+        with open(pkg_path, "r", encoding="utf-8") as f:
+            pkg = json.load(f)
+        result = {}
+        license_val = pkg.get("license")
+        if license_val:
+            result["license"] = license_val
+        description = pkg.get("description")
+        if description:
+            result["description"] = description
+        return result
 
     def _detect_package_manager(self, dir_path):
         """Detect the package manager by walking up from dir_path to the git root.
@@ -118,7 +145,7 @@ class NpmTarget(BaseTarget):
         publish_config = pkg.get("publishConfig", {})
         registry_url = publish_config.get("registry", "https://registry.npmjs.org")
 
-        return {
+        result = {
             "name": pkg.get("name", ""),
             "version": pkg.get("version", "0.1.0"),
             "binCommand": bin_command,
@@ -128,6 +155,15 @@ class NpmTarget(BaseTarget):
             "publishSetup": "Requires NPM_TOKEN secret on GitHub (Settings > Secrets > Actions)",
             "packageManager": self._detect_package_manager(dir_path),
         }
+
+        engines = pkg.get("engines", {})
+        node_engine = engines.get("node")
+        if node_engine:
+            m = _MIN_VERSION_RE.search(node_engine)
+            if m:
+                result["minRequiredNode"] = m.group(1)
+
+        return result
 
     def template_mappings(self):
         pm = self._detect_package_manager(".")
