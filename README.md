@@ -4,7 +4,7 @@
 
 # rlsbl
 
-Release orchestration and project scaffolding CLI for npm, PyPI, and Go. Pure Python, no dependencies.
+Release orchestration and project scaffolding CLI for npm, PyPI, and Go. Pure Python, one dependency (tomlkit).
 
 ## Install
 

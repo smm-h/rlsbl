@@ -82,6 +82,58 @@ class TestPypiTarget:
         assert target.tag_format(None, "2.0.0") == "v2.0.0"
 
 
+class TestPypiWriteVersion:
+    """Tests for PypiTarget.write_version() with tomlkit."""
+
+    def test_write_version_with_project_urls_subtable(self):
+        """write_version correctly updates version when [project.urls] sub-table is present."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            content = (
+                '[project]\n'
+                'name = "my-pkg"\n'
+                'version = "1.0.0"\n'
+                '\n'
+                '[project.urls]\n'
+                'Repository = "https://github.com/user/repo"\n'
+                '\n'
+                '[build-system]\n'
+                'requires = ["hatchling"]\n'
+                'build-backend = "hatchling.build"\n'
+            )
+            with open(toml_path, "w") as f:
+                f.write(content)
+            target.write_version(d, "2.0.0")
+            with open(toml_path, "r") as f:
+                updated = f.read()
+            assert 'version = "2.0.0"' in updated
+            # Ensure [project.urls] is preserved
+            assert '[project.urls]' in updated
+            assert 'https://github.com/user/repo' in updated
+            # Ensure [build-system] is preserved
+            assert '[build-system]' in updated
+
+    def test_write_version_preserves_comments(self):
+        """write_version preserves inline comments and formatting."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            content = (
+                '[project]\n'
+                'name = "my-pkg"  # package name\n'
+                'version = "1.0.0"\n'
+                'description = "A test package"\n'
+            )
+            with open(toml_path, "w") as f:
+                f.write(content)
+            target.write_version(d, "3.5.0")
+            with open(toml_path, "r") as f:
+                updated = f.read()
+            assert 'version = "3.5.0"' in updated
+            assert '# package name' in updated
+
+
 class TestGoTarget:
     def test_is_release_target(self):
         target = GoTarget()

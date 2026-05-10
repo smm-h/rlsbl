@@ -4,9 +4,10 @@ import json
 import os
 import re
 import subprocess
-import tomllib
 import urllib.request
 import urllib.error
+
+import tomlkit
 
 from .utils import run
 
@@ -47,74 +48,26 @@ def ensure_npm_keyword(dir_path=".", quiet=False):
 
 def ensure_pypi_keyword(dir_path=".", quiet=False):
     """Add "rlsbl" to the keywords array in pyproject.toml if not already present."""
-    toml_path = os.path.join(dir_path, "pyproject.toml")
-    with open(toml_path, "rb") as f:
-        data = tomllib.load(f)
+    pyproject_path = os.path.join(dir_path, "pyproject.toml")
+    with open(pyproject_path, "r", encoding="utf-8") as f:
+        doc = tomlkit.parse(f.read())
 
-    # Check if already tagged
-    existing = data.get("project", {}).get("keywords", [])
-    if "rlsbl" in existing:
+    project = doc.get("project")
+    if project is None:
         return False
 
-    # Read as text for regex-based editing
-    with open(toml_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # Find [project] section boundaries
-    project_match = re.search(r"^\[project\]\s*$", content, re.MULTILINE)
-    if not project_match:
-        raise ValueError("No [project] section found in pyproject.toml")
-
-    section_start = project_match.end()
-    next_section = re.search(r"^\[", content[section_start:], re.MULTILINE)
-    section_end = section_start + next_section.start() if next_section else len(content)
-    section = content[section_start:section_end]
-
-    # Case 1: keywords field already exists -- add "rlsbl" to the array
-    # Use DOTALL to handle multi-line arrays (e.g. keywords = [\n  "foo",\n])
-    keywords_match = re.search(r'^(keywords\s*=\s*\[)(.*?)\]', section, re.MULTILINE | re.DOTALL)
-    if keywords_match:
-        prefix = keywords_match.group(1)
-        array_content = keywords_match.group(2)
-        # Detect if multi-line (contains newline between brackets)
-        if "\n" in array_content:
-            # Multi-line: insert before the closing bracket on its own line
-            # Find the indent used for existing items
-            item_indent_match = re.search(r'\n( +)"', array_content)
-            item_indent = item_indent_match.group(1) if item_indent_match else "    "
-            # Strip trailing comma to avoid double comma when the list
-            # already has a trailing comma before the closing bracket
-            stripped = array_content.rstrip()
-            stripped = stripped.rstrip(",")
-            new_array_content = stripped + f',\n{item_indent}"rlsbl"\n'
-        else:
-            # Single-line
-            if array_content.strip():
-                stripped_sl = array_content.rstrip().rstrip(",")
-                new_array_content = stripped_sl + ', "rlsbl"'
-            else:
-                new_array_content = '"rlsbl"'
-        new_field = prefix + new_array_content + "]"
-        updated_section = section[:keywords_match.start()] + new_field + section[keywords_match.end():]
+    keywords = project.get("keywords")
+    if keywords is None:
+        project["keywords"] = ["rlsbl"]
+    elif "rlsbl" in keywords:
+        return False
     else:
-        # Case 2: keywords field missing -- insert after the version line
-        version_match = re.search(r'^version\s*=\s*"[^"]*"\s*$', section, re.MULTILINE)
-        if version_match:
-            insert_pos = version_match.end()
-        else:
-            # Fallback: insert at the beginning of the section
-            insert_pos = 0
-        updated_section = (
-            section[:insert_pos] + '\nkeywords = ["rlsbl"]' + section[insert_pos:]
-        )
+        keywords.append("rlsbl")
 
-    updated = content[:section_start] + updated_section + content[section_end:]
-
-    # Atomic write: write to temp file, then rename
-    tmp_path = toml_path + ".tmp"
+    tmp_path = pyproject_path + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as f:
-        f.write(updated)
-    os.replace(tmp_path, toml_path)
+        f.write(tomlkit.dumps(doc))
+    os.replace(tmp_path, pyproject_path)
 
     if not quiet:
         print('Tagged pyproject.toml with "rlsbl" keyword')

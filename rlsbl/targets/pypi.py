@@ -5,6 +5,8 @@ import re
 import subprocess
 import tomllib
 
+import tomlkit
+
 from .base import BaseTarget
 from ..utils import run
 
@@ -34,43 +36,15 @@ class PypiTarget(BaseTarget):
             raise ValueError(f"No [project].version in {toml_path}")
 
     def write_version(self, dir_path, version):
-        """Write a new version to pyproject.toml using regex replacement.
-
-        tomllib is read-only (no stdlib TOML writer), so we use a regex to
-        replace the version string within the [project] section only,
-        preserving all other formatting.
-        """
-        toml_path = os.path.join(dir_path, "pyproject.toml")
-        with open(toml_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        # Find [project] section boundaries to avoid matching version keys
-        # in other sections (e.g. [tool.something])
-        project_match = re.search(r"^\[project\]\s*$", content, re.MULTILINE)
-        if not project_match:
-            raise ValueError("No [project] section found in pyproject.toml")
-
-        section_start = project_match.end()
-        # Find next top-level section header or EOF
-        next_section = re.search(r"^\[", content[section_start:], re.MULTILINE)
-        section_end = section_start + next_section.start() if next_section else len(content)
-
-        # Replace version only within [project] section
-        section = content[section_start:section_end]
-        updated_section = re.sub(
-            r'^(version\s*=\s*)"[^"]+"',
-            rf'\g<1>"{version}"',
-            section,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        updated = content[:section_start] + updated_section + content[section_end:]
-
-        # Atomic write: write to temp file, then rename
-        tmp_path = toml_path + ".tmp"
+        """Write a new version to pyproject.toml using tomlkit for round-trip editing."""
+        path = os.path.join(dir_path, "pyproject.toml")
+        with open(path, "r", encoding="utf-8") as f:
+            doc = tomlkit.parse(f.read())
+        doc["project"]["version"] = version
+        tmp_path = path + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
-            f.write(updated)
-        os.replace(tmp_path, toml_path)
+            f.write(tomlkit.dumps(doc))
+        os.replace(tmp_path, path)
 
     def version_file(self):
         return "pyproject.toml"

@@ -94,6 +94,43 @@ class TestEnsurePypiKeyword:
         result = ensure_pypi_keyword(str(tmp_path), quiet=True)
         assert result is False
 
+    def test_handles_project_urls_subtable(self, tmp_path):
+        """Ensure keyword insertion works when [project.urls] sub-table is present."""
+        content = (
+            '[project]\n'
+            'name = "my-pkg"\n'
+            'version = "1.0.0"\n'
+            'keywords = ["cli"]\n'
+            '\n'
+            '[project.urls]\n'
+            'Repository = "https://github.com/user/repo"\n'
+        )
+        (tmp_path / "pyproject.toml").write_text(content)
+        result = ensure_pypi_keyword(str(tmp_path), quiet=True)
+        assert result is True
+        updated = (tmp_path / "pyproject.toml").read_text()
+        assert '"rlsbl"' in updated
+        assert '"cli"' in updated
+        # Verify [project.urls] is preserved intact
+        assert '[project.urls]' in updated
+        assert 'https://github.com/user/repo' in updated
+
+    def test_keywords_with_nested_brackets(self, tmp_path):
+        """Ensure keyword insertion works when keywords contain bracket characters."""
+        content = (
+            '[project]\n'
+            'name = "my-pkg"\n'
+            'version = "1.0.0"\n'
+            'keywords = ["[beta]", "cli"]\n'
+        )
+        (tmp_path / "pyproject.toml").write_text(content)
+        result = ensure_pypi_keyword(str(tmp_path), quiet=True)
+        assert result is True
+        updated = (tmp_path / "pyproject.toml").read_text()
+        assert '"rlsbl"' in updated
+        assert '"[beta]"' in updated
+        assert '"cli"' in updated
+
 
 class TestEnsureGithubTopic:
     """Tests for ensure_github_topic."""
