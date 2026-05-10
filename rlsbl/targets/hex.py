@@ -18,6 +18,20 @@ class HexTarget(BaseTarget):
     def detect(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "mix.exs"))
 
+    def read_name(self, dir_path):
+        """Extract app name from mix.exs."""
+        mix_path = os.path.join(dir_path, "mix.exs")
+        if not os.path.exists(mix_path):
+            return None
+        with open(mix_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        app_match = re.search(r'app:\s*:(\w+)', content)
+        return app_match.group(1) if app_match else None
+
+    def read_metadata(self, dir_path):
+        """Hex metadata extraction not yet implemented."""
+        return {}
+
     def read_version(self, dir_path):
         """Read the version from mix.exs."""
         mix_path = os.path.join(dir_path, "mix.exs")

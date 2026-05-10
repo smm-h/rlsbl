@@ -25,6 +25,19 @@ class DockerTarget(BaseTarget):
     def detect(self, dir_path):
         return os.path.exists(os.path.join(dir_path, "Dockerfile"))
 
+    def read_name(self, dir_path):
+        """Return image name from config or directory name."""
+        config = read_project_config()
+        docker_config = config.get("docker", {})
+        image = docker_config.get("image")
+        if image:
+            return image
+        return os.path.basename(os.path.abspath(dir_path))
+
+    def read_metadata(self, dir_path):
+        """Docker projects have no standard metadata in the manifest."""
+        return {}
+
     def read_version(self, dir_path):
         """Read version from the VERSION file."""
         version_path = os.path.join(dir_path, VERSION_FILE)

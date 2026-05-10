@@ -21,6 +21,14 @@ class SpecTarget(BaseTarget):
     def name(self):
         return "spec"
 
+    def read_name(self, dir_path):
+        """Return the directory name as the project name."""
+        return os.path.basename(os.path.abspath(dir_path))
+
+    def read_metadata(self, dir_path):
+        """Spec projects have no standard metadata in version.json."""
+        return {}
+
     def detect(self, dir_path):
         """True if version.json exists in root or spec/ subdir."""
         return (

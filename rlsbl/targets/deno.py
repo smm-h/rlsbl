@@ -22,6 +22,21 @@ class DenoTarget(BaseTarget):
             or os.path.exists(os.path.join(dir_path, "deno.jsonc"))
         )
 
+    def read_name(self, dir_path):
+        """Read the package name from deno.json."""
+        config_path = self._config_path(dir_path)
+        if not config_path:
+            return None
+        with open(config_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        cleaned = self._strip_comments(content)
+        data = json.loads(cleaned)
+        return data.get("name")
+
+    def read_metadata(self, dir_path):
+        """deno.json has no standard license/description fields."""
+        return {}
+
     def _config_path(self, dir_path):
         """Return the path to deno.json or deno.jsonc, preferring deno.json."""
         json_path = os.path.join(dir_path, "deno.json")

@@ -25,6 +25,20 @@ class SwiftAppleTarget(BaseTarget):
         """Never auto-detect; must be declared in .rlsbl/config.json."""
         return False
 
+    def read_name(self, dir_path):
+        """Extract name from Package.swift."""
+        package_path = os.path.join(dir_path, "Package.swift")
+        if not os.path.exists(package_path):
+            return None
+        with open(package_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        match = re.search(r'name:\s*"([^"]+)"', content)
+        return match.group(1) if match else None
+
+    def read_metadata(self, dir_path):
+        """Swift packages have no standard license/description in Package.swift."""
+        return {}
+
     def read_version(self, dir_path):
         """Read version from the VERSION file."""
         version_path = os.path.join(dir_path, VERSION_FILE)
