@@ -114,12 +114,17 @@ class NpmTarget(BaseTarget):
             if match:
                 repo_name = match.group(1)
 
+        # Use publishConfig.registry from package.json if set, otherwise default
+        publish_config = pkg.get("publishConfig", {})
+        registry_url = publish_config.get("registry", "https://registry.npmjs.org")
+
         return {
             "name": pkg.get("name", ""),
             "version": pkg.get("version", "0.1.0"),
             "binCommand": bin_command,
             "author": pkg.get("author", ""),
             "repoName": repo_name,
+            "registryUrl": registry_url,
             "publishSetup": "Requires NPM_TOKEN secret on GitHub (Settings > Secrets > Actions)",
             "packageManager": self._detect_package_manager(dir_path),
         }

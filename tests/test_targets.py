@@ -824,6 +824,30 @@ class TestGoRootMainDetection:
         assert target._has_cmd_main(str(tmp_project)) is False
 
 
+class TestNpmRegistryUrl:
+    """Tests for NpmTarget.template_vars() registryUrl from publishConfig."""
+
+    def test_default_registry_url(self, tmp_path):
+        """Without publishConfig, registryUrl defaults to https://registry.npmjs.org."""
+        target = NpmTarget()
+        pkg = {"name": "test-pkg", "version": "1.0.0"}
+        (tmp_path / "package.json").write_text(json.dumps(pkg))
+        vars = target.template_vars(str(tmp_path))
+        assert vars["registryUrl"] == "https://registry.npmjs.org"
+
+    def test_custom_registry_url(self, tmp_path):
+        """publishConfig.registry in package.json overrides the default registryUrl."""
+        target = NpmTarget()
+        pkg = {
+            "name": "test-pkg",
+            "version": "1.0.0",
+            "publishConfig": {"registry": "https://npm.pkg.github.com"},
+        }
+        (tmp_path / "package.json").write_text(json.dumps(pkg))
+        vars = target.template_vars(str(tmp_path))
+        assert vars["registryUrl"] == "https://npm.pkg.github.com"
+
+
 class TestNpmPackageManagerDetection:
     """Tests for NpmTarget._detect_package_manager() and dynamic template selection."""
 
