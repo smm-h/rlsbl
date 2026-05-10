@@ -104,10 +104,12 @@ class TestRemove:
         captured = capsys.readouterr()
         assert "Removed project at pkg-a" in captured.out
 
-    def test_error_on_missing_project(self, mock_git_repo):
+    def test_warning_on_missing_project(self, mock_git_repo, capsys):
         _cmd_init({})
-        with pytest.raises(SystemExit):
-            _cmd_remove(["nonexistent"], {})
+        # Should NOT raise SystemExit -- just warn
+        _cmd_remove(["nonexistent"], {})
+        captured = capsys.readouterr()
+        assert "Warning:" in captured.err
 
     def test_normalizes_trailing_slash(self, mock_git_repo, capsys):
         _cmd_init({})
@@ -126,6 +128,17 @@ class TestRemove:
     def test_refuses_without_init(self, mock_git_repo):
         with pytest.raises(SystemExit):
             _cmd_remove(["pkg-a"], {})
+
+    def test_nonexistent_path_warns_without_exit(self, mock_git_repo, capsys):
+        """Removing a path not in the workspace prints a warning, does not sys.exit."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "pkg-a")
+        _cmd_add(["pkg-a"], {})
+        capsys.readouterr()
+        # Should NOT raise SystemExit
+        _cmd_remove(["nonexistent"], {})
+        captured = capsys.readouterr()
+        assert "Warning:" in captured.err
 
 
 class TestList:

@@ -238,6 +238,40 @@ class TestStaleCleanup:
         )
 
 
+class TestRewriteTrigger:
+    """Unit tests for _rewrite_trigger function."""
+
+    def test_single_line_trigger(self):
+        """Single-line 'on: push' is replaced with workflow_call."""
+        content = "on: push\n\njobs:\n  test:\n"
+        result = _rewrite_trigger(content)
+        assert "on:\n  workflow_call:" in result
+        assert "on: push" not in result
+
+    def test_single_line_array_trigger(self):
+        """Single-line 'on: [push, pull_request]' is replaced with workflow_call."""
+        content = "on: [push, pull_request]\n\njobs:\n"
+        result = _rewrite_trigger(content)
+        assert "on:\n  workflow_call:" in result
+        assert "[push, pull_request]" not in result
+
+    def test_no_on_block(self, capsys):
+        """Content without 'on:' is returned unchanged with a warning."""
+        content = "name: CI\njobs:\n  test:\n"
+        result = _rewrite_trigger(content)
+        assert result == content
+        captured = capsys.readouterr()
+        assert "Warning" in captured.err
+
+    def test_multi_line_on_no_jobs(self, capsys):
+        """Multi-line on: without jobs: is returned unchanged with a warning."""
+        content = "on:\n  push:\n    branches: [main]\n"
+        result = _rewrite_trigger(content)
+        assert result == content
+        captured = capsys.readouterr()
+        assert "Warning" in captured.err
+
+
 class TestAutoCommit:
     def test_sync_commits_changes(self, mock_git_repo, capsys):
         _init_workspace_with_projects(mock_git_repo, [

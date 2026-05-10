@@ -42,21 +42,20 @@ class TestMonorepoStatus:
         assert "Target" in captured.out
         assert "Version" in captured.out
         assert "Tag" in captured.out
-        assert "Status" in captured.out
+        assert "Unreleased" in captured.out
         # Project row
         assert "pkg-a" in captured.out
         assert "npm" in captured.out
         assert "1.0.0" in captured.out
 
     def test_status_shows_unreleased(self, mock_git_repo, capsys):
-        """Project with no tag or version > latest tag shows 'unreleased'."""
+        """Project with no tag shows (none) for tag and info in Unreleased column."""
         _cmd_init({})
         _make_npm_project(mock_git_repo, "mylib", version="0.2.0")
         _cmd_add(["mylib"], {})
         capsys.readouterr()
         _cmd_status({})
         captured = capsys.readouterr()
-        assert "unreleased" in captured.out
         assert "(none)" in captured.out
 
     def test_status_shows_released(self, mock_git_repo, capsys):
@@ -102,6 +101,61 @@ class TestMonorepoStatus:
         assert len(lines) == 3
         assert "alpha" in captured.out
         assert "beta" in captured.out
+
+
+class TestMonorepoStatusChangelog:
+    """Tests for the Unreleased changelog column in monorepo status."""
+
+    def test_no_changelog_file(self, mock_git_repo, capsys):
+        """Project with no CHANGELOG.md shows 'no changelog'."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "pkg-a", version="0.1.0")
+        _cmd_add(["pkg-a"], {})
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        assert "no changelog" in captured.out
+
+    def test_changelog_with_entries_no_tag(self, mock_git_repo, capsys):
+        """Changelog with bullets and no git tag shows entry count."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "pkg-b", version="0.1.0")
+        _cmd_add(["pkg-b"], {})
+        changelog = mock_git_repo / "pkg-b" / "CHANGELOG.md"
+        changelog.write_text("## 0.1.0\n- Added X\n- Added Y\n")
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        assert "2 entries" in captured.out
+
+    def test_changelog_entries_above_tagged_version(self, mock_git_repo, capsys):
+        """Only bullets above the tagged version heading are counted."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "proj", version="0.2.0")
+        _cmd_add(["proj"], {})
+        changelog = mock_git_repo / "proj" / "CHANGELOG.md"
+        changelog.write_text("## 0.2.0\n- New feature\n## 0.1.0\n- Initial\n")
+        # Create tag matching version 0.1.0
+        subprocess.run(
+            ["git", "tag", "proj@v0.1.0"],
+            cwd=str(mock_git_repo),
+            check=True,
+        )
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        assert "1 entry" in captured.out
+
+    def test_column_header_is_unreleased(self, mock_git_repo, capsys):
+        """The column header should be 'Unreleased', not 'Status'."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "pkg-c", version="0.1.0")
+        _cmd_add(["pkg-c"], {})
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        header_line = captured.out.strip().split("\n")[0]
+        assert "Unreleased" in header_line
 
 
 class TestStatusMonorepoAware:
