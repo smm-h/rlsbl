@@ -4,7 +4,7 @@ import json as _json
 import os
 import sys
 
-from ..targets import TARGETS
+from ..targets import TARGETS, detect_targets
 from ..utils import (
     extract_changelog_entry,
     get_current_branch,
@@ -14,19 +14,19 @@ from ..utils import (
 from ..workspace import find_workspace_root, load_workspace, resolve_project
 
 
-def _collect_status(registry):
+def _collect_status(registry, target_path="."):
     """Collect status data as a dict.
 
     Returns None and prints an error if the project does not exist.
     """
     reg = TARGETS[registry]
 
-    if not reg.check_project_exists("."):
+    if not reg.check_project_exists(target_path):
         print(f"No {registry} project found in current directory.", file=sys.stderr)
         sys.exit(1)
 
-    version = reg.read_version(".")
-    vars_dict = reg.get_template_vars(".")
+    version = reg.read_version(target_path)
+    vars_dict = reg.get_template_vars(target_path)
     name = vars_dict.get("name") or "(unknown)"
 
     # Git branch
@@ -80,7 +80,13 @@ def run_cmd(registry, args, flags):
     Shows a quick 'where am I' summary: package info, git state, changelog, CI.
     With --json, outputs machine-readable JSON instead.
     """
-    data = _collect_status(registry)
+    # Build per-target path mapping from detect_targets
+    target_entries = detect_targets(".")
+    target_paths = {entry.name: entry.path for entry in target_entries}
+
+    # Use per-target path for the primary registry
+    primary_path = target_paths.get(registry, ".")
+    data = _collect_status(registry, primary_path)
 
     if flags.get("json"):
         print(_json.dumps(data, indent=2))
@@ -88,12 +94,14 @@ def run_cmd(registry, args, flags):
 
     print(f"Package:   {data['name']}")
 
-    # Show version info for all detected registries
-    for r_name, r_mod in TARGETS.items():
-        if r_mod.check_project_exists("."):
-            ver = r_mod.read_version(".")
+    # Show version info for all detected targets with per-target paths
+    for entry_name, entry_path in target_paths.items():
+        r_mod = TARGETS[entry_name]
+        if r_mod.check_project_exists(entry_path):
+            ver = r_mod.read_version(entry_path)
             file = r_mod.get_version_file() or "git tag"
-            print(f"Version:   {ver} ({r_name}, {file})")
+            path_info = f", path={entry_path}" if entry_path != "." else ""
+            print(f"Version:   {ver} ({entry_name}, {file}{path_info})")
 
     # Git info
     if data["branch"] is not None:
