@@ -154,6 +154,16 @@ class GoTarget(BaseTarget):
         else:
             publish_setup = "GoReleaser handles binary publishing via GitHub Actions (no secrets needed)"
 
+        # Determine the main package path for goreleaser
+        if self._has_root_main(dir_path):
+            goreleaser_main = "."
+        elif self._has_cmd_main(dir_path):
+            matches = glob.glob(os.path.join(dir_path, "cmd", "*", "main.go"))
+            cmd_name = os.path.basename(os.path.dirname(matches[0]))
+            goreleaser_main = f"./cmd/{cmd_name}"
+        else:
+            goreleaser_main = "."
+
         return {
             "name": short_name,
             "modulePath": name,
@@ -162,6 +172,7 @@ class GoTarget(BaseTarget):
             "repoName": repo_name,
             "binCommand": short_name,
             "publishSetup": publish_setup,
+            "goreleaserMain": goreleaser_main,
         }
 
     def template_mappings(self):

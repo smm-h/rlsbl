@@ -1,7 +1,8 @@
 version: 2
 
 builds:
-  - env:
+  - main: {{goreleaserMain}}
+    env:
       - CGO_ENABLED=0
     ldflags:
       - -s -w -X main.version={{.Version}}
