@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.1
+
+- **Monorepo sync adds `working-directory`.** Synced CI workflows now include `defaults: run: working-directory: {path}` so steps run in the correct project subdirectory.
+- **Monorepo add shows guidance.** When no target is detected, the error now suggests which manifest files to create.
+- **Dynamic merged publish workflows.** Multi-target projects now get dynamically generated publish workflows composed from each target's individual template. Supports all 11 targets, replaces the static npm+pypi+go-only merged template.
+- **Deleted deprecated `rlsbl/registries/` shim modules.** The backward-compat shim from the REGISTRIES-to-TARGETS rename is removed. All code uses `rlsbl.targets` directly.
+- **Pinned `tomlkit>=0.12`** in dependencies.
+- **CI installs safegit** for monorepo auto-commit tests.
+- **Test fixes.** Monorepo tests work on CI runners. Added parametrized `detect_targets()` auto-detection test covering all 11 targets.
+
 ## 0.13.0
 
 - **Monorepo support.** New `rlsbl monorepo` command family for managing multi-project repos with independent versioning. Projects remain fully standalone — extracting to a solo repo requires zero config changes.
