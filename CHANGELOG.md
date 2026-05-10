@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.0
+
+- **Router watch paths.** Projects in a monorepo can declare extra file patterns to watch via `--watch` on `monorepo add` or the `watch` key in `workspace.toml`. The CI router generates multi-line path filters including both the project directory and all watch entries.
+- **Swift target split.** New `swift-apple` target for Apple-platform Swift projects (macOS-only CI). The existing `swift` target keeps macOS+ubuntu for server-side Swift. `swift-apple` requires explicit declaration in `.rlsbl/config.json` (no auto-detection).
+- **Subtree publishing.** Monorepo projects with `subtree_remote` configured get automatic git subtree pushes after release. The project's subdirectory is split and pushed to a mirror repo with plain semver tags, enabling SPM consumption. A GitHub Release is also created on the mirror. Failures are non-fatal.
+- **Explicit target enforcement.** `rlsbl scaffold` now warns when using auto-detected targets and always writes the detected target to `.rlsbl/config.json`, ensuring subsequent runs use explicit config.
+- **Workspace schema extended.** `save_workspace()` preserves all project keys (not just path/name), enabling `watch` and `subtree_remote` round-trips.
+- **`monorepo status` enhanced.** Optional Watch column (path count) and Remote column (subtree URL) appear when projects use these features.
+- **`monorepo sync` warns for Swift projects** without `subtree_remote`, since SPM can't resolve monorepo-style prefixed tags.
+- **12 registered targets.** swift-apple joins npm, pypi, go, swift, cargo, deno, docker, hex, maven, spec, docs.
+
 ## 0.13.1
 
 - **Monorepo sync adds `working-directory`.** Synced CI workflows now include `defaults: run: working-directory: {path}` so steps run in the correct project subdirectory.
