@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: go install github.com/smm-h/safegit@latest
+      - run: go install github.com/smm-h/safegit/cmd/safegit@latest
       - run: pip install . pytest
       - run: python -m rlsbl --version
       - run: python -m rlsbl --help
