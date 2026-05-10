@@ -15,9 +15,7 @@ def _auto_commit(message, files):
             ["safegit", "commit", "-m", message, "--"] + files,
             check=True, capture_output=True, text=True,
         )
-    except FileNotFoundError:
-        print("Error: safegit not found. Install it or check your PATH.", file=sys.stderr)
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         pass
 
 
