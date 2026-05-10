@@ -898,5 +898,24 @@ class TestResolveReleaseTargets(unittest.TestCase):
         self.assertNotIn("nonexistent", result)
 
 
+class TestScaffoldAutoDetection:
+    """Tests for scaffold auto-detection writing targets to config."""
+
+    def test_single_npm_scaffold_writes_target_to_config(self, mock_git_repo):
+        """After scaffolding a single npm project without existing config,
+        .rlsbl/config.json should contain targets: ["npm"]."""
+        pkg = {"name": "test-pkg", "version": "0.1.0"}
+        (mock_git_repo / "package.json").write_text(json.dumps(pkg))
+
+        with patch("sys.stdout", new_callable=StringIO):
+            run_cmd("npm", [], {"no-tag": True})
+
+        config_path = mock_git_repo / ".rlsbl" / "config.json"
+        assert config_path.exists(), ".rlsbl/config.json should be created"
+        config = json.loads(config_path.read_text())
+        assert "targets" in config, "config should have a 'targets' key"
+        assert config["targets"] == ["npm"], f"expected ['npm'], got {config['targets']}"
+
+
 if __name__ == "__main__":
     unittest.main()
