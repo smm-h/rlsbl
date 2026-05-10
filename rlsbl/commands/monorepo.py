@@ -86,6 +86,7 @@ def _cmd_add(args, flags):
         sys.exit(1)
 
     name = flags.get("name") or os.path.basename(path.rstrip("/"))
+    watch_raw = flags.get("watch")
 
     root = find_workspace_root(".")
     if root is None:
@@ -103,7 +104,10 @@ def _cmd_add(args, flags):
             print(f"Error: Project named '{name}' already exists in workspace.", file=sys.stderr)
             sys.exit(1)
 
-    projects.append({"path": path, "name": name})
+    project = {"path": path, "name": name}
+    if watch_raw:
+        project["watch"] = [w.strip() for w in watch_raw.split(",")]
+    projects.append(project)
     save_workspace(root, projects)
     print(f"Added project '{name}' at {path}")
 

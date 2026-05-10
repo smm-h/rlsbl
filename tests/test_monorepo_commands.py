@@ -91,6 +91,14 @@ class TestAdd:
         with pytest.raises(SystemExit):
             _cmd_add(["pkg-a"], {})
 
+    def test_watch_flag_creates_watch_list(self, mock_git_repo, capsys):
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "myproject")
+        _cmd_add(["myproject"], {"watch": "Package.swift,shared/**"})
+        projects = load_workspace(str(mock_git_repo))
+        assert len(projects) == 1
+        assert projects[0]["watch"] == ["Package.swift", "shared/**"]
+
 
 class TestRemove:
     def test_removes_project(self, mock_git_repo, capsys):
