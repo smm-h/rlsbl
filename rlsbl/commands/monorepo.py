@@ -419,6 +419,17 @@ def _cmd_sync(flags):
         msg += f" Removed {stale_removed} stale workflow(s)."
     print(msg)
 
+    # Warn about Swift projects without subtree_remote
+    for proj in projects:
+        proj_targets = detect_targets(proj["path"])
+        if any(t in ("swift", "swift-apple") for t in proj_targets):
+            if not proj.get("subtree_remote"):
+                print(
+                    f"Warning: Swift project '{proj['name']}' has no subtree_remote configured. "
+                    "SPM consumers won't be able to resolve monorepo tags.",
+                    file=sys.stderr,
+                )
+
 def _cmd_status(flags):
     root = find_workspace_root(".")
     if root is None:
@@ -497,29 +508,45 @@ def _cmd_status(flags):
         watch = proj.get("watch", [])
         watch_str = f"{len(watch)} paths" if watch else "-"
 
-        rows.append((name, path, target_name, version, latest_tag, unreleased_str, watch_str))
+        # Subtree remote
+        remote = proj.get("subtree_remote", "")
+        remote_str = remote if remote else "-"
+
+        rows.append((name, path, target_name, version, latest_tag, unreleased_str, watch_str, remote_str))
 
     # Determine if any project has watch paths
     any_watch = any(row[6] != "-" for row in rows)
+    # Determine if any project has a subtree remote
+    any_remote = any(row[7] != "-" for row in rows)
 
     # Calculate column widths
     base_headers = ("Project", "Path", "Target", "Version", "Tag", "Unreleased")
     if any_watch:
-        headers = base_headers + ("Watch",)
-    else:
-        headers = base_headers
+        base_headers = base_headers + ("Watch",)
+    if any_remote:
+        base_headers = base_headers + ("Remote",)
+    headers = base_headers
+
+    # Build display rows matching the dynamic header order
+    display_rows = []
+    for row in rows:
+        cells = list(row[:6])  # base columns: name, path, target, version, tag, unreleased
+        if any_watch:
+            cells.append(row[6])
+        if any_remote:
+            cells.append(row[7])
+        display_rows.append(tuple(cells))
 
     widths = [len(h) for h in headers]
-    for row in rows:
+    for cells in display_rows:
         for i in range(len(headers)):
-            widths[i] = max(widths[i], len(row[i]))
+            widths[i] = max(widths[i], len(cells[i]))
 
     # Print header
     header_line = "  ".join(h.ljust(widths[i]) for i, h in enumerate(headers))
     print(header_line)
 
     # Print rows
-    for row in rows:
-        cells = row[:len(headers)]
+    for cells in display_rows:
         line = "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(cells))
         print(line)
