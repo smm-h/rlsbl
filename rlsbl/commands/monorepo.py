@@ -1,6 +1,7 @@
 """Monorepo workspace management commands."""
 
 import os
+import re
 import subprocess
 import sys
 
@@ -435,18 +436,37 @@ def _cmd_status(flags):
         except Exception:
             pass
 
-        # Determine status
-        if latest_tag_version is None:
-            status = "unreleased"
-        elif version != latest_tag_version:
-            status = "unreleased"
+        # Count unreleased changelog entries
+        changelog_path = os.path.join(path, "CHANGELOG.md")
+        if not os.path.isfile(changelog_path):
+            unreleased_str = "no changelog"
         else:
-            status = "released"
+            with open(changelog_path, "r") as f:
+                changelog_text = f.read()
+            if latest_tag_version is None:
+                # No tag: count all bullet lines across all ## sections
+                count = sum(1 for line in changelog_text.splitlines() if line.startswith("- "))
+            else:
+                # Count bullet lines in ## sections above the tagged version
+                tag_pattern = re.compile(r"^## " + re.escape(latest_tag_version) + r"(\s|$)", re.MULTILINE)
+                match = tag_pattern.search(changelog_text)
+                if match:
+                    above = changelog_text[:match.start()]
+                    count = sum(1 for line in above.splitlines() if line.startswith("- "))
+                else:
+                    # Tagged version not found in changelog: count all bullets
+                    count = sum(1 for line in changelog_text.splitlines() if line.startswith("- "))
+            if count == 0:
+                unreleased_str = "0"
+            elif count == 1:
+                unreleased_str = "1 entry"
+            else:
+                unreleased_str = f"{count} entries"
 
-        rows.append((name, path, target_name, version, latest_tag, status))
+        rows.append((name, path, target_name, version, latest_tag, unreleased_str))
 
     # Calculate column widths
-    headers = ("Project", "Path", "Target", "Version", "Tag", "Status")
+    headers = ("Project", "Path", "Target", "Version", "Tag", "Unreleased")
     widths = [len(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):
