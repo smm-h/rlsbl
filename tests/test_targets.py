@@ -728,6 +728,56 @@ class TestMavenTarget:
 import pytest
 
 
+class TestGoScaffoldTemplates:
+    """Tests for Go scaffold template improvements (goreleaser main, version.go)."""
+
+    def test_goreleaser_main_root(self, tmp_project):
+        """Go project with main.go at root returns goreleaserMain: '.'"""
+        target = GoTarget()
+        (tmp_project / "go.mod").write_text("module github.com/user/myapp\n\ngo 1.21\n")
+        (tmp_project / "main.go").write_text("package main\n\nfunc main() {}\n")
+        (tmp_project / "VERSION").write_text("0.1.0\n")
+        vars = target.template_vars(str(tmp_project))
+        assert vars["goreleaserMain"] == "."
+
+    def test_goreleaser_main_cmd(self, tmp_project):
+        """Go project with cmd/myapp/main.go returns goreleaserMain: './cmd/myapp'"""
+        target = GoTarget()
+        (tmp_project / "go.mod").write_text("module github.com/user/myapp\n\ngo 1.21\n")
+        cmd_dir = tmp_project / "cmd" / "myapp"
+        cmd_dir.mkdir(parents=True)
+        (cmd_dir / "main.go").write_text("package main\n\nfunc main() {}\n")
+        (tmp_project / "VERSION").write_text("0.1.0\n")
+        vars = target.template_vars(str(tmp_project))
+        assert vars["goreleaserMain"] == "./cmd/myapp"
+
+    def test_goreleaser_main_fallback(self, tmp_project):
+        """Go project with no main.go anywhere returns goreleaserMain: '.'"""
+        target = GoTarget()
+        (tmp_project / "go.mod").write_text("module github.com/user/mylib\n\ngo 1.21\n")
+        (tmp_project / "VERSION").write_text("0.1.0\n")
+        vars = target.template_vars(str(tmp_project))
+        assert vars["goreleaserMain"] == "."
+
+    def test_version_go_in_binary_mappings(self, tmp_project):
+        """Go binary project includes version.go in template_mappings."""
+        target = GoTarget()
+        (tmp_project / "go.mod").write_text("module github.com/user/myapp\n\ngo 1.21\n")
+        (tmp_project / "main.go").write_text("package main\n\nfunc main() {}\n")
+        mappings = target.template_mappings()
+        targets = [m["target"] for m in mappings]
+        assert "version.go" in targets
+
+    def test_version_go_not_in_library_mappings(self, tmp_project):
+        """Go library project does NOT include version.go in template_mappings."""
+        target = GoTarget()
+        (tmp_project / "go.mod").write_text("module github.com/user/mylib\n\ngo 1.21\n")
+        (tmp_project / "lib.go").write_text("package mylib\n\nfunc Hello() string { return \"hello\" }\n")
+        mappings = target.template_mappings()
+        targets = [m["target"] for m in mappings]
+        assert "version.go" not in targets
+
+
 class TestGoRootMainDetection:
     """Tests for GoTarget._has_root_main() and _has_cmd_main() detection."""
 
