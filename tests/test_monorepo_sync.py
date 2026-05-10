@@ -142,6 +142,16 @@ class TestWorkflowCopy:
         _init_workspace_with_projects(mock_git_repo, [
             ("tooling", {"ci": False}),
         ])
+        # Auto-scaffold creates CI workflows; remove them to test the missing case
+        import shutil
+        wf_dir = mock_git_repo / "tooling" / ".github" / "workflows"
+        if wf_dir.exists():
+            shutil.rmtree(str(wf_dir))
+        # Also remove the synced copies at root
+        root_wf = mock_git_repo / ".github" / "workflows"
+        for f in root_wf.glob("tooling-*"):
+            f.chmod(0o644)
+            f.unlink()
         _cmd_sync({})
         captured = capsys.readouterr()
         assert "Warning" in captured.err

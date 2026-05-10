@@ -111,6 +111,10 @@ class TestMonorepoStatusChangelog:
         _cmd_init({})
         _make_npm_project(mock_git_repo, "pkg-a", version="0.1.0")
         _cmd_add(["pkg-a"], {})
+        # Auto-scaffold creates CHANGELOG.md; remove it to test the missing case
+        changelog = os.path.join(str(mock_git_repo), "pkg-a", "CHANGELOG.md")
+        if os.path.exists(changelog):
+            os.remove(changelog)
         capsys.readouterr()
         _cmd_status({})
         captured = capsys.readouterr()
