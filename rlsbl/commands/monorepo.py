@@ -351,6 +351,7 @@ def _cmd_sync(flags):
 
     # Remove stale workflows
     stale_removed = 0
+    deleted_files = []
     for filename in os.listdir(workflows_dir):
         filepath = os.path.join(workflows_dir, filename)
         if filepath in written_files:
@@ -362,17 +363,19 @@ def _cmd_sync(flags):
                 if proj_name not in current_project_names:
                     os.chmod(filepath, 0o644)
                     os.remove(filepath)
+                    deleted_files.append(filepath)
                     stale_removed += 1
 
     # Auto-commit
+    all_files = written_files + deleted_files
     try:
         subprocess.run(
-            ["safegit", "commit", "-m", "monorepo: sync CI workflows", "--"] + written_files,
+            ["safegit", "commit", "-m", "monorepo: sync CI workflows", "--"] + all_files,
             check=True,
         )
     except FileNotFoundError:
         # safegit not available, fall back to git
-        subprocess.run(["git", "add", "--"] + written_files, check=True)
+        subprocess.run(["git", "add", "--"] + all_files, check=True)
         subprocess.run(["git", "commit", "-m", "monorepo: sync CI workflows"], check=True)
 
     wf_count = len(written_files) - 1  # subtract router(s)

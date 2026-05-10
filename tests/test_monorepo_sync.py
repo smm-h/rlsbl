@@ -227,6 +227,16 @@ class TestStaleCleanup:
         # "tooling-ci.yml" should still exist
         assert (mock_git_repo / ".github" / "workflows" / "tooling-ci.yml").exists()
 
+        # Deletion should be committed -- working tree must be clean
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(mock_git_repo),
+            capture_output=True, text=True,
+        )
+        assert result.stdout.strip() == "", (
+            f"Working tree dirty after sync with stale deletion: {result.stdout}"
+        )
+
 
 class TestAutoCommit:
     def test_sync_commits_changes(self, mock_git_repo, capsys):
