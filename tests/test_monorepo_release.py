@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import patch, call
 
 import pytest
 
@@ -306,3 +306,124 @@ class TestMonorepoRelease:
 
         output = mock_out.getvalue()
         assert "Initial release of core component" in output
+
+
+class TestSubtreePublish:
+    """Tests for subtree publishing during monorepo releases."""
+
+    def _setup_monorepo_with_subtree(self, repo_root, project_name="tooling",
+                                     project_path="tooling", version="1.0.0",
+                                     changelog_version=None, subtree_remote=None):
+        """Create a monorepo workspace with optional subtree_remote."""
+        if changelog_version is None:
+            changelog_version = version
+
+        ws_dir = repo_root / ".rlsbl-monorepo"
+        ws_dir.mkdir(exist_ok=True)
+        ws_content = (
+            f'[[projects]]\npath = "{project_path}"\nname = "{project_name}"\n'
+        )
+        if subtree_remote:
+            ws_content += f'subtree_remote = "{subtree_remote}"\n'
+        (ws_dir / "workspace.toml").write_text(ws_content)
+
+        proj_dir = repo_root / project_path
+        proj_dir.mkdir(parents=True, exist_ok=True)
+        (proj_dir / "package.json").write_text(
+            json.dumps({"name": project_name, "version": version}, indent=2) + "\n"
+        )
+        (proj_dir / "CHANGELOG.md").write_text(
+            f"# Changelog\n\n## {changelog_version}\n\n"
+            "Patch release with bugfixes and improvements.\n"
+        )
+
+        subprocess.run(["git", "add", "."], cwd=str(repo_root), check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "add monorepo structure"],
+            cwd=str(repo_root), check=True,
+        )
+        return proj_dir
+
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_release_calls_subtree_push(
+        self, _gh_inst, _gh_auth, _clean, _branch, mock_run,
+        mock_git_repo, capsys,
+    ):
+        """Dry-run with subtree_remote shows subtree info in output."""
+        proj_dir = self._setup_monorepo_with_subtree(
+            mock_git_repo, "tooling", "tooling",
+            subtree_remote="git@github.com:user/tooling.git",
+        )
+        os.chdir(str(proj_dir))
+
+        # First release: tag doesn't exist
+        mock_run.side_effect = ["", "0", "", ""]
+
+        with patch("sys.stdout", new_callable=StringIO) as mock_out:
+            run_cmd("npm", ["patch"], {"dry-run": True, "quiet": False})
+
+        output = mock_out.getvalue()
+        assert "Subtree:" in output
+        assert "git@github.com:user/tooling.git" in output
+        assert "v1.0.0" in output
+
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_release_skips_subtree_without_config(
+        self, _gh_inst, _gh_auth, _clean, _branch, mock_run,
+        mock_git_repo, capsys,
+    ):
+        """Dry-run without subtree_remote does not show subtree info."""
+        proj_dir = self._setup_monorepo_with_subtree(
+            mock_git_repo, "tooling", "tooling",
+        )
+        os.chdir(str(proj_dir))
+
+        mock_run.side_effect = ["", "0", "", ""]
+
+        with patch("sys.stdout", new_callable=StringIO) as mock_out:
+            run_cmd("npm", ["patch"], {"dry-run": True, "quiet": False})
+
+        output = mock_out.getvalue()
+        assert "Subtree:" not in output
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_subtree_push_failure_nonfatal(
+        self, _gh_inst, _gh_auth, _clean, _branch, mock_run, _push,
+        mock_git_repo, capsys,
+    ):
+        """Subtree push failure does not abort the release."""
+        proj_dir = self._setup_monorepo_with_subtree(
+            mock_git_repo, "tooling", "tooling",
+            subtree_remote="git@github.com:user/tooling.git",
+        )
+        os.chdir(str(proj_dir))
+
+        def mock_run_side_effect(cmd, args, **kwargs):
+            if "rev-list" in args:
+                return "0"
+            if "rev-parse" in args and "HEAD" in args:
+                return "abc123"
+            # Subtree split: fail
+            if "subtree" in args:
+                raise RuntimeError("subtree split failed")
+            # Other commands (tag -l, git tag, git push, gh release, etc.): succeed
+            return ""
+
+        mock_run.side_effect = mock_run_side_effect
+
+        # The release should complete without raising, despite subtree failure
+        with patch("sys.stdout", new_callable=StringIO):
+            run_cmd("npm", [], {"yes": True, "quiet": False})

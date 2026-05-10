@@ -276,3 +276,51 @@ class TestMonorepoStatusWatch:
         _cmd_status({})
         captured = capsys.readouterr()
         assert "Watch" not in captured.out
+
+
+class TestMonorepoStatusRemote:
+    """Tests for subtree_remote display in monorepo status."""
+
+    def test_status_shows_remote_column(self, mock_git_repo, capsys):
+        """Project with subtree_remote shows Remote column with URL."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "tooling", version="1.0.0")
+        _cmd_add(["tooling"], {})
+
+        # Add subtree_remote to workspace
+        projects = load_workspace(".")
+        for p in projects:
+            if p["name"] == "tooling":
+                p["subtree_remote"] = "git@github.com:user/tooling.git"
+        save_workspace(".", projects)
+
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        assert "Remote" in captured.out
+        assert "git@github.com:user/tooling.git" in captured.out
+
+    def test_status_no_remote_shows_dash(self, mock_git_repo, capsys):
+        """Project without subtree_remote shows '-' when Remote column is present."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "tooling", version="1.0.0")
+        _make_npm_project(mock_git_repo, "core", version="1.0.0")
+        _cmd_add(["tooling"], {})
+        _cmd_add(["core"], {})
+
+        # Add subtree_remote only to tooling
+        projects = load_workspace(".")
+        for p in projects:
+            if p["name"] == "tooling":
+                p["subtree_remote"] = "git@github.com:user/tooling.git"
+        save_workspace(".", projects)
+
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        assert "Remote" in captured.out
+        # core should show "-" in the Remote column
+        lines = captured.out.strip().split("\n")
+        core_line = [l for l in lines if "core" in l and "tooling" not in l][0]
+        # The last column should be "-" for core (since it has no remote)
+        assert "-" in core_line

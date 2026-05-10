@@ -346,6 +346,41 @@ class TestRouterWatchPaths:
         assert "core: 'core/**'" in content
 
 
+class TestSwiftSubtreeWarning:
+    """Tests for the Swift subtree_remote warning in monorepo sync."""
+
+    def test_warns_swift_without_subtree_remote(self, mock_git_repo, capsys):
+        """Sync warns when a Swift project lacks subtree_remote."""
+        _cmd_init({})
+        # Create a Swift project (Package.swift triggers swift target detection)
+        proj_dir = os.path.join(str(mock_git_repo), "swiftpkg")
+        os.makedirs(proj_dir, exist_ok=True)
+        with open(os.path.join(proj_dir, "Package.swift"), "w") as f:
+            f.write("// swift-tools-version:5.9\n")
+        # Also need a version file for detect_targets
+        with open(os.path.join(proj_dir, "VERSION"), "w") as f:
+            f.write("0.1.0\n")
+        # Create a minimal CI workflow so sync has something to process
+        wf_dir = os.path.join(proj_dir, ".github", "workflows")
+        os.makedirs(wf_dir, exist_ok=True)
+        with open(os.path.join(wf_dir, "ci.yml"), "w") as f:
+            f.write(CI_WORKFLOW)
+        _cmd_add(["swiftpkg"], {})
+        subprocess.run(["git", "add", "."], cwd=str(mock_git_repo), check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "setup swift project"],
+            cwd=str(mock_git_repo), check=True,
+        )
+        capsys.readouterr()
+        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+            _cmd_sync({})
+        captured = capsys.readouterr()
+        assert "Warning" in captured.err
+        assert "swiftpkg" in captured.err
+        assert "subtree_remote" in captured.err
+        assert "SPM" in captured.err
+
+
 class TestAutoCommit:
     def test_sync_commits_changes(self, mock_git_repo, capsys):
         _init_workspace_with_projects(mock_git_repo, [
