@@ -70,8 +70,6 @@ Usage:
 Options:
   --target <npm|pypi|go>    Target a specific registry (auto-detected if omitted)
   --registry <npm|pypi|go>  Deprecated alias for --target
-  --include <target>        Add a target to the release (comma-separated)
-  --exclude <target>        Remove a target from the release (comma-separated)
   --no-tag               Disable ecosystem tagging for this invocation
   --private              Scaffold for private repos (skip publish, add asset upload hook)
   --help, -h             Show this help
@@ -96,7 +94,7 @@ def parse_args(argv):
     (e.g. --registry npm). All other --flags are boolean.
     """
     VALUE_FLAGS = ("registry", "target", "width", "height", "font-size", "duration",
-                   "include", "exclude", "name", "watch", "subtree-remote")
+                   "name", "watch", "subtree-remote")
     raw = argv[1:]
     positional = []
     flags = {}

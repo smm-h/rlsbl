@@ -772,7 +772,7 @@ class TestPrePushCheck(unittest.TestCase):
 
 
 class TestResolveReleaseTargets(unittest.TestCase):
-    """Tests for resolve_release_targets: config + --include/--exclude."""
+    """Tests for resolve_release_targets: config-based secondary target resolution."""
 
     def setUp(self):
         self.orig_dir = os.getcwd()
@@ -827,52 +827,6 @@ class TestResolveReleaseTargets(unittest.TestCase):
         result = resolve_release_targets("npm", {})
         self.assertIn("docs", result)
         self.assertNotIn("npm", result)
-
-    def test_include_flag_adds_target(self):
-        """--include adds a target that is not in the baseline."""
-        # No config, no selfdoc.json -> docs would not be auto-detected
-        from rlsbl.commands.release import resolve_release_targets
-
-        result = resolve_release_targets("npm", {"include": "docs"})
-        self.assertIn("docs", result)
-
-    def test_exclude_flag_removes_target(self):
-        """--exclude removes a target from the baseline."""
-        # Create selfdoc.json so docs would be auto-detected
-        with open("selfdoc.json", "w") as f:
-            f.write("{}")
-
-        from rlsbl.commands.release import resolve_release_targets
-
-        result = resolve_release_targets("npm", {"exclude": "docs"})
-        self.assertNotIn("docs", result)
-
-    def test_include_and_exclude_together(self):
-        """--include and --exclude can be used together; exclude wins for same target."""
-        from rlsbl.commands.release import resolve_release_targets
-
-        result = resolve_release_targets("npm", {"include": "docs", "exclude": "docs"})
-        # exclude is applied after include, so docs is removed
-        self.assertNotIn("docs", result)
-
-    def test_comma_separated_include(self):
-        """--include accepts comma-separated target names."""
-        from rlsbl.commands.release import resolve_release_targets
-
-        result = resolve_release_targets("npm", {"include": "docs,pypi"})
-        self.assertIn("docs", result)
-        self.assertIn("pypi", result)
-
-    def test_comma_separated_exclude(self):
-        """--exclude accepts comma-separated target names."""
-        with open("selfdoc.json", "w") as f:
-            f.write("{}")
-
-        from rlsbl.commands.release import resolve_release_targets
-
-        result = resolve_release_targets("npm", {"exclude": "docs,pypi"})
-        self.assertNotIn("docs", result)
-        self.assertNotIn("pypi", result)
 
     def test_primary_always_excluded_from_secondaries(self):
         """The primary target is never in the secondary set, even if config lists it."""

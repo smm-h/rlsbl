@@ -61,17 +61,14 @@ def resolve_target_paths(version_dir="."):
 def resolve_release_targets(primary, flags, version_dir="."):
     """Compute the effective set of secondary targets for this release.
 
-    Precedence:
-      1. Start with the baseline from .rlsbl/config.json "release_targets" list.
-         If absent, fall back to auto-detect (all targets that detect(".")).
-         Entries can be plain strings or dicts with "name" and optional "path".
-      2. Apply --include to add targets, --exclude to remove targets.
-      3. The primary target is always excluded from the secondary set
-         (it's handled separately by the main release flow).
+    Reads the baseline from .rlsbl/config.json "release_targets" list.
+    If absent, falls back to auto-detect (all targets that detect(".")).
+    Entries can be plain strings or dicts with "name" and optional "path".
+
+    The primary target is always excluded from the secondary set
+    (it's handled separately by the main release flow).
 
     Returns a dict mapping target name -> resolved directory path.
-    Dict key membership supports the same `"name" in result` checks as the
-    old set-based return type.
     """
     from ..targets import TARGETS as ALL_TARGETS
 
@@ -92,23 +89,6 @@ def resolve_release_targets(primary, flags, version_dir="."):
     else:
         # Auto-detect: use detect_targets which handles config and fallback
         baseline = resolve_target_paths(version_dir)
-
-    # Apply --include (comma-separated or repeated)
-    # Included targets without explicit path default to version_dir
-    include_raw = flags.get("include")
-    if include_raw:
-        for name in include_raw.split(","):
-            name = name.strip()
-            if name:
-                baseline.setdefault(name, version_dir)
-
-    # Apply --exclude (comma-separated or repeated)
-    exclude_raw = flags.get("exclude")
-    if exclude_raw:
-        for name in exclude_raw.split(","):
-            name = name.strip()
-            if name:
-                baseline.pop(name, None)
 
     # Never include the primary target in the secondary set
     baseline.pop(primary, None)

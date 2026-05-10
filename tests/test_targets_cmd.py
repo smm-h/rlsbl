@@ -179,45 +179,6 @@ class TestMultiTargetRelease:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
-    def test_exclude_docs_flag_suppresses_secondary(
-        self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
-    ):
-        """--exclude docs prevents secondary target build/publish from running."""
-        # Create selfdoc.json so docs target is detected
-        with open("selfdoc.json", "w") as f:
-            f.write("{}")
-
-        # fetch + rev-list (remote-ahead check) + original mock sequence
-        mock_run.side_effect = ["", "0", "v1.0.0", "", "", "", "", "", "", "", "abc123"]
-
-        from rlsbl.targets import TARGETS
-        original_build = TARGETS["docs"].build
-        original_publish = TARGETS["docs"].publish
-        build_mock = MagicMock()
-        publish_mock = MagicMock()
-        TARGETS["docs"].build = build_mock
-        TARGETS["docs"].publish = publish_mock
-
-        try:
-            from rlsbl.commands.release import run_cmd
-
-            with patch("sys.stdout", StringIO()):
-                run_cmd("npm", ["patch"], {"yes": True, "quiet": False, "exclude": "docs"})
-
-            # Verify docs target build/publish were NOT called
-            build_mock.assert_not_called()
-            publish_mock.assert_not_called()
-        finally:
-            TARGETS["docs"].build = original_build
-            TARGETS["docs"].publish = original_publish
-
-    @patch("rlsbl.commands.release.push_if_needed")
-    @patch("rlsbl.commands.release.run")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
-    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
-    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
-    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
-    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
     def test_secondary_target_failure_is_non_fatal(
         self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
     ):
