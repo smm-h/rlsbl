@@ -8,7 +8,7 @@ from ..config import read_json_config, should_tag
 from ..lock import acquire_lock, release_lock
 from ..targets import TARGETS
 from ..tagging import ensure_github_topic, ensure_npm_keyword, ensure_pypi_keyword
-from ..workspace import find_workspace_root, resolve_project
+from ..workspace import find_workspace_root, load_workspace, resolve_project
 from ..utils import (
     bump_version,
     check_gh_auth,
@@ -271,6 +271,17 @@ def run_cmd(registry, args, flags):
                     other_files.append(other_file)
         if other_files:
             log(f"Sync to:   {', '.join(other_files)}")
+        # Show subtree publishing info in dry-run
+        if monorepo_name:
+            try:
+                projects = load_workspace(".")
+                proj_dict = next((p for p in projects if p["name"] == monorepo_name), None)
+                subtree_remote = proj_dict.get("subtree_remote") if proj_dict else None
+            except Exception:
+                subtree_remote = None
+            if subtree_remote:
+                plain_tag = target.tag_format(new_version)
+                log(f"Subtree:   {subtree_remote} (tag: {plain_tag})")
         log(f"Changelog:\n{changelog_entry}")
         log("--- No changes made ---")
         return
@@ -287,6 +298,7 @@ def run_cmd(registry, args, flags):
             bump_type, tag, branch, changelog_entry, target,
             secondary_targets=secondary_targets,
             monorepo_name=monorepo_name,
+            monorepo_project_path=monorepo_project_path,
             version_dir=version_dir,
             commit_msg=commit_msg,
         )
@@ -297,6 +309,7 @@ def run_cmd(registry, args, flags):
 def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current_version,
                           bump_type, tag, branch, changelog_entry, target,
                           secondary_targets=None, monorepo_name=None,
+                          monorepo_project_path=None,
                           version_dir=".", commit_msg=None):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     if commit_msg is None:
@@ -459,6 +472,35 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         for tmp in (notes_file, writing_file):
             if os.path.exists(tmp):
                 os.unlink(tmp)
+
+    # Subtree publishing for monorepo projects with subtree_remote configured
+    if monorepo_name and monorepo_project_path:
+        try:
+            projects = load_workspace(".")
+            proj_dict = None
+            for p in projects:
+                if p["name"] == monorepo_name:
+                    proj_dict = p
+                    break
+            subtree_remote = proj_dict.get("subtree_remote") if proj_dict else None
+        except Exception:
+            subtree_remote = None
+
+        if subtree_remote:
+            plain_tag = target.tag_format(new_version)
+            log(f"Publishing subtree to {subtree_remote}...")
+            try:
+                run("git", ["subtree", "split", f"--prefix={monorepo_project_path}", "-b", "_rlsbl-subtree-tmp"])
+                run("git", ["push", subtree_remote, f"_rlsbl-subtree-tmp:refs/tags/{plain_tag}"])
+                run("git", ["push", subtree_remote, "_rlsbl-subtree-tmp:refs/heads/main"])
+                log(f"Subtree published: {plain_tag} -> {subtree_remote}")
+            except Exception as e:
+                print(f"Warning: subtree push failed: {e}", file=sys.stderr)
+            finally:
+                try:
+                    run("git", ["branch", "-D", "_rlsbl-subtree-tmp"])
+                except Exception:
+                    pass
 
     # Publish step (no-op for npm/pypi/go targets)
     try:
