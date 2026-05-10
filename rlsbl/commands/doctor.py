@@ -153,6 +153,23 @@ def _apply_fixes(results, tag, version):
             except subprocess.CalledProcessError as e:
                 print(f"Could not create GitHub Release: {e}", file=sys.stderr)
 
+    # Report guidance for unfixable issues
+    version_status, _ = results["Version files"]
+    if version_status == "FAIL":
+        print("Manual fix needed: version mismatch -- update version files to agree")
+
+    branch_status, _ = results["Branch sync"]
+    if branch_status == "FAIL":
+        print("Manual fix needed: run 'git pull' to sync with origin")
+
+    changelog_status, _ = results["Changelog"]
+    if changelog_status == "WARN" and version:
+        print(f"Manual fix needed: add a '## {version}' entry to CHANGELOG.md")
+
+    local_tag_status, _ = results["Local tag"]
+    if local_tag_status == "WARN" and tag:
+        print(f"Manual fix needed: create tag with 'git tag {tag}'")
+
     return fixed
 
 
