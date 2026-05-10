@@ -17,6 +17,16 @@ class DocsTarget(BaseTarget):
     def name(self):
         return "docs"
 
+    def _selfdoc_available(self):
+        """Return True if the selfdoc CLI is installed and runnable."""
+        try:
+            subprocess.run(
+                ["selfdoc", "--version"], capture_output=True, check=False
+            )
+            return True
+        except FileNotFoundError:
+            return False
+
     def detect(self, dir_path):
         """True if selfdoc.json exists in the given directory."""
         return os.path.exists(os.path.join(dir_path, "selfdoc.json"))
@@ -39,8 +49,12 @@ class DocsTarget(BaseTarget):
 
     def build(self, dir_path, version):
         """Delegate to selfdoc build."""
+        if not self._selfdoc_available():
+            return
         subprocess.run(["selfdoc", "build"], cwd=dir_path, check=True, timeout=300)
 
     def publish(self, dir_path, version):
         """Delegate to selfdoc deploy."""
+        if not self._selfdoc_available():
+            return
         subprocess.run(["selfdoc", "deploy"], cwd=dir_path, check=True, timeout=300)
