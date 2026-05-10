@@ -1,10 +1,12 @@
 """Git helpers, version bump, changelog extraction, and other shared utilities."""
 
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import urllib.request
 
 
 def run(cmd, args=None, timeout=120, env=None):
@@ -135,3 +137,30 @@ def bump_version(version, bump_type):
         return f"{major}.{minor}.{patch + 1}"
     else:
         raise ValueError(f'Invalid bump type: "{bump_type}". Use patch, minor, or major.')
+
+
+def is_private_repo():
+    """Detect if the current repo is private via GitHub API.
+
+    Returns True if private, False if public, None if detection fails.
+    """
+    try:
+        remote = run("git", ["remote", "get-url", "origin"])
+        # Extract owner/repo from git@github.com:owner/repo or https://github.com/owner/repo
+        match = re.search(r"github\.com[/:]([^/]+/[^/.]+)", remote)
+        if not match:
+            return None
+        repo_name = match.group(1).removesuffix(".git")
+        owner, repo = repo_name.split("/", 1)
+
+        token = run("gh", ["auth", "token"])
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{owner}/{repo}"
+        )
+        req.add_header("Authorization", f"Bearer {token.strip()}")
+        req.add_header("User-Agent", "rlsbl-cli")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            return data.get("private", False)
+    except Exception:
+        return None

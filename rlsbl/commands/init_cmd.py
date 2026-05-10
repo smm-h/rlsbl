@@ -12,7 +12,7 @@ from ..config import should_tag, read_project_config, write_project_config
 from ..lock import acquire_lock, release_lock
 from ..targets import TARGETS
 from ..tagging import ensure_tags
-from ..utils import find_commit_tool
+from ..utils import find_commit_tool, is_private_repo
 
 HASHES_FILE = os.path.join(".rlsbl", "hashes.json")
 BASES_DIR = os.path.join(".rlsbl", "bases")
@@ -467,6 +467,58 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
         print(f"Warning: could not commit scaffold changes: {e}")
 
 
+def _resolve_private(flags):
+    """Determine if this is a private repository.
+
+    Checks --private flag first, then saved config, then auto-detects via GitHub API.
+    Returns True/False, or False if detection fails.
+    """
+    if flags.get("private"):
+        return True
+
+    # Check saved config
+    config = read_project_config()
+    if "private" in config:
+        return bool(config["private"])
+
+    # Auto-detect via GitHub API
+    detected = is_private_repo()
+    if detected is not None:
+        return detected
+
+    return False
+
+
+def _filter_mappings_for_private(mappings):
+    """Remove publish template mappings (private repos don't publish to registries)."""
+    return [m for m in mappings if "publish" not in m["template"]]
+
+
+def _replace_post_release_hook_for_private(mappings):
+    """Replace the generic post-release hook mapping with the private-specific one."""
+    result = []
+    for m in mappings:
+        if m["target"] == ".rlsbl/hooks/post-release.sh":
+            result.append({
+                "template": "hooks/post-release-private.sh.tpl",
+                "target": ".rlsbl/hooks/post-release.sh",
+            })
+        else:
+            result.append(m)
+    return result
+
+
+def _print_private_summary():
+    """Print helpful output for private repository scaffold."""
+    print("\nPrivate repository detected. Scaffold configured for private distribution.")
+    print("- publish.yml skipped (no public registry)")
+    print("- Post-release hook will build and upload artifacts to GitHub Releases")
+    print("\nConsumers can install via:")
+    print('  Python: uv pip install "pkg @ git+ssh://git@github.com/owner/repo@vX.Y.Z"')
+    print("  npm:    npm install git+ssh://git@github.com/owner/repo#vX.Y.Z")
+    print("  Go:     go get github.com/owner/repo@vX.Y.Z")
+
+
 def run_cmd(registry, args, flags):
     """Init command handler.
 
@@ -488,6 +540,11 @@ def run_cmd(registry, args, flags):
         # Register this target in .rlsbl/config.json targets array
         _ensure_target_in_config(registry)
 
+        # Determine if this is a private repository
+        private = _resolve_private(flags)
+        if private:
+            write_project_config("private", True)
+
         # Gather template variables
         vars_dict = reg.get_template_vars(".")
         from datetime import datetime
@@ -499,9 +556,12 @@ def run_cmd(registry, args, flags):
         existing_hashes = load_hashes()
 
         # Process registry-specific templates
+        reg_mappings = reg.get_template_mappings()
+        if private:
+            reg_mappings = _filter_mappings_for_private(reg_mappings)
         reg_created, reg_skipped, reg_warnings, reg_hashes = process_mappings(
             reg.get_template_dir(),
-            reg.get_template_mappings(),
+            reg_mappings,
             vars_dict,
             force,
             update,
@@ -511,9 +571,12 @@ def run_cmd(registry, args, flags):
         # Process shared templates (skip if another registry already handled them)
         shared_created, shared_skipped, shared_warnings, shared_hashes = [], [], [], {}
         if not flags.get("skip-shared"):
+            shared_mappings = reg.get_shared_template_mappings()
+            if private:
+                shared_mappings = _replace_post_release_hook_for_private(shared_mappings)
             shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
                 reg.get_shared_template_dir(),
-                reg.get_shared_template_mappings(),
+                shared_mappings,
                 vars_dict,
                 force,
                 update,
@@ -529,6 +592,9 @@ def run_cmd(registry, args, flags):
             created, skipped, warnings, registry=registry,
             flags=flags, registries=[registry],
         )
+
+        if private:
+            _print_private_summary()
     finally:
         release_lock()
 
@@ -554,8 +620,16 @@ def run_cmd_multi(registries_list, args, flags):
         for r in registries_list:
             _ensure_target_in_config(r)
 
+        # Determine if this is a private repository
+        private = _resolve_private(flags)
+        if private:
+            write_project_config("private", True)
+
         print(f"Multiple registries detected: {', '.join(registries_list)}")
-        print("Scaffolding with merged publish workflow.")
+        if private:
+            print("Scaffolding for private repository (no publish workflow).")
+        else:
+            print("Scaffolding with merged publish workflow.")
 
         vars_dict = reg.get_template_vars(".")
         from datetime import datetime
@@ -576,22 +650,27 @@ def run_cmd_multi(registries_list, args, flags):
             existing_hashes,
         )
 
-        # Process merged publish workflow template
-        merged_tpl_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                      "templates", "merged")
-        merged_created, merged_skipped, merged_warnings, merged_hashes = process_mappings(
-            merged_tpl_dir,
-            [{"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"}],
-            vars_dict,
-            force,
-            update,
-            existing_hashes,
-        )
+        # Process merged publish workflow template (skip for private repos)
+        merged_created, merged_skipped, merged_warnings, merged_hashes = [], [], [], {}
+        if not private:
+            merged_tpl_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                          "templates", "merged")
+            merged_created, merged_skipped, merged_warnings, merged_hashes = process_mappings(
+                merged_tpl_dir,
+                [{"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"}],
+                vars_dict,
+                force,
+                update,
+                existing_hashes,
+            )
 
         # Process shared templates (once)
+        shared_mappings = reg.get_shared_template_mappings()
+        if private:
+            shared_mappings = _replace_post_release_hook_for_private(shared_mappings)
         shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
             reg.get_shared_template_dir(),
-            reg.get_shared_template_mappings(),
+            shared_mappings,
             vars_dict,
             force,
             update,
@@ -608,11 +687,14 @@ def run_cmd_multi(registries_list, args, flags):
             flags=flags, registries=registries_list,
         )
 
-        # Show combined next steps for dual-registry
-        print("\nNext steps:")
-        print("  1. Add an NPM_TOKEN secret to your GitHub repo (Settings > Secrets > Actions)")
-        print("  2. Configure Trusted Publishing on pypi.org")
-        print("  3. Push to GitHub to activate the CI workflow")
-        print("  4. Run rlsbl release [patch|minor|major]")
+        if private:
+            _print_private_summary()
+        else:
+            # Show combined next steps for dual-registry
+            print("\nNext steps:")
+            print("  1. Add an NPM_TOKEN secret to your GitHub repo (Settings > Secrets > Actions)")
+            print("  2. Configure Trusted Publishing on pypi.org")
+            print("  3. Push to GitHub to activate the CI workflow")
+            print("  4. Run rlsbl release [patch|minor|major]")
     finally:
         release_lock()
