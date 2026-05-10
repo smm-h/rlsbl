@@ -50,7 +50,7 @@ Usage:
   rlsbl release [patch|minor|major] [--dry-run] [--yes] [--quiet] [--skip-remote-check]
                                                             Orchestrate a release
   rlsbl status                                              Show project status
-  rlsbl scaffold [--force] [--update]                       Scaffold release infrastructure
+  rlsbl scaffold [--force] [--update] [--private]           Scaffold release infrastructure
   rlsbl check <name>                                        Check name availability
   rlsbl config [show|init|migrate|status]                    Manage project configuration
   rlsbl undo [--yes]                                        Revert the last release
@@ -70,6 +70,7 @@ Options:
   --include <target>        Add a target to the release (comma-separated)
   --exclude <target>        Remove a target from the release (comma-separated)
   --no-tag               Disable ecosystem tagging for this invocation
+  --private              Scaffold for private repos (skip publish, add asset upload hook)
   --help, -h             Show this help
   --version, -v          Show version"""
 
