@@ -177,7 +177,7 @@ def ssh_run(host, user, command, ssh_key=None, directory=None, env=None, timeout
     return result.stdout, result.stderr, result.returncode
 
 
-def check_health(config, deploy_host):
+def check_health(config, deploy_host, user="root"):
     """Run a health check based on config. Returns (success: bool, message: str)."""
     htype = config["type"]
 
@@ -186,7 +186,7 @@ def check_health(config, deploy_host):
     elif htype == "tcp":
         return _check_health_tcp(config, deploy_host)
     elif htype == "script":
-        return _check_health_script(config, deploy_host)
+        return _check_health_script(config, deploy_host, user)
     else:
         return False, f"Unknown health check type: {htype}"
 
@@ -241,17 +241,14 @@ def _check_health_tcp(config, deploy_host):
     return False, f"TCP health check failed after {timeout}s: {last_error or 'connection refused'}"
 
 
-def _check_health_script(config, deploy_host):
+def _check_health_script(config, deploy_host, user="root"):
     """Run a script health check via SSH on the deploy host."""
     command = config["command"]
     timeout = config.get("timeout", 30)
 
-    # Use ssh_run with a default user; the caller should have set up the target
-    # For script health checks, we re-use the deploy target's connection info
-    # This is called from deploy_target which passes deploy_host
     stdout, stderr, returncode = ssh_run(
         host=deploy_host,
-        user="root",
+        user=user,
         command=command,
         timeout=timeout,
     )
@@ -300,7 +297,7 @@ def deploy_target(target_config, current_branch):
     health = target_config.get("health")
     if health:
         print(f"[{name}] Running health check...")
-        success, message = check_health(health, host)
+        success, message = check_health(health, host, user)
         if not success:
             # Try rollback
             rollback_steps = target_config.get("rollback_steps")
@@ -312,7 +309,20 @@ def deploy_target(target_config, current_branch):
                         host=host, user=user, command=step,
                         ssh_key=ssh_key, directory=directory, env=env,
                     )
-                return DeployResult(name, False, message, rolled_back=True)
+                # Re-check health after rollback
+                print(f"[{name}] Re-checking health after rollback...")
+                rb_success, _ = check_health(health, host, user)
+                if rb_success:
+                    return DeployResult(
+                        name, False,
+                        "Rollback successful, service restored",
+                        rolled_back=True,
+                    )
+                return DeployResult(
+                    name, False,
+                    "Rollback failed, manual intervention required",
+                    rolled_back=True,
+                )
             return DeployResult(name, False, message)
         return DeployResult(name, True, message)
 

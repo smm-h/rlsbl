@@ -511,7 +511,12 @@ class TestDeployTarget:
             raise urllib.error.URLError("Connection refused")
 
         monkeypatch.setattr("urllib.request.urlopen", failing_urlopen)
-        monkeypatch.setattr("time.monotonic", _monotonic_counter(0, 1, 2, 3, 4, 5, 6, 7))
+        monkeypatch.setattr("time.monotonic", _monotonic_counter(
+            # initial health check (fails after timeout)
+            0, 1, 2, 3, 4, 5,
+            # post-rollback health check (also fails after timeout)
+            6, 7, 8, 9, 10, 11,
+        ))
 
         target = _minimal_target(
             health={"type": "http", "url": "http://localhost/health", "timeout": 2, "interval": 1},
@@ -520,6 +525,7 @@ class TestDeployTarget:
         result = deploy_target(target, "main")
         assert result.success is False
         assert result.rolled_back is True
+        assert "Rollback failed, manual intervention required" in result.message
         # Rollback command should have been executed (after the deploy step)
         assert any("rollback-cmd" in cmd for cmd in executed)
 
@@ -536,6 +542,109 @@ class TestDeployTarget:
         assert "no health check" in result.message.lower()
         captured = capsys.readouterr()
         assert "No health check configured" in captured.err
+
+    def test_rollback_rechecks_health_success(self, monkeypatch):
+        """After rollback, health re-check passes -> message indicates service restored."""
+        executed = []
+        health_call_count = [0]
+
+        def fake_run(cmd, **kwargs):
+            executed.append(cmd[-1])
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        def urlopen_fails_then_succeeds(url, timeout=None):
+            health_call_count[0] += 1
+            # Initial health check call(s) fail; post-rollback calls succeed
+            if health_call_count[0] <= 1:
+                raise urllib.error.URLError("Connection refused")
+            class FakeResp:
+                status = 200
+                def read(self): return b"ok"
+                def __enter__(self): return self
+                def __exit__(self, *a): pass
+            return FakeResp()
+
+        monkeypatch.setattr("urllib.request.urlopen", urlopen_fails_then_succeeds)
+        monkeypatch.setattr("time.monotonic", _monotonic_counter(
+            # initial health check: monotonic(0) sets deadline=2,
+            # monotonic(1)<2 enters loop, urlopen fails,
+            # monotonic(2) remaining=0 breaks
+            0, 1, 2,
+            # post-rollback health check: monotonic(3) sets deadline=5,
+            # monotonic(4)<5 enters loop, urlopen succeeds
+            3, 4,
+        ))
+
+        target = _minimal_target(
+            health={"type": "http", "url": "http://localhost/health", "timeout": 2, "interval": 1},
+            rollback_steps=["rollback-cmd"],
+        )
+        result = deploy_target(target, "main")
+        assert result.success is False
+        assert result.rolled_back is True
+        assert "Rollback successful, service restored" in result.message
+        assert any("rollback-cmd" in cmd for cmd in executed)
+
+    def test_rollback_rechecks_health_failure(self, monkeypatch):
+        """After rollback, health re-check fails -> message indicates manual intervention."""
+        executed = []
+
+        def fake_run(cmd, **kwargs):
+            executed.append(cmd[-1])
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        def failing_urlopen(url, timeout=None):
+            raise urllib.error.URLError("Connection refused")
+
+        monkeypatch.setattr("urllib.request.urlopen", failing_urlopen)
+        monkeypatch.setattr("time.monotonic", _monotonic_counter(
+            # initial health check (fails)
+            0, 1, 2, 3, 4, 5,
+            # post-rollback health check (also fails)
+            6, 7, 8, 9, 10, 11,
+        ))
+
+        target = _minimal_target(
+            health={"type": "http", "url": "http://localhost/health", "timeout": 2, "interval": 1},
+            rollback_steps=["rollback-cmd"],
+        )
+        result = deploy_target(target, "main")
+        assert result.success is False
+        assert result.rolled_back is True
+        assert "Rollback failed, manual intervention required" in result.message
+
+    def test_script_health_uses_configured_user(self, monkeypatch):
+        """Script health check uses the target's configured user, not hardcoded root."""
+        ssh_calls = []
+
+        def fake_run(cmd, **kwargs):
+            ssh_calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        target = _minimal_target(
+            user="deploy",
+            health={"type": "script", "command": "curl -f http://localhost/health"},
+        )
+        result = deploy_target(target, "main")
+        assert result.success is True
+
+        # Find the health check SSH call (the one running the curl command)
+        health_ssh_cmd = None
+        for cmd in ssh_calls:
+            if any("curl" in part for part in cmd):
+                health_ssh_cmd = cmd
+                break
+
+        assert health_ssh_cmd is not None, "Health check SSH call not found"
+        # Verify the SSH call used user="deploy" not user="root"
+        assert "deploy@10.0.0.1" in health_ssh_cmd
+        assert "root@10.0.0.1" not in health_ssh_cmd
 
     def test_deploy_health_failure_no_rollback(self, monkeypatch):
         def fake_run(cmd, **kwargs):
