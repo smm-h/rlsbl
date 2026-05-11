@@ -462,6 +462,30 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
     if not os.path.isdir(".git"):
         return
 
+    # Untrack files that are now gitignored but still tracked by git.
+    # Adding a path to .gitignore only prevents new untracked files from being
+    # staged -- it has no effect on files already in the index.
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-ic", "--exclude-standard", "-z"],
+            capture_output=True, text=True, check=True,
+        )
+        if result.stdout:
+            ignored_tracked = [f for f in result.stdout.split("\0") if f]
+            for path in ignored_tracked:
+                subprocess.run(
+                    ["git", "rm", "--cached", path],
+                    capture_output=True, text=True, check=True,
+                )
+            # Commit the removal separately so it doesn't interfere with
+            # safegit's file staging (which would re-add the files).
+            subprocess.run(
+                ["git", "commit", "-m", "untrack gitignored files"],
+                capture_output=True, text=True, check=True,
+            )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
     tool = find_commit_tool()
     try:
         if tool == "safegit":

@@ -935,5 +935,69 @@ class TestScaffoldAutoDetection:
         assert config["targets"] == ["npm"], f"expected ['npm'], got {config['targets']}"
 
 
+class TestScaffoldUntrack(unittest.TestCase):
+    """Tests for scaffold untracking files added to .gitignore."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+        # Create a full git repo with initial commit
+        subprocess.run(["git", "init", "-q", "."], check=True)
+        subprocess.run(["git", "config", "user.email", "test@test.local"], check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True)
+        # Create minimal package.json so npm registry is detected
+        with open("package.json", "w") as f:
+            json.dump({"name": "test-pkg", "version": "0.1.0"}, f)
+        subprocess.run(["git", "add", "package.json"], check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "initial"], check=True)
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    def test_scaffold_untracks_gitignored_files(self):
+        """Scaffold should untrack files that match .gitignore patterns."""
+        # Use .credentials.json which is in the gitignore template but
+        # won't be deleted by the lock cleanup (unlike .rlsbl/lock).
+        target_file = ".credentials.json"
+
+        with open(target_file, "w") as f:
+            f.write('{"secret": "value"}\n')
+        subprocess.run(["git", "add", target_file], check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "add credentials"], check=True)
+
+        # Verify it's tracked
+        result = subprocess.run(
+            ["git", "ls-files", "--cached", target_file],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.stdout.strip(), target_file)
+
+        # Run scaffold (which writes .gitignore containing .credentials.json)
+        with patch("sys.stdout", new_callable=StringIO):
+            run_cmd("npm", [], {"no-tag": True})
+
+        # Verify it's no longer tracked
+        result = subprocess.run(
+            ["git", "ls-files", "--cached", target_file],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.stdout.strip(), "",
+                         f"{target_file} should no longer be tracked after scaffold")
+
+        # Verify the file still exists on disk (untracked, not deleted)
+        self.assertTrue(os.path.exists(target_file),
+                        f"{target_file} should still exist on disk")
+
+        # Verify the untrack was committed (not just staged)
+        status = subprocess.run(
+            ["git", "status", "--porcelain", target_file],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(status.stdout.strip(), "",
+                         f"{target_file} removal should be committed, not just staged")
+
+
 if __name__ == "__main__":
     unittest.main()
