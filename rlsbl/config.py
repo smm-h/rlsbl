@@ -79,6 +79,18 @@ def read_project_config():
     return read_json_config(_project_config())
 
 
+def read_deploy_config():
+    """Read and validate deploy targets from project config. Returns (targets, errors)."""
+    from rlsbl.deploy import validate_deploy_config
+
+    config = read_project_config()
+    targets = config.get("deploy", [])
+    if not targets:
+        return [], []
+    errors = validate_deploy_config(targets)
+    return targets, errors
+
+
 def write_project_config(key, value):
     """Write or update a key in .rlsbl/config.json (creates dir if needed)."""
     os.makedirs(os.path.dirname(_project_config()), exist_ok=True)
