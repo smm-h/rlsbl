@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.1
+
+- **`env_file` config key.** Set `"env_file": "~/path/to/.env"` in `.rlsbl/config.json` to load environment variables before release. Useful for secrets needed by target publish steps (e.g., `CLOUDFLARE_API_TOKEN` for docs deploys).
+
 ## 0.18.0
 
 - **Go binary distribution: Homebrew tap.** Go binary projects can now scaffold Homebrew tap support. Set `{"homebrew": {"tap": "homebrew-tap"}}` in `.rlsbl/config.json` to add a `brews:` section to the goreleaser config and pass `HOMEBREW_TAP_TOKEN` to the publish workflow. Users install via `brew install user/tap/tool`.
