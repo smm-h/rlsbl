@@ -176,6 +176,23 @@ def main():
         print(HELP, file=sys.stderr)
         sys.exit(1)
 
+    # Project root discovery: chdir to project root for commands that need it
+    from .utils import find_project_root
+
+    NEEDS_PROJECT = {"release", "status", "doctor", "pre-push-check", "unreleased", "record-gif", "targets"}
+
+    if command in NEEDS_PROJECT:
+        root = find_project_root()
+        if root is None:
+            print("Error: not in an rlsbl project (no .rlsbl/ found in any ancestor directory).", file=sys.stderr)
+            sys.exit(1)
+        os.chdir(root)
+    elif command == "scaffold":
+        # Scaffold creates .rlsbl/ for new projects; for existing projects, find the root
+        root = find_project_root()
+        if root is not None:
+            os.chdir(root)
+
     args = positional[1:]
     registry = flags.get("registry")
     target = flags.get("target")

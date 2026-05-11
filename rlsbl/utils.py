@@ -17,6 +17,24 @@ def run(cmd, args=None, timeout=120, env=None):
 
 
 
+def find_project_root(start=None):
+    """Walk up from start (default: cwd) to find .rlsbl/ or .rlsbl-monorepo/.
+
+    Returns the directory path containing the marker, or None if not found.
+    Prefers the nearest ancestor with either marker.
+    """
+    current = os.path.abspath(start or ".")
+    while True:
+        if os.path.isdir(os.path.join(current, ".rlsbl")):
+            return current
+        if os.path.isdir(os.path.join(current, ".rlsbl-monorepo")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
 def is_clean_tree():
     """Returns True if the git working tree is clean (no uncommitted changes)."""
     status = run("git", ["status", "--porcelain"])
