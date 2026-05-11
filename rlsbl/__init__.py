@@ -41,7 +41,7 @@ __version__ = _detect_version()
 
 COMMANDS = ("release", "status", "scaffold", "check", "undo", "discover", "watch",
             "pre-push-check", "prs", "record-gif", "unreleased", "targets", "monorepo",
-            "migrate", "doctor")
+            "migrate", "doctor", "deploy")
 COMMAND_ALIASES = {"init": "scaffold"}
 
 HELP = f"""\
@@ -63,6 +63,7 @@ Usage:
   rlsbl targets                                             List available release targets
   rlsbl monorepo [init|add|remove|list|sync|status]    Manage monorepo workspaces
   rlsbl migrate [--dry-run] [--status]              Run config migrations (via migrable)
+  rlsbl deploy [name] [--dry-run] [--force]             Deploy to configured targets
   rlsbl doctor [--fix]                                 Diagnose and repair release state
   rlsbl record-gif [--width N] [--height N] [--font-size N] [--duration N]
                                                             Record a demo GIF with vhs
@@ -138,6 +139,7 @@ def _get_command_module(command):
         "monorepo": "monorepo",
         "migrate": "migrate",
         "doctor": "doctor",
+        "deploy": "deploy_cmd",
     }
     module_name = module_map.get(command)
     if not module_name:
@@ -179,7 +181,7 @@ def main():
     # Project root discovery: chdir to project root for commands that need it
     from .utils import find_project_root
 
-    NEEDS_PROJECT = {"release", "status", "doctor", "pre-push-check", "unreleased", "record-gif", "targets"}
+    NEEDS_PROJECT = {"release", "status", "doctor", "pre-push-check", "unreleased", "record-gif", "targets", "deploy"}
 
     if command in NEEDS_PROJECT:
         root = find_project_root()
@@ -284,7 +286,7 @@ def main():
         elif command == "watch":
             # watch: monitors CI runs, no registry needed
             handler.run_cmd(registry, args, flags)
-        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "targets", "monorepo", "migrate", "doctor"):
+        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "targets", "monorepo", "migrate", "doctor", "deploy"):
             # Standalone commands, no registry needed
             handler.run_cmd(registry, args, flags)
         else:
