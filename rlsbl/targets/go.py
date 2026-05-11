@@ -15,6 +15,7 @@ import shutil
 import subprocess
 
 from .base import BaseTarget
+from ..config import read_project_config
 from ..utils import run
 
 VERSION_FILE = "VERSION"
@@ -147,7 +148,8 @@ class GoTarget(BaseTarget):
         )
 
     def template_vars(self, dir_path):
-        """Extract template variables from go.mod."""
+        """Extract template variables from go.mod and .rlsbl/config.json."""
+        config = read_project_config()
         name = self._read_module_path(dir_path)
 
         # Derive short name from module path (last segment)
@@ -158,6 +160,9 @@ class GoTarget(BaseTarget):
         repo_match = re.search(r"github\.com/([^/\s]+/[^/\s]+)", name)
         if repo_match:
             repo_name = repo_match.group(1)
+
+        # Extract owner from repo name (e.g. "smm-h" from "smm-h/rlsbl")
+        github_owner = repo_name.split("/")[0] if "/" in repo_name else ""
 
         # Author from git config
         author = ""
@@ -186,15 +191,45 @@ class GoTarget(BaseTarget):
         else:
             goreleaser_main = "."
 
+        # Homebrew tap support via goreleaser brews section
+        homebrew_config = config.get("homebrew", {}) if config else {}
+        tap_repo = homebrew_config.get("tap", "")
+        brews_section = ""
+        homebrew_env = ""
+
+        if tap_repo and github_owner:
+            description = homebrew_config.get("description", short_name)
+            license_id = homebrew_config.get("license", "MIT")
+            brews_section = (
+                "\n"
+                "\nbrews:"
+                "\n  - repository:"
+                "\n      owner: " + github_owner +
+                "\n      name: " + tap_repo +
+                '\n      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"'
+                '\n    homepage: "https://github.com/' + repo_name + '"'
+                '\n    description: "' + description + '"'
+                '\n    license: "' + license_id + '"'
+                "\n    install: |"
+                "\n      bin.install \"" + short_name + "\""
+                "\n    test: |"
+                '\n      system "#{bin}/' + short_name + '", "--version"'
+            )
+            homebrew_env = "\n          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}"
+            publish_setup += "\n- Add HOMEBREW_TAP_TOKEN secret (PAT with contents:write on the tap repo)"
+
         result = {
             "name": short_name,
             "modulePath": name,
             "version": version,
             "author": author,
             "repoName": repo_name,
+            "githubOwner": github_owner,
             "binCommand": short_name,
             "publishSetup": publish_setup,
             "goreleaserMain": goreleaser_main,
+            "brewsSection": brews_section,
+            "homebrewEnv": homebrew_env,
         }
 
         # Extract minimum required Go version from go.mod
