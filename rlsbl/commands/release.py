@@ -113,6 +113,8 @@ def run_cmd(registry, args, flags):
     if env_file:
         from ..config import load_env_file
         load_env_file(env_file)
+        if "CF_ACCOUNT_ID" in os.environ and "CLOUDFLARE_ACCOUNT_ID" not in os.environ:
+            os.environ["CLOUDFLARE_ACCOUNT_ID"] = os.environ["CF_ACCOUNT_ID"]
 
     reg = TARGETS[registry]
 
