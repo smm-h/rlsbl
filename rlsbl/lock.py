@@ -1,7 +1,11 @@
 """Advisory file lock to prevent concurrent rlsbl operations.
 
-Uses fcntl.flock on .rlsbl/lock to ensure only one rlsbl process
+Uses fcntl.flock on <lock_dir>/lock to ensure only one rlsbl process
 (release, scaffold, etc.) mutates project state at a time.
+
+The default lock directory is .rlsbl/. In monorepo mode the caller
+passes lock_dir=".rlsbl-monorepo" so the lock lives alongside the
+workspace config instead of creating a spurious .rlsbl/ at the repo root.
 """
 
 import atexit
@@ -14,12 +18,15 @@ from contextlib import contextmanager
 _lock_fd = None
 
 
-def acquire_lock():
-    """Acquire an exclusive advisory lock on .rlsbl/lock.
+def acquire_lock(lock_dir=".rlsbl"):
+    """Acquire an exclusive advisory lock on <lock_dir>/lock.
 
     If another process holds the lock, prints a waiting message and
     blocks until the lock is available. Returns early if already locked
     (prevents fd leak on double-acquire).
+
+    lock_dir: directory for the lock file (default ".rlsbl").
+              In monorepo mode pass ".rlsbl-monorepo".
     """
     global _lock_fd
 
@@ -27,7 +34,6 @@ def acquire_lock():
     if _lock_fd is not None:
         return
 
-    lock_dir = ".rlsbl"
     os.makedirs(lock_dir, exist_ok=True)
     lock_path = os.path.join(lock_dir, "lock")
 
@@ -89,9 +95,9 @@ def is_stale(lock_path=None):
 
 
 @contextmanager
-def rlsbl_lock():
+def rlsbl_lock(lock_dir=".rlsbl"):
     """Context manager that acquires the lock on enter and releases on exit."""
-    acquire_lock()
+    acquire_lock(lock_dir=lock_dir)
     try:
         yield
     finally:

@@ -308,8 +308,11 @@ def run_cmd(registry, args, flags):
     # Resolve which secondary targets participate in this release
     secondary_targets = resolve_release_targets(registry, flags, version_dir=version_dir)
 
-    # Acquire advisory lock to prevent concurrent rlsbl operations
-    acquire_lock()
+    # Acquire advisory lock to prevent concurrent rlsbl operations.
+    # In monorepo mode the lock goes in .rlsbl-monorepo/ (the workspace
+    # config dir) instead of .rlsbl/ to avoid creating a spurious directory.
+    lock_dir = ".rlsbl-monorepo" if monorepo_name else ".rlsbl"
+    acquire_lock(lock_dir=lock_dir)
 
     try:
         _run_release_mutating(
@@ -322,6 +325,7 @@ def run_cmd(registry, args, flags):
             commit_msg=commit_msg,
             primary_path=primary_path,
             target_paths=target_paths,
+            lock_dir=lock_dir,
         )
     finally:
         release_lock()
@@ -332,7 +336,8 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
                           secondary_targets=None, monorepo_name=None,
                           monorepo_project_path=None,
                           version_dir=".", commit_msg=None,
-                          primary_path=None, target_paths=None):
+                          primary_path=None, target_paths=None,
+                          lock_dir=".rlsbl"):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     if commit_msg is None:
         commit_msg = tag
@@ -450,7 +455,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     if dirty_output:
         dirty_files = parse_porcelain_paths(dirty_output)
         expected_files = set(files_to_commit)
-        expected_files.add(os.path.join(".rlsbl", "lock"))
+        expected_files.add(os.path.join(lock_dir, "lock"))
         unexpected = dirty_files - expected_files
         if unexpected:
             unexpected_list = ", ".join(sorted(unexpected))

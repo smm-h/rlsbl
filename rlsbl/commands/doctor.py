@@ -17,9 +17,17 @@ from ..utils import (
 
 
 def _check_stale_lock():
-    """Check for stale lock files."""
+    """Check for stale lock files.
+
+    Checks both .rlsbl/lock (standalone) and .rlsbl-monorepo/lock (monorepo).
+    """
+    stale_paths = []
     if is_stale():
-        return ("WARN", "stale lock file exists at .rlsbl/lock")
+        stale_paths.append(".rlsbl/lock")
+    if is_stale(lock_path=os.path.join(".rlsbl-monorepo", "lock")):
+        stale_paths.append(".rlsbl-monorepo/lock")
+    if stale_paths:
+        return ("WARN", f"stale lock file exists at {', '.join(stale_paths)}")
     return ("PASS", "no lock file")
 
 
@@ -228,14 +236,15 @@ def _apply_fixes(results, tag, version):
     """Apply safe auto-fixes for WARN/FAIL results."""
     fixed = 0
 
-    # Fix stale lock
+    # Fix stale lock (check both standalone and monorepo locations)
     status, _ = results["Lock file"]
     if status == "WARN":
-        lock_path = os.path.join(".rlsbl", "lock")
-        if os.path.exists(lock_path):
-            os.unlink(lock_path)
-            print("Fixed: removed stale lock file")
-            fixed += 1
+        for lock_path in (os.path.join(".rlsbl", "lock"),
+                          os.path.join(".rlsbl-monorepo", "lock")):
+            if os.path.exists(lock_path) and is_stale(lock_path=lock_path):
+                os.unlink(lock_path)
+                print(f"Fixed: removed stale lock file at {lock_path}")
+                fixed += 1
 
     # Fix missing remote tag (only if local tag exists)
     local_status, _ = results["Local tag"]
