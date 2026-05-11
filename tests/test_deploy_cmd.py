@@ -65,6 +65,7 @@ class TestDeployAutoSelectSingleTarget:
             return DeployResult("prod", True, "Deploy completed")
 
         monkeypatch.setattr("rlsbl.commands.deploy_cmd.deploy_target", mock_deploy_target)
+        monkeypatch.setattr("rlsbl.commands.deploy_cmd.get_current_branch", lambda: "main")
 
         run_cmd(None, [], {})
 
@@ -89,6 +90,7 @@ class TestDeploySelectByName:
             return DeployResult(target_config["name"], True, "Deploy completed")
 
         monkeypatch.setattr("rlsbl.commands.deploy_cmd.deploy_target", mock_deploy_target)
+        monkeypatch.setattr("rlsbl.commands.deploy_cmd.get_current_branch", lambda: "main")
 
         run_cmd(None, ["staging"], {})
 
@@ -220,6 +222,7 @@ class TestDeploySuccess:
             return DeployResult("prod", True, "All steps passed, health OK")
 
         monkeypatch.setattr("rlsbl.commands.deploy_cmd.deploy_target", mock_deploy_target)
+        monkeypatch.setattr("rlsbl.commands.deploy_cmd.get_current_branch", lambda: "main")
 
         run_cmd(None, [], {})
 
@@ -238,6 +241,7 @@ class TestDeployFailure:
             return DeployResult("prod", False, "Step 1 failed (exit 1): connection refused")
 
         monkeypatch.setattr("rlsbl.commands.deploy_cmd.deploy_target", mock_deploy_target)
+        monkeypatch.setattr("rlsbl.commands.deploy_cmd.get_current_branch", lambda: "main")
 
         with pytest.raises(SystemExit) as exc_info:
             run_cmd(None, [], {})
