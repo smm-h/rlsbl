@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-from ..config import read_json_config, should_tag
+from ..config import read_json_config, read_project_config, should_tag
 from ..lock import acquire_lock, release_lock
 from ..targets import TARGETS, detect_targets, _parse_target_entry
 from ..tagging import ensure_github_topic, ensure_npm_keyword, ensure_pypi_keyword
@@ -106,6 +106,13 @@ def run_cmd(registry, args, flags):
     def log(msg):
         if not quiet:
             print(msg)
+
+    # Load env file if configured
+    config = read_project_config()
+    env_file = config.get("env_file")
+    if env_file:
+        from ..config import load_env_file
+        load_env_file(env_file)
 
     reg = TARGETS[registry]
 

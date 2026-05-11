@@ -9,6 +9,33 @@ Precedence (highest to lowest):
 
 import json
 import os
+import sys
+
+
+def load_env_file(path):
+    """Load KEY=VALUE pairs from a file into os.environ.
+
+    Supports ~ expansion. Ignores comments (#) and blank lines.
+    Strips surrounding quotes from values.
+    """
+    path = os.path.expanduser(path)
+    if not os.path.exists(path):
+        print(f"Warning: env file not found: {path}", file=sys.stderr)
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            # Strip surrounding quotes
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            os.environ[key] = value
 
 
 def _project_config():
