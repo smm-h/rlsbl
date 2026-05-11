@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 
-from ..config import should_tag, read_project_config, write_project_config
+from ..config import read_deploy_config, should_tag, read_project_config, write_project_config
 from ..lock import acquire_lock, release_lock
 from ..targets import TARGETS, detect_targets
 from ..tagging import ensure_tags
@@ -534,6 +534,18 @@ def _filter_mappings_for_private(mappings):
     return [m for m in mappings if "publish" not in m["template"]]
 
 
+def _append_deploy_workflow_if_configured(mappings):
+    """Add deploy workflow template to mappings if deploy config exists."""
+    deploy_targets, _ = read_deploy_config()
+    if deploy_targets:
+        mappings = list(mappings)
+        mappings.append({
+            "template": ".github/workflows/deploy.yml.tpl",
+            "target": ".github/workflows/deploy.yml",
+        })
+    return mappings
+
+
 def _replace_post_release_hook_for_private(mappings):
     """Replace the generic post-release hook mapping with the private-specific one."""
     result = []
@@ -639,6 +651,7 @@ def run_cmd(registry, args, flags):
             shared_mappings = reg.get_shared_template_mappings()
             if private:
                 shared_mappings = _replace_post_release_hook_for_private(shared_mappings)
+            shared_mappings = _append_deploy_workflow_if_configured(shared_mappings)
             shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
                 reg.get_shared_template_dir(),
                 shared_mappings,
@@ -1035,6 +1048,7 @@ def run_cmd_multi(registries_list, args, flags):
         shared_mappings = reg.get_shared_template_mappings()
         if private:
             shared_mappings = _replace_post_release_hook_for_private(shared_mappings)
+        shared_mappings = _append_deploy_workflow_if_configured(shared_mappings)
         shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
             reg.get_shared_template_dir(),
             shared_mappings,

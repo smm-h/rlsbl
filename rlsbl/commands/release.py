@@ -4,7 +4,8 @@ import os
 import sys
 import time
 
-from ..config import read_json_config, read_project_config, should_tag
+from ..config import read_deploy_config, read_json_config, read_project_config, should_tag
+from ..deploy import deploy_target
 from ..lock import acquire_lock, release_lock
 from ..targets import TARGETS, detect_targets, _parse_target_entry
 from ..tagging import ensure_github_topic, ensure_npm_keyword, ensure_pypi_keyword
@@ -576,6 +577,27 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
                 sec_target.publish(sec_path, new_version)
             except Exception as e:
                 print(f"Warning: {sec_name} target publish failed: {e}", file=sys.stderr)
+
+    # Deploy phase (after publish, before post-release hook)
+    deploy_targets, deploy_errors = read_deploy_config()
+    if deploy_targets and not deploy_errors:
+        current_branch = get_current_branch()
+        for target_config in deploy_targets:
+            print(f"\nDeploying to {target_config['name']}...")
+            result = deploy_target(target_config, current_branch)
+            if result.success:
+                print(f"  Deploy to {result.target_name}: {result.message}")
+            else:
+                print(f"  Deploy to {result.target_name} FAILED: {result.message}", file=sys.stderr)
+                if result.rolled_back:
+                    print("  Rollback was executed.", file=sys.stderr)
+                print(f"  Retry with: rlsbl deploy {result.target_name}", file=sys.stderr)
+                break  # Stop at first failure
+    elif deploy_errors:
+        print("Warning: deploy config has errors, skipping deploy:", file=sys.stderr)
+        for err in deploy_errors:
+            print(f"  {err}", file=sys.stderr)
+    # If no deploy targets configured, silently skip (most projects don't have deploy)
 
     # Ecosystem tagging: add GitHub topic after release is created
     if should_tag(flags):
