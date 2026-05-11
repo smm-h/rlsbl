@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.0
+
+- **`rlsbl deploy [name]` command.** Deploy to configured targets via SSH with health checks (HTTP, TCP, script) and automatic rollback on failure. Configure targets in `.rlsbl/config.json` under the `deploy` key. Supports `--dry-run` to preview without executing and `--force` to override branch restrictions.
+- **Deploy after publish.** `rlsbl release` runs deploy automatically after publish completes. Deploy failures do not undo the release — retry with `rlsbl deploy <name>`.
+- **Deploy CI workflow template.** `rlsbl scaffold` generates a deploy workflow when deploy targets are configured.
+- **Project root discovery.** rlsbl now finds the project root automatically, so commands work from any subdirectory (like git, cargo, npm).
+- **Scaffold untracks gitignored files.** `rlsbl scaffold` runs `git rm --cached` on tracked files matching new `.gitignore` entries.
+- **Monorepo: lock files moved to `.rlsbl-monorepo/`.** `rlsbl release` no longer creates a spurious `.rlsbl/` directory at the repo root.
+
 ## 0.18.1
 
 - **`env_file` config key.** Set `"env_file": "~/path/to/.env"` in `.rlsbl/config.json` to load environment variables before release. Useful for secrets needed by target publish steps (e.g., `CLOUDFLARE_API_TOKEN` for docs deploys).
