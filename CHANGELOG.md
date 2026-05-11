@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19.1
+
+- No user-facing changes.
+
 ## 0.19.0
 
 - **`rlsbl deploy [name]` command.** Deploy to configured targets via SSH with health checks (HTTP, TCP, script) and automatic rollback on failure. Configure targets in `.rlsbl/config.json` under the `deploy` key. Supports `--dry-run` to preview without executing and `--force` to override branch restrictions.
