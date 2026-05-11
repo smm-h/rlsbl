@@ -483,8 +483,8 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
                 ["git", "commit", "-m", "untrack gitignored files"],
                 capture_output=True, text=True, check=True,
             )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"Warning: could not untrack gitignored files: {e}")
 
     tool = find_commit_tool()
     try:

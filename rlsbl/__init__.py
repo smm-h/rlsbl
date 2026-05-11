@@ -271,22 +271,13 @@ def main():
                     handler.run_cmd_multi(regs, args, flags)
                 else:
                     handler.run_cmd(regs[0], args, flags)
-        elif command == "undo":
-            # undo: auto-detect like release
-            if not registry:
-                regs = detect_registries()
-                if not regs:
-                    print("Error: no package.json, pyproject.toml, or go.mod found.", file=sys.stderr)
-                    sys.exit(1)
-                registry = regs[0]
-            handler.run_cmd(registry, args, flags)
         elif command == "discover":
             # discover: global query, no registry needed
             handler.run_cmd(registry, args, flags)
         elif command == "watch":
             # watch: monitors CI runs, no registry needed
             handler.run_cmd(registry, args, flags)
-        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "targets", "monorepo", "migrate", "doctor", "deploy"):
+        elif command in ("pre-push-check", "record-gif", "prs", "unreleased", "targets", "monorepo", "migrate", "doctor", "deploy", "undo"):
             # Standalone commands, no registry needed
             handler.run_cmd(registry, args, flags)
         else:

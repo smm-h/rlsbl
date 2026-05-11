@@ -149,7 +149,7 @@ def run_cmd(registry, args, flags):
         sys.exit(0)
 
     # Read changelog for coverage checking
-    changelog_path = os.path.join(os.getcwd(), "CHANGELOG.md")
+    changelog_path = "CHANGELOG.md"
     changelog_text = _get_unreleased_changelog_text(changelog_path)
 
     # Cross-reference each commit
