@@ -26,3 +26,4 @@ checksum:
 
 changelog:
   use: github-native
+{{brewsSection}}
