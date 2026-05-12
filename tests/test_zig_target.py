@@ -3,9 +3,10 @@
 import os
 import tempfile
 
-from rlsbl.targets.zig import ZigTarget
+from rlsbl.targets.zig import ZigTarget, ZIG_TARGET_MAP, _zig_archive_fn
 from rlsbl.targets.protocol import ReleaseTarget
 from rlsbl.targets import TARGETS
+from rlsbl.npm_wrapper import DEFAULT_PLATFORMS, PlatformSpec
 
 
 SAMPLE_ZON = """\
@@ -312,3 +313,222 @@ class TestZigTargetRegistered:
             found = detect_targets(d)
             names = [t.name for t in found]
             assert "zig" in names
+
+
+class TestZigArchiveFunction:
+    """_zig_archive_fn produces correct asset patterns for all 6 platforms."""
+
+    def test_linux_x64(self):
+        spec = PlatformSpec("linux-x64", "linux", "x64")
+        asset, extract, binary = _zig_archive_fn(spec, "myapp")
+        assert asset == "myapp-x86_64-linux"
+        assert extract is None
+        assert binary == "myapp"
+
+    def test_linux_arm64(self):
+        spec = PlatformSpec("linux-arm64", "linux", "arm64")
+        asset, extract, binary = _zig_archive_fn(spec, "myapp")
+        assert asset == "myapp-aarch64-linux"
+        assert extract is None
+        assert binary == "myapp"
+
+    def test_darwin_x64(self):
+        spec = PlatformSpec("darwin-x64", "darwin", "x64")
+        asset, extract, binary = _zig_archive_fn(spec, "myapp")
+        assert asset == "myapp-x86_64-macos"
+        assert extract is None
+        assert binary == "myapp"
+
+    def test_darwin_arm64(self):
+        spec = PlatformSpec("darwin-arm64", "darwin", "arm64")
+        asset, extract, binary = _zig_archive_fn(spec, "myapp")
+        assert asset == "myapp-aarch64-macos"
+        assert extract is None
+        assert binary == "myapp"
+
+    def test_win32_x64(self):
+        spec = PlatformSpec("win32-x64", "win32", "x64")
+        asset, extract, binary = _zig_archive_fn(spec, "myapp")
+        assert asset == "myapp-x86_64-windows.exe"
+        assert extract is None
+        assert binary == "myapp.exe"
+
+    def test_win32_arm64(self):
+        spec = PlatformSpec("win32-arm64", "win32", "arm64")
+        asset, extract, binary = _zig_archive_fn(spec, "myapp")
+        assert asset == "myapp-aarch64-windows.exe"
+        assert extract is None
+        assert binary == "myapp.exe"
+
+    def test_all_platforms_covered(self):
+        """All 6 DEFAULT_PLATFORMS produce valid artifacts."""
+        for spec in DEFAULT_PLATFORMS:
+            asset, extract, binary = _zig_archive_fn(spec, "tool")
+            assert asset  # non-empty
+            assert extract is None  # Zig always produces raw binaries
+            assert binary  # non-empty
+
+    def test_zig_target_map_has_all_default_platforms(self):
+        """ZIG_TARGET_MAP covers all DEFAULT_PLATFORMS."""
+        for spec in DEFAULT_PLATFORMS:
+            assert spec.npm_platform in ZIG_TARGET_MAP
+
+
+class TestZigNpmWrapperTemplateVars:
+    """Test npmScope and npmPublishJobs generation for Zig target."""
+
+    def _setup_zig_binary_project(self, d):
+        """Create a minimal Zig binary project in directory d."""
+        _write(os.path.join(d, "build.zig.zon"), SAMPLE_ZON)
+        _write(os.path.join(d, "build.zig"), BUILD_ZIG_BINARY)
+        _write(os.path.join(d, "VERSION"), "0.1.0\n")
+
+    def _setup_zig_library_project(self, d):
+        """Create a minimal Zig library project in directory d."""
+        _write(os.path.join(d, "build.zig.zon"), SAMPLE_ZON)
+        _write(os.path.join(d, "build.zig"), BUILD_ZIG_LIBRARY)
+        _write(os.path.join(d, "VERSION"), "0.1.0\n")
+
+    def test_npm_publish_jobs_empty_without_config(self):
+        """npmPublishJobs is empty when npm_wrapper not configured."""
+        target = ZigTarget()
+        with tempfile.TemporaryDirectory() as d:
+            self._setup_zig_binary_project(d)
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(d)
+                vars_ = target.template_vars(d)
+            finally:
+                os.chdir(old_cwd)
+            assert vars_.get("npmPublishJobs", "") == ""
+            assert vars_.get("npmScope", "") == ""
+
+    def test_npm_scope_with_config(self):
+        """npmScope set when npm_wrapper.scope configured."""
+        target = ZigTarget()
+        with tempfile.TemporaryDirectory() as d:
+            self._setup_zig_binary_project(d)
+            config_dir = os.path.join(d, ".rlsbl")
+            os.makedirs(config_dir)
+            _write(
+                os.path.join(config_dir, "config.json"),
+                '{"npm_wrapper": {"scope": "@ziguser"}}',
+            )
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(d)
+                vars_ = target.template_vars(d)
+            finally:
+                os.chdir(old_cwd)
+            assert vars_["npmScope"] == "@ziguser"
+
+    def test_npm_publish_jobs_with_config(self):
+        """npmPublishJobs generated when npm_wrapper.scope configured."""
+        target = ZigTarget()
+        with tempfile.TemporaryDirectory() as d:
+            self._setup_zig_binary_project(d)
+            config_dir = os.path.join(d, ".rlsbl")
+            os.makedirs(config_dir)
+            _write(
+                os.path.join(config_dir, "config.json"),
+                '{"npm_wrapper": {"scope": "@ziguser"}}',
+            )
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(d)
+                vars_ = target.template_vars(d)
+            finally:
+                os.chdir(old_cwd)
+            jobs = vars_.get("npmPublishJobs", "")
+            assert "npm publish" in jobs
+            assert "npm-publish:" in jobs
+            # Zig uses cp (raw binaries), not tar/unzip
+            assert "cp my-zig-project-x86_64-linux npm-wrapper/linux-x64/" in jobs
+            assert "cp my-zig-project-aarch64-macos npm-wrapper/darwin-arm64/" in jobs
+            assert "cp my-zig-project-x86_64-windows.exe npm-wrapper/win32-x64/" in jobs
+
+    def test_library_no_npm_wrapper_even_with_config(self):
+        """Library projects don't get npm wrapper even with config."""
+        target = ZigTarget()
+        with tempfile.TemporaryDirectory() as d:
+            self._setup_zig_library_project(d)
+            config_dir = os.path.join(d, ".rlsbl")
+            os.makedirs(config_dir)
+            _write(
+                os.path.join(config_dir, "config.json"),
+                '{"npm_wrapper": {"scope": "@ziguser"}}',
+            )
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(d)
+                vars_ = target.template_vars(d)
+            finally:
+                os.chdir(old_cwd)
+            assert vars_.get("npmPublishJobs", "") == ""
+
+
+class TestZigNpmWrapperTemplateMappings:
+    """Test shared_template_mappings includes npm wrapper when configured."""
+
+    def test_mappings_include_npm_wrapper_when_configured(self):
+        """npm wrapper mappings included in shared_template_mappings when configured."""
+        target = ZigTarget()
+        with tempfile.TemporaryDirectory() as d:
+            _write(os.path.join(d, "build.zig.zon"), SAMPLE_ZON)
+            _write(os.path.join(d, "build.zig"), BUILD_ZIG_BINARY)
+            _write(os.path.join(d, "VERSION"), "0.1.0\n")
+            config_dir = os.path.join(d, ".rlsbl")
+            os.makedirs(config_dir)
+            _write(
+                os.path.join(config_dir, "config.json"),
+                '{"npm_wrapper": {"scope": "@ziguser"}}',
+            )
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(d)
+                mappings = target.shared_template_mappings()
+            finally:
+                os.chdir(old_cwd)
+            targets = [m["target"] for m in mappings]
+            assert "npm-wrapper/package.json" in targets
+            assert "npm-wrapper/bin/index.js" in targets
+            assert "npm-wrapper/linux-x64/package.json" in targets
+            assert "npm-wrapper/win32-x64/package.json" in targets
+
+    def test_mappings_exclude_npm_wrapper_when_not_configured(self):
+        """npm wrapper mappings excluded from shared_template_mappings when not configured."""
+        target = ZigTarget()
+        with tempfile.TemporaryDirectory() as d:
+            _write(os.path.join(d, "build.zig.zon"), SAMPLE_ZON)
+            _write(os.path.join(d, "build.zig"), BUILD_ZIG_BINARY)
+            _write(os.path.join(d, "VERSION"), "0.1.0\n")
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(d)
+                mappings = target.shared_template_mappings()
+            finally:
+                os.chdir(old_cwd)
+            targets = [m["target"] for m in mappings]
+            assert "npm-wrapper/package.json" not in targets
+
+    def test_mappings_exclude_npm_wrapper_for_libraries(self):
+        """npm wrapper mappings excluded for Zig libraries."""
+        target = ZigTarget()
+        with tempfile.TemporaryDirectory() as d:
+            _write(os.path.join(d, "build.zig.zon"), SAMPLE_ZON)
+            _write(os.path.join(d, "build.zig"), BUILD_ZIG_LIBRARY)
+            _write(os.path.join(d, "VERSION"), "0.1.0\n")
+            config_dir = os.path.join(d, ".rlsbl")
+            os.makedirs(config_dir)
+            _write(
+                os.path.join(config_dir, "config.json"),
+                '{"npm_wrapper": {"scope": "@ziguser"}}',
+            )
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(d)
+                mappings = target.shared_template_mappings()
+            finally:
+                os.chdir(old_cwd)
+            targets = [m["target"] for m in mappings]
+            assert "npm-wrapper/package.json" not in targets

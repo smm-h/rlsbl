@@ -10,6 +10,13 @@ import re
 
 from .base import BaseTarget
 from .zig_version import read_zig_version, write_zig_version
+from ..config import read_project_config
+from ..npm_wrapper import (
+    build_artifacts,
+    build_npm_publish_jobs,
+    load_platform_config,
+    npm_wrapper_template_mappings,
+)
 
 VERSION_FILE = "VERSION"
 ZON_FILE = "build.zig.zon"
@@ -18,6 +25,29 @@ BUILD_ZIG_FILE = "build.zig"
 _ZON_NAME_RE = re.compile(r'\.name\s*=\s*"([^"]+)"')
 _ZON_MIN_ZIG_RE = re.compile(r'\.minimum_zig_version\s*=\s*"([^"]+)"')
 _BUILD_EXE_RE = re.compile(r'(?:exe\(|addExecutable\()')
+
+# Zig cross-compilation target triples for each npm platform.
+ZIG_TARGET_MAP: dict[str, str] = {
+    "linux-x64": "x86_64-linux",
+    "linux-arm64": "aarch64-linux",
+    "darwin-x64": "x86_64-macos",
+    "darwin-arm64": "aarch64-macos",
+    "win32-x64": "x86_64-windows",
+    "win32-arm64": "aarch64-windows",
+}
+
+
+def _zig_archive_fn(spec, name):
+    """Return (asset_pattern, extract_cmd, binary_name) for a Zig build.
+
+    Zig produces raw binaries (not archives), so extract_cmd is always None.
+    """
+    triple = ZIG_TARGET_MAP[spec.npm_platform]
+    is_windows = "win32" in spec.npm_platform
+    exe_suffix = ".exe" if is_windows else ""
+    asset = f"{name}-{triple}{exe_suffix}"
+    binary = f"{name}{exe_suffix}"
+    return (asset, None, binary)
 
 
 class ZigTarget(BaseTarget):
@@ -74,6 +104,7 @@ class ZigTarget(BaseTarget):
 
     def template_vars(self, dir_path):
         """Extract template variables from build.zig.zon and build.zig."""
+        config = read_project_config()
         name = self._read_zon_field(dir_path, _ZON_NAME_RE)
         if not name:
             name = os.path.basename(os.path.abspath(dir_path))
@@ -89,12 +120,24 @@ class ZigTarget(BaseTarget):
 
         is_library = self._is_library(dir_path)
 
+        # npm binary wrapper support
+        npm_wrapper_config = config.get("npm_wrapper", {}) if config else {}
+        npm_scope = npm_wrapper_config.get("scope", "")
+
+        npm_publish_jobs = ""
+        if npm_scope and not is_library:
+            specs = load_platform_config(config or {})
+            artifacts = build_artifacts(specs, name, _zig_archive_fn)
+            npm_publish_jobs = build_npm_publish_jobs(npm_scope, name, artifacts)
+
         return {
             "name": name,
             "version": version,
             "zig.minRequiredZig": min_zig,
             "zig.projectName": name,
             "zig.isLibrary": is_library,
+            "npmScope": npm_scope,
+            "npmPublishJobs": npm_publish_jobs,
         }
 
     def template_mappings(self):
@@ -103,6 +146,15 @@ class ZigTarget(BaseTarget):
             {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
             {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
         ]
+
+    def shared_template_mappings(self):
+        mappings = super().shared_template_mappings()
+        if not self._is_library("."):
+            config = read_project_config()
+            npm_wrapper_config = config.get("npm_wrapper", {})
+            if npm_wrapper_config.get("scope"):
+                mappings.extend(npm_wrapper_template_mappings())
+        return mappings
 
     def check_project_exists(self, dir_path):
         return self.detect(dir_path)
