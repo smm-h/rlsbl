@@ -16,6 +16,7 @@ from .deno import DenoTarget
 from .cargo import CargoTarget
 from .docker import DockerTarget
 from .maven import MavenTarget
+from .plain import PlainTarget
 from .protocol import ReleaseTarget
 from .base import BaseTarget
 from ..config import read_json_config
@@ -40,6 +41,7 @@ TARGETS = {
     "cargo": CargoTarget(),
     "docker": DockerTarget(),
     "maven": MavenTarget(),
+    "plain": PlainTarget(),
 }
 
 

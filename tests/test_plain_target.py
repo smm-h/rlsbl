@@ -1,0 +1,127 @@
+"""Tests for PlainTarget: VERSION file handling and opt-in-only detection."""
+
+import os
+import tempfile
+
+from rlsbl.targets.plain import PlainTarget
+from rlsbl.targets import TARGETS
+
+
+class TestPlainTargetDetect:
+    """PlainTarget.detect() always returns False (opt-in only)."""
+
+    def test_detect_always_false_empty_dir(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            assert target.detect(d) is False
+
+    def test_detect_always_false_with_version_file(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "VERSION"), "w") as f:
+                f.write("1.0.0\n")
+            assert target.detect(d) is False
+
+
+class TestPlainTargetReadVersion:
+    """Reading version from VERSION file."""
+
+    def test_read_version(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "VERSION"), "w") as f:
+                f.write("2.3.4\n")
+            assert target.read_version(d) == "2.3.4"
+
+    def test_read_version_strips_whitespace(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "VERSION"), "w") as f:
+                f.write("  1.0.0  \n")
+            assert target.read_version(d) == "1.0.0"
+
+    def test_read_version_raises_when_no_file(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            try:
+                target.read_version(d)
+                assert False, "Expected FileNotFoundError"
+            except FileNotFoundError:
+                pass
+
+
+class TestPlainTargetWriteVersion:
+    """Writing version to VERSION file atomically."""
+
+    def test_write_version_creates_file(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            target.write_version(d, "1.0.0")
+            path = os.path.join(d, "VERSION")
+            assert os.path.exists(path)
+            with open(path) as f:
+                assert f.read() == "1.0.0\n"
+
+    def test_write_version_updates_existing(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "VERSION"), "w") as f:
+                f.write("1.0.0\n")
+            target.write_version(d, "2.0.0")
+            with open(os.path.join(d, "VERSION")) as f:
+                assert f.read() == "2.0.0\n"
+
+    def test_write_version_no_tmp_left_behind(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            target.write_version(d, "1.0.0")
+            files = os.listdir(d)
+            assert "VERSION.tmp" not in files
+
+
+class TestPlainTargetProperties:
+    """Static properties and template methods."""
+
+    def test_name(self):
+        target = PlainTarget()
+        assert target.name == "plain"
+
+    def test_version_file(self):
+        target = PlainTarget()
+        assert target.version_file() == "VERSION"
+
+    def test_template_mappings_empty(self):
+        target = PlainTarget()
+        assert target.template_mappings() == []
+
+    def test_template_vars_with_version(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "VERSION"), "w") as f:
+                f.write("3.1.0\n")
+            vars = target.template_vars(d)
+            assert vars["name"] == os.path.basename(d)
+            assert vars["version"] == "3.1.0"
+
+    def test_template_vars_fallback_version(self):
+        target = PlainTarget()
+        with tempfile.TemporaryDirectory() as d:
+            vars = target.template_vars(d)
+            assert vars["name"] == os.path.basename(d)
+            assert vars["version"] == "0.0.0"
+
+    def test_tag_format_inherited(self):
+        target = PlainTarget()
+        assert target.tag_format("1.2.3") == "v1.2.3"
+
+    def test_monorepo_tag_format_inherited(self):
+        target = PlainTarget()
+        assert target.monorepo_tag_format("myproject", "1.2.3") == "myproject@v1.2.3"
+
+
+class TestPlainTargetRegistered:
+    """PlainTarget is registered in TARGETS."""
+
+    def test_registered_in_targets(self):
+        assert "plain" in TARGETS
+        assert isinstance(TARGETS["plain"], PlainTarget)

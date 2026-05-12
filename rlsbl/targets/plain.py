@@ -1,0 +1,57 @@
+"""Plain release target for projects with no build system.
+
+Uses a VERSION file as the sole version source. No CI workflows, no build,
+no publish -- just version tracking, tagging, and GitHub Releases.
+"""
+
+import os
+
+from .base import BaseTarget
+
+VERSION_FILE = "VERSION"
+
+
+class PlainTarget(BaseTarget):
+    """Release target for projects that have no build system or package registry."""
+
+    @property
+    def name(self):
+        return "plain"
+
+    def detect(self, dir_path):
+        # Opt-in only via --target plain or config; never auto-detected.
+        return False
+
+    def read_version(self, dir_path):
+        """Read version from the VERSION file."""
+        version_path = os.path.join(dir_path, VERSION_FILE)
+        if not os.path.exists(version_path):
+            raise FileNotFoundError(
+                f"No {VERSION_FILE} file found. Run 'rlsbl scaffold' first."
+            )
+        with open(version_path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+
+    def write_version(self, dir_path, version):
+        """Write the new version to the VERSION file atomically."""
+        version_path = os.path.join(dir_path, VERSION_FILE)
+        tmp_path = version_path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(version + "\n")
+        os.replace(tmp_path, version_path)
+
+    def version_file(self):
+        return VERSION_FILE
+
+    def template_mappings(self):
+        return []
+
+    def template_vars(self, dir_path):
+        try:
+            version = self.read_version(dir_path)
+        except FileNotFoundError:
+            version = "0.0.0"
+        return {
+            "name": os.path.basename(os.path.abspath(dir_path)),
+            "version": version,
+        }
