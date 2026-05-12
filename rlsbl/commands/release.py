@@ -1,6 +1,7 @@
 """Release command: bump version, commit, push, create GitHub Release."""
 
 import os
+import subprocess
 import sys
 import time
 
@@ -265,9 +266,12 @@ def run_cmd(registry, args, flags):
         try:
             env = os.environ.copy()
             env["RLSBL_VERSION"] = new_version
-            run("bash", [pre_release_script], env=env)
-        except Exception:
-            print("Error: pre-release hook failed. Fix the issues and try again.", file=sys.stderr)
+            subprocess.run(["bash", pre_release_script], env=env, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error: pre-release hook exited with code {e.returncode}.", file=sys.stderr)
+            sys.exit(1)
+        except subprocess.TimeoutExpired:
+            print("Error: pre-release hook timed out.", file=sys.stderr)
             sys.exit(1)
 
     # Commit message: scoped in monorepo mode, plain tag otherwise
@@ -625,9 +629,11 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         try:
             env = os.environ.copy()
             env["RLSBL_VERSION"] = new_version
-            run("bash", [post_release_script], env=env)
-        except Exception as e:
-            print(f"Warning: post-release hook failed: {e}", file=sys.stderr)
+            subprocess.run(["bash", post_release_script], env=env, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: post-release hook exited with code {e.returncode}.", file=sys.stderr)
+        except subprocess.TimeoutExpired:
+            print("Warning: post-release hook timed out.", file=sys.stderr)
 
     # Hint: how to watch CI for this release
     try:

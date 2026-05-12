@@ -126,7 +126,6 @@ class TestReleaseDeployFailureContinues:
         from rlsbl.commands.release import _run_release_mutating
 
         run_calls = []
-        post_release_hook_ran = [False]
 
         def mock_run(cmd, args, **kwargs):
             run_calls.append((cmd, args))
@@ -136,8 +135,6 @@ class TestReleaseDeployFailureContinues:
                 return ""
             if cmd == "git" and args and args[0] == "rev-parse":
                 return "abc123"
-            if cmd == "bash" and args and "post-release" in args[0]:
-                post_release_hook_ran[0] = True
             return ""
 
         monkeypatch.setattr("rlsbl.commands.release.run", mock_run)
@@ -148,11 +145,29 @@ class TestReleaseDeployFailureContinues:
 
         # Create a fake post-release hook to verify it still runs after deploy failure
         import os
+        import subprocess as sp
         hooks_dir = mock_git_repo / ".rlsbl" / "hooks"
         hooks_dir.mkdir(parents=True, exist_ok=True)
         hook_path = hooks_dir / "post-release.sh"
         hook_path.write_text("#!/bin/bash\necho post-release\n")
         hook_path.chmod(0o755)
+
+        # Track subprocess.run calls to verify the post-release hook ran
+        post_release_hook_ran = [False]
+        import rlsbl.commands.release as release_mod
+        original_sp = release_mod.subprocess
+
+        class FakeSubprocessModule:
+            CalledProcessError = sp.CalledProcessError
+            TimeoutExpired = sp.TimeoutExpired
+
+            @staticmethod
+            def run(cmd, **kwargs):
+                if len(cmd) > 1 and "post-release" in cmd[1]:
+                    post_release_hook_ran[0] = True
+                return sp.CompletedProcess(args=cmd, returncode=0)
+
+        monkeypatch.setattr("rlsbl.commands.release.subprocess", FakeSubprocessModule())
 
         # Should NOT raise -- deploy failure is non-fatal
         _run_release_mutating(
@@ -184,7 +199,7 @@ class TestReleaseDeployFailureContinues:
         assert "FAILED" in captured.err
         assert "Retry with: rlsbl deploy prod" in captured.err
 
-        # Post-release hook should have been called (bash run was invoked)
+        # Post-release hook should have been called via subprocess.run
         assert post_release_hook_ran[0]
 
 
