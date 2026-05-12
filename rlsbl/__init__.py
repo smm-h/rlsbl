@@ -48,7 +48,7 @@ HELP = f"""\
 rlsbl v{__version__} -- Release orchestration and project scaffolding for npm, PyPI, and Go
 
 Usage:
-  rlsbl release [patch|minor|major] [--dry-run] [--yes] [--quiet] [--skip-remote-check]
+  rlsbl release [patch|minor|major] [--dry-run] [--yes] [--quiet] [--skip-remote-check] [--allow-dirty]
                                                             Orchestrate a release
   rlsbl status                                              Show project status
   rlsbl scaffold [--force] [--update] [--private] [--no-commit] [--skip-shared]

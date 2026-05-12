@@ -128,7 +128,15 @@ def run_cmd(registry, args, flags):
         sys.exit(1)
 
     # Clean working tree
-    if not flags.get("allow-dirty") and not is_clean_tree():
+    pre_existing_dirty = set()
+    if flags.get("allow-dirty"):
+        # Record which files are already dirty so the re-check guard inside
+        # _run_release_mutating can distinguish pre-existing dirt from genuinely
+        # unexpected modifications that appeared during the release.
+        dirty_output = run("git", ["status", "--porcelain"])
+        if dirty_output:
+            pre_existing_dirty = parse_porcelain_paths(dirty_output)
+    elif not is_clean_tree():
         print("Error: working tree is not clean. Commit your changes first.", file=sys.stderr)
         sys.exit(1)
 
@@ -327,6 +335,7 @@ def run_cmd(registry, args, flags):
             primary_path=primary_path,
             target_paths=target_paths,
             lock_dir=lock_dir,
+            pre_existing_dirty=pre_existing_dirty,
         )
     finally:
         release_lock()
@@ -338,7 +347,8 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
                           monorepo_project_path=None,
                           version_dir=".", commit_msg=None,
                           primary_path=None, target_paths=None,
-                          lock_dir=".rlsbl"):
+                          lock_dir=".rlsbl",
+                          pre_existing_dirty=None):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     if commit_msg is None:
         commit_msg = tag
@@ -457,6 +467,11 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         dirty_files = parse_porcelain_paths(dirty_output)
         expected_files = set(files_to_commit)
         expected_files.add(os.path.join(lock_dir, "lock"))
+        # When --allow-dirty was used, files that were already dirty before the
+        # release started are not "unexpected" -- only genuinely new modifications
+        # (from e.g. concurrent processes) should trigger the abort.
+        if pre_existing_dirty:
+            expected_files |= pre_existing_dirty
         unexpected = dirty_files - expected_files
         if unexpected:
             unexpected_list = ", ".join(sorted(unexpected))

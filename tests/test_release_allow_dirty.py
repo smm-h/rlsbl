@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import unittest
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import patch, call
 
 
 class TestReleaseAllowDirty(unittest.TestCase):
@@ -51,11 +51,12 @@ class TestReleaseAllowDirty(unittest.TestCase):
         """With --allow-dirty, a dirty tree should not block the release (dry-run)."""
         from rlsbl.commands.release import run_cmd
 
-        # 1. git fetch origin --quiet
-        # 2. git rev-list --count HEAD..origin/main
-        # 3. tag -l for current version (exists -> bump)
-        # 4. tag -l for bumped version (doesn't exist -> proceed)
-        mock_run.side_effect = ["", "0", "v1.0.0", ""]
+        # 1. git status --porcelain (capture pre-existing dirty files)
+        # 2. git fetch origin --quiet
+        # 3. git rev-list --count HEAD..origin/main
+        # 4. tag -l for current version (exists -> bump)
+        # 5. tag -l for bumped version (doesn't exist -> proceed)
+        mock_run.side_effect = [" M notes.txt", "", "0", "v1.0.0", ""]
 
         with patch("sys.stdout", new_callable=StringIO):
             # Should not raise SystemExit
@@ -64,6 +65,103 @@ class TestReleaseAllowDirty(unittest.TestCase):
                 "dry-run": True,
                 "quiet": False,
             })
+
+    @patch("rlsbl.commands.release.release_lock")
+    @patch("rlsbl.commands.release.acquire_lock")
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=False)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.should_tag", return_value=False)
+    @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
+    def test_allow_dirty_non_dry_run_passes_recheck(self, _deploy, _tag, _gh_inst,
+                                                     _gh_auth, _clean, _branch,
+                                                     _commit_tool, mock_run, _push,
+                                                     _lock, _unlock):
+        """With --allow-dirty (non-dry-run), pre-existing dirty files pass the re-check guard."""
+        from rlsbl.commands.release import run_cmd
+
+        # Pre-existing dirty file that is NOT a release-managed file
+        dirty_file = "notes.txt"
+        porcelain_dirty = f" M {dirty_file}"
+        # After version bump, porcelain shows both the pre-existing dirty file
+        # and the expected release file (package.json)
+        porcelain_recheck = f" M {dirty_file}\n M package.json"
+
+        mock_run.side_effect = [
+            # run_cmd phase:
+            porcelain_dirty,  # git status --porcelain (capture pre-existing dirty)
+            "",               # git fetch origin --quiet
+            "0",              # git rev-list --count HEAD..origin/main
+            "v1.0.0",         # git tag -l v1.0.0 (exists -> bump)
+            "",               # git tag -l v1.0.1 (doesn't exist -> proceed)
+            # _run_release_mutating phase:
+            porcelain_recheck,  # git status --porcelain (re-check guard)
+            "package.json",     # git diff --name-only -- package.json
+            "M package.json",   # git status --porcelain -- package.json
+            "",                 # git add package.json
+            "",                 # git commit -m v1.0.1
+            "",                 # git tag v1.0.1
+            "",                 # git push origin v1.0.1
+            "",                 # gh release create ...
+            "abc123def",        # git rev-parse HEAD
+        ]
+
+        with patch("sys.stdout", new_callable=StringIO):
+            # Should not raise SystemExit -- the re-check guard must not
+            # treat the pre-existing dirty file as unexpected.
+            run_cmd("npm", ["patch"], {
+                "allow-dirty": True,
+                "yes": True,
+                "quiet": False,
+            })
+
+    @patch("rlsbl.commands.release.release_lock")
+    @patch("rlsbl.commands.release.acquire_lock")
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=False)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.should_tag", return_value=False)
+    @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
+    def test_allow_dirty_still_catches_new_unexpected_files(self, _deploy, _tag,
+                                                             _gh_inst, _gh_auth,
+                                                             _clean, _branch,
+                                                             _commit_tool, mock_run,
+                                                             _push, _lock, _unlock):
+        """With --allow-dirty, genuinely new unexpected files still abort the release."""
+        from rlsbl.commands.release import run_cmd
+
+        # Pre-existing dirty file
+        porcelain_dirty = " M notes.txt"
+        # Re-check shows a NEW unexpected file that wasn't dirty before
+        porcelain_recheck = " M notes.txt\n M package.json\n?? surprise.txt"
+
+        mock_run.side_effect = [
+            # run_cmd phase:
+            porcelain_dirty,    # git status --porcelain (capture pre-existing dirty)
+            "",                 # git fetch origin --quiet
+            "0",                # git rev-list --count HEAD..origin/main
+            "v1.0.0",           # git tag -l v1.0.0 (exists -> bump)
+            "",                 # git tag -l v1.0.1 (doesn't exist -> proceed)
+            # _run_release_mutating phase:
+            porcelain_recheck,  # git status --porcelain (re-check guard) -- has surprise.txt
+        ]
+
+        with patch("sys.stdout", new_callable=StringIO):
+            with self.assertRaises(SystemExit) as ctx:
+                run_cmd("npm", ["patch"], {
+                    "allow-dirty": True,
+                    "yes": True,
+                    "quiet": False,
+                })
+            self.assertEqual(ctx.exception.code, 1)
 
 
 if __name__ == "__main__":
