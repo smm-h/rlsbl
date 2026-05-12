@@ -535,6 +535,42 @@ def _cmd_status(flags):
         print(line)
 
 
+def _cmd_release_order(flags):
+    root = find_workspace_root(".")
+    if root is None:
+        print("Error: No workspace found. Run 'rlsbl monorepo init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    projects = load_workspace(root)
+    if not projects:
+        print("No projects in workspace.")
+        return
+
+    from ..workspace_graph import CycleError
+
+    graph = WorkspaceGraph(root, projects)
+    project_names = [p["name"] for p in projects]
+
+    try:
+        order = graph.topological_order()
+    except CycleError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    all_independent = all(graph.dep_count(p) == 0 for p in project_names)
+
+    if all_independent:
+        print("All projects are independent (no intra-workspace dependencies).")
+        print()
+        for name in sorted(project_names):
+            print(f"  {name}")
+    else:
+        print("Release order (leaves first):")
+        print()
+        for i, name in enumerate(order, 1):
+            print(f"  {i}. {name}")
+
+
 def _cmd_check_names(args, flags):
     target = flags.get("target")
     if not target:
@@ -599,6 +635,11 @@ SUBCOMMANDS = {
         _cmd_check_names,
         "Check name availability for all projects",
         "rlsbl monorepo check-names --target <npm|pypi|go> [--prefix <str>] [--suffix <str>] [--delay <ms>]",
+    ),
+    "release-order": (
+        _cmd_release_order,
+        "Show topological release order for projects",
+        "rlsbl monorepo release-order",
     ),
 }
 
