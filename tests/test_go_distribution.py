@@ -37,6 +37,14 @@ def _template_path(name):
     )
 
 
+def _shared_template_path(name):
+    """Return the absolute path to a shared template file."""
+    return os.path.join(
+        os.path.dirname(os.path.dirname(__file__)),
+        "rlsbl", "templates", "shared", name,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Test class 1: Go config reading
 # ---------------------------------------------------------------------------
@@ -221,7 +229,7 @@ class TestNpmWrapperTemplateMappings:
     def test_mappings_include_npm_wrapper_when_configured(
         self, tmp_path, monkeypatch
     ):
-        """npm wrapper mappings included when configured."""
+        """npm wrapper mappings included in shared_template_mappings when configured."""
         monkeypatch.chdir(tmp_path)
         _setup_go_project(tmp_path)
         config_dir = tmp_path / ".rlsbl"
@@ -229,7 +237,7 @@ class TestNpmWrapperTemplateMappings:
         (config_dir / "config.json").write_text(
             '{"npm_wrapper": {"scope": "@testuser"}}'
         )
-        mappings = TARGETS["go"].template_mappings()
+        mappings = TARGETS["go"].shared_template_mappings()
         targets = [m["target"] for m in mappings]
         assert "npm-wrapper/package.json" in targets
         assert "npm-wrapper/bin/index.js" in targets
@@ -239,10 +247,10 @@ class TestNpmWrapperTemplateMappings:
     def test_mappings_exclude_npm_wrapper_when_not_configured(
         self, tmp_path, monkeypatch
     ):
-        """npm wrapper mappings excluded when not configured."""
+        """npm wrapper mappings excluded from shared_template_mappings when not configured."""
         monkeypatch.chdir(tmp_path)
         _setup_go_project(tmp_path)
-        mappings = TARGETS["go"].template_mappings()
+        mappings = TARGETS["go"].shared_template_mappings()
         targets = [m["target"] for m in mappings]
         assert "npm-wrapper/package.json" not in targets
 
@@ -262,7 +270,7 @@ class TestNpmWrapperTemplateMappings:
         (config_dir / "config.json").write_text(
             '{"npm_wrapper": {"scope": "@user"}}'
         )
-        mappings = TARGETS["go"].template_mappings()
+        mappings = TARGETS["go"].shared_template_mappings()
         targets = [m["target"] for m in mappings]
         assert "npm-wrapper/package.json" not in targets
 
@@ -277,7 +285,7 @@ class TestNpmWrapperTemplateRendering:
 
     def test_wrapper_package_json_renders(self):
         """Wrapper package.json template renders valid JSON."""
-        template = open(_template_path("npm-wrapper.json.tpl")).read()
+        template = open(_shared_template_path("npm-wrapper/package.json.tpl")).read()
         vars_ = {"npmScope": "@testuser", "binCommand": "mycli"}
         content, unreplaced = process_template(template, vars_)
         assert unreplaced == []
@@ -288,7 +296,7 @@ class TestNpmWrapperTemplateRendering:
     def test_platform_package_json_renders(self):
         """Platform package.json template renders valid JSON."""
         template = open(
-            _template_path("npm-platform-linux-x64.json.tpl")
+            _shared_template_path("npm-wrapper/platform-linux-x64.json.tpl")
         ).read()
         vars_ = {"npmScope": "@testuser", "binCommand": "mycli"}
         content, _ = process_template(template, vars_)
@@ -299,7 +307,7 @@ class TestNpmWrapperTemplateRendering:
 
     def test_bin_script_renders(self):
         """Bin script template renders with correct platform mappings."""
-        template = open(_template_path("npm-wrapper-bin.js.tpl")).read()
+        template = open(_shared_template_path("npm-wrapper/bin-index.js.tpl")).read()
         vars_ = {"npmScope": "@testuser", "binCommand": "mycli"}
         content, unreplaced = process_template(template, vars_)
         assert unreplaced == []

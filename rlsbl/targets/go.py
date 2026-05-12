@@ -336,19 +336,24 @@ class GoTarget(BaseTarget):
                 mappings.append(
                     {"template": "version.go.tpl", "target": "version.go"},
                 )
-            # npm wrapper scaffolding (when npm_wrapper.scope is configured)
+            # npm wrapper scaffolding is in shared_template_mappings()
+        return mappings
+
+    def shared_template_mappings(self):
+        mappings = super().shared_template_mappings()
+        if not self._is_library("."):
             config = read_project_config()
             npm_wrapper_config = config.get("npm_wrapper", {})
             if npm_wrapper_config.get("scope"):
                 mappings.extend([
-                    {"template": "npm-wrapper.json.tpl", "target": "npm-wrapper/package.json"},
-                    {"template": "npm-wrapper-bin.js.tpl", "target": "npm-wrapper/bin/index.js"},
-                    {"template": "npm-platform-linux-x64.json.tpl", "target": "npm-wrapper/linux-x64/package.json"},
-                    {"template": "npm-platform-linux-arm64.json.tpl", "target": "npm-wrapper/linux-arm64/package.json"},
-                    {"template": "npm-platform-darwin-x64.json.tpl", "target": "npm-wrapper/darwin-x64/package.json"},
-                    {"template": "npm-platform-darwin-arm64.json.tpl", "target": "npm-wrapper/darwin-arm64/package.json"},
-                    {"template": "npm-platform-win32-x64.json.tpl", "target": "npm-wrapper/win32-x64/package.json"},
-                    {"template": "npm-platform-win32-arm64.json.tpl", "target": "npm-wrapper/win32-arm64/package.json"},
+                    {"template": "npm-wrapper/package.json.tpl", "target": "npm-wrapper/package.json"},
+                    {"template": "npm-wrapper/bin-index.js.tpl", "target": "npm-wrapper/bin/index.js"},
+                    {"template": "npm-wrapper/platform-linux-x64.json.tpl", "target": "npm-wrapper/linux-x64/package.json"},
+                    {"template": "npm-wrapper/platform-linux-arm64.json.tpl", "target": "npm-wrapper/linux-arm64/package.json"},
+                    {"template": "npm-wrapper/platform-darwin-x64.json.tpl", "target": "npm-wrapper/darwin-x64/package.json"},
+                    {"template": "npm-wrapper/platform-darwin-arm64.json.tpl", "target": "npm-wrapper/darwin-arm64/package.json"},
+                    {"template": "npm-wrapper/platform-win32-x64.json.tpl", "target": "npm-wrapper/win32-x64/package.json"},
+                    {"template": "npm-wrapper/platform-win32-arm64.json.tpl", "target": "npm-wrapper/win32-arm64/package.json"},
                 ])
         return mappings
 
