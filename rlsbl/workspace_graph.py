@@ -1,0 +1,247 @@
+"""Dependency graph for monorepo workspaces.
+
+Builds a directed graph of intra-workspace dependencies by parsing each
+project's manifest (pyproject.toml for PyPI, package.json for npm).
+"""
+
+import json
+import os
+import sys
+from collections import namedtuple
+
+import tomlkit
+
+from .targets.utils import normalize_pypi
+
+
+Dependency = namedtuple("Dependency", ["name", "dep_type", "constraint"])
+
+
+class CycleError(Exception):
+    """Raised when the workspace dependency graph contains a cycle."""
+
+
+def _parse_pypi_dep_name(dep_string):
+    """Extract the package name from a PEP 508 dependency string.
+
+    Handles forms like:
+      - "requests>=2.0"
+      - "my-lib[extra]>=1.0"
+      - "foo @ file:///path/to/foo"
+      - "foo @ {root:uri}/path"
+    Returns (name, is_path_dep, constraint) where constraint is the
+    version specifier string or the full @ URI for path deps.
+    """
+    dep_string = dep_string.strip()
+    if not dep_string:
+        return None, False, None
+
+    # Check for path dependency: "name @ file:..." or "name @ {root:uri}..."
+    if " @ " in dep_string:
+        parts = dep_string.split(" @ ", 1)
+        name = parts[0].strip()
+        # Strip extras from name: "foo[bar]" -> "foo"
+        if "[" in name:
+            name = name[:name.index("[")]
+        return name, True, parts[1].strip()
+
+    # Strip extras: "foo[bar]>=1.0" -> "foo>=1.0"
+    name_end = len(dep_string)
+    for i, ch in enumerate(dep_string):
+        if ch in "[ >=<!~;":
+            name_end = i
+            break
+    name = dep_string[:name_end]
+    constraint = dep_string[name_end:].lstrip()
+    # Remove extras from constraint if present: "[extra]>=1.0" -> ">=1.0"
+    if constraint.startswith("["):
+        bracket_end = constraint.find("]")
+        if bracket_end != -1:
+            constraint = constraint[bracket_end + 1:].lstrip()
+    return name, False, constraint or ""
+
+
+def _scan_pypi(project_dir, workspace_names_normalized):
+    """Parse pyproject.toml and return intra-workspace Dependency list.
+
+    workspace_names_normalized maps normalize_pypi(name) -> original name.
+    """
+    manifest = os.path.join(project_dir, "pyproject.toml")
+    if not os.path.isfile(manifest):
+        return []
+
+    try:
+        with open(manifest, "r", encoding="utf-8") as f:
+            data = tomlkit.parse(f.read())
+    except Exception as exc:
+        print(f"Warning: failed to parse {manifest}: {exc}", file=sys.stderr)
+        return []
+
+    deps = []
+    project_section = data.get("project", {})
+
+    # Collect all dependency strings: main + optional
+    all_dep_strings = list(project_section.get("dependencies", []))
+    for group_deps in project_section.get("optional-dependencies", {}).values():
+        all_dep_strings.extend(group_deps)
+
+    for dep_str in all_dep_strings:
+        name, is_path, constraint = _parse_pypi_dep_name(dep_str)
+        if name is None:
+            continue
+        normalized = normalize_pypi(name)
+        if normalized in workspace_names_normalized:
+            dep_type = "path" if is_path else "versioned"
+            deps.append(Dependency(
+                name=workspace_names_normalized[normalized],
+                dep_type=dep_type,
+                constraint=constraint,
+            ))
+
+    return deps
+
+
+def _scan_npm(project_dir, workspace_names):
+    """Parse package.json and return intra-workspace Dependency list.
+
+    workspace_names is a set of workspace project names (exact match).
+    """
+    manifest = os.path.join(project_dir, "package.json")
+    if not os.path.isfile(manifest):
+        return []
+
+    try:
+        with open(manifest, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:
+        print(f"Warning: failed to parse {manifest}: {exc}", file=sys.stderr)
+        return []
+
+    deps = []
+    dep_sections = ["dependencies", "devDependencies", "peerDependencies"]
+
+    for section in dep_sections:
+        for name, version in data.get(section, {}).items():
+            if name not in workspace_names:
+                continue
+            if isinstance(version, str) and version.startswith("workspace:"):
+                dep_type = "workspace"
+                constraint = version
+            elif isinstance(version, str) and version.startswith("file:"):
+                dep_type = "path"
+                constraint = version
+            else:
+                dep_type = "versioned"
+                constraint = version if isinstance(version, str) else ""
+            deps.append(Dependency(name=name, dep_type=dep_type, constraint=constraint))
+
+    return deps
+
+
+class WorkspaceGraph:
+    """Directed dependency graph of intra-workspace project dependencies."""
+
+    def __init__(self, root, projects):
+        # Map: project_name -> list of Dependency
+        self._deps = {}
+        # Map: project_name -> list of dependent project names
+        self._rdeps = {}
+        self._project_names = []
+
+        workspace_names = set()
+        for proj in projects:
+            name = proj["name"]
+            workspace_names.add(name)
+            self._project_names.append(name)
+            self._deps[name] = []
+            self._rdeps[name] = []
+
+        # Build normalized PyPI lookup: normalize_pypi(name) -> original name
+        pypi_normalized = {}
+        for name in workspace_names:
+            pypi_normalized[normalize_pypi(name)] = name
+
+        for proj in projects:
+            name = proj["name"]
+            project_dir = os.path.join(root, proj["path"])
+
+            found_deps = []
+            found_deps.extend(_scan_pypi(project_dir, pypi_normalized))
+            found_deps.extend(_scan_npm(project_dir, workspace_names))
+
+            # Deduplicate: same target name only once (first wins)
+            seen = set()
+            for dep in found_deps:
+                if dep.name != name and dep.name not in seen:
+                    seen.add(dep.name)
+                    self._deps[name].append(dep)
+
+        # Build reverse deps
+        for name, dep_list in self._deps.items():
+            for dep in dep_list:
+                if dep.name in self._rdeps:
+                    self._rdeps[dep.name].append(name)
+
+    def dependencies(self, project_name):
+        """Return list of Dependency namedtuples for intra-workspace deps."""
+        return list(self._deps.get(project_name, []))
+
+    def dependents(self, project_name):
+        """Return list of project names that depend on this project."""
+        return list(self._rdeps.get(project_name, []))
+
+    def topological_order(self):
+        """Return project names in topological order (leaves first).
+
+        Raises CycleError if the graph contains cycles.
+        """
+        # Kahn's algorithm
+        in_degree = {name: 0 for name in self._project_names}
+        for name, dep_list in self._deps.items():
+            for dep in dep_list:
+                if dep.name in in_degree:
+                    in_degree[dep.name] += 1
+
+        # Note: in_degree counts how many projects depend on a node,
+        # but for topological sort we need in-degree in the dependency
+        # direction. A depends on B means edge A->B, so B should come
+        # first. We want "leaves first" = projects with no deps first.
+        # Recompute: in_degree[X] = number of deps X has (not rdeps).
+        in_degree = {name: len(deps) for name, deps in self._deps.items()}
+
+        queue = [name for name in self._project_names if in_degree[name] == 0]
+        result = []
+
+        while queue:
+            # Sort for deterministic output
+            queue.sort()
+            node = queue.pop(0)
+            result.append(node)
+            # For each project that depends on this node, decrement its in-degree
+            for dependent in self._rdeps.get(node, []):
+                in_degree[dependent] -= 1
+                if in_degree[dependent] == 0:
+                    queue.append(dependent)
+
+        if len(result) != len(self._project_names):
+            raise CycleError(
+                "Workspace dependency graph contains a cycle"
+            )
+
+        return result
+
+    def has_cycles(self):
+        """Return True if the dependency graph contains cycles."""
+        try:
+            self.topological_order()
+            return False
+        except CycleError:
+            return True
+
+    def dep_count(self, project_name):
+        """Return number of intra-workspace dependencies for a project."""
+        return len(self._deps.get(project_name, []))
+
+    def rdep_count(self, project_name):
+        """Return number of projects that depend on this project."""
+        return len(self._rdeps.get(project_name, []))
