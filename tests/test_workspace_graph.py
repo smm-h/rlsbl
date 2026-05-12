@@ -633,3 +633,112 @@ class TestDeduplication:
         deps = graph.dependencies("app")
         assert len(deps) == 1
         assert deps[0].name == "core"
+
+
+class TestExplicitDependsOn:
+    """Tests for explicit depends_on edges from workspace config."""
+
+    def test_explicit_edge_created(self, tmp_path):
+        """Project A with depends_on: ["B"] creates an explicit edge."""
+        projects = [
+            {"path": "packages/a", "name": "a", "depends_on": ["b"]},
+            {"path": "packages/b", "name": "b"},
+        ]
+        root, projects = _make_workspace(tmp_path, projects)
+        graph = WorkspaceGraph(root, projects)
+        deps = graph.dependencies("a")
+        assert len(deps) == 1
+        assert deps[0].name == "b"
+        assert deps[0].dep_type == "explicit"
+        assert deps[0].constraint == ""
+
+    def test_explicit_dep_type(self, tmp_path):
+        """Explicit edge appears in dependencies() with dep_type='explicit'."""
+        projects = [
+            {"path": "packages/app", "name": "app", "depends_on": ["lib"]},
+            {"path": "packages/lib", "name": "lib"},
+        ]
+        root, projects = _make_workspace(tmp_path, projects)
+        graph = WorkspaceGraph(root, projects)
+        deps = graph.dependencies("app")
+        assert len(deps) == 1
+        assert deps[0] == Dependency(name="lib", dep_type="explicit", constraint="")
+
+    def test_explicit_counted_in_dep_rdep(self, tmp_path):
+        """Explicit edge counted in dep_count/rdep_count."""
+        projects = [
+            {"path": "packages/a", "name": "a", "depends_on": ["b"]},
+            {"path": "packages/b", "name": "b"},
+        ]
+        root, projects = _make_workspace(tmp_path, projects)
+        graph = WorkspaceGraph(root, projects)
+        assert graph.dep_count("a") == 1
+        assert graph.rdep_count("b") == 1
+        assert graph.dep_count("b") == 0
+        assert graph.rdep_count("a") == 0
+
+    def test_topological_sort_respects_explicit(self, tmp_path):
+        """Topological sort respects explicit edges (B before A)."""
+        projects = [
+            {"path": "packages/a", "name": "a", "depends_on": ["b"]},
+            {"path": "packages/b", "name": "b", "depends_on": ["c"]},
+            {"path": "packages/c", "name": "c"},
+        ]
+        root, projects = _make_workspace(tmp_path, projects)
+        graph = WorkspaceGraph(root, projects)
+        order = graph.topological_order()
+        assert order.index("c") < order.index("b")
+        assert order.index("b") < order.index("a")
+
+    def test_invalid_depends_on_raises(self, tmp_path):
+        """Invalid depends_on name raises ValueError with clear message."""
+        projects = [
+            {"path": "packages/a", "name": "a", "depends_on": ["nonexistent"]},
+        ]
+        root, projects = _make_workspace(tmp_path, projects)
+        with pytest.raises(ValueError, match="no workspace project with that name exists"):
+            WorkspaceGraph(root, projects)
+
+    def test_self_reference_silently_skipped(self, tmp_path):
+        """Self-reference in depends_on is silently skipped."""
+        projects = [
+            {"path": "packages/a", "name": "a", "depends_on": ["a"]},
+        ]
+        root, projects = _make_workspace(tmp_path, projects)
+        graph = WorkspaceGraph(root, projects)
+        assert graph.dependencies("a") == []
+        assert graph.dependents("a") == []
+
+    def test_explicit_and_auto_detected_coexist(self, tmp_path):
+        """Explicit + auto-detected deps coexist."""
+        projects = [
+            {"path": "packages/app", "name": "app", "depends_on": ["infra"]},
+            {"path": "packages/core", "name": "core"},
+            {"path": "packages/infra", "name": "infra"},
+        ]
+        pyproject = textwrap.dedent("""\
+            [project]
+            name = "app"
+            dependencies = ["core>=1.0"]
+        """)
+        root, projects = _make_workspace(tmp_path, projects, {
+            "app": ("pyproject.toml", pyproject),
+        })
+        graph = WorkspaceGraph(root, projects)
+        deps = graph.dependencies("app")
+        dep_names = {d.name for d in deps}
+        assert dep_names == {"core", "infra"}
+        # Verify types
+        dep_by_name = {d.name: d for d in deps}
+        assert dep_by_name["core"].dep_type == "versioned"
+        assert dep_by_name["infra"].dep_type == "explicit"
+
+    def test_empty_depends_on_harmless(self, tmp_path):
+        """depends_on with empty list is harmless."""
+        projects = [
+            {"path": "packages/a", "name": "a", "depends_on": []},
+        ]
+        root, projects = _make_workspace(tmp_path, projects)
+        graph = WorkspaceGraph(root, projects)
+        assert graph.dependencies("a") == []
+        assert graph.topological_order() == ["a"]

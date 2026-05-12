@@ -169,6 +169,22 @@ class WorkspaceGraph:
             found_deps.extend(_scan_pypi(project_dir, pypi_normalized))
             found_deps.extend(_scan_npm(project_dir, workspace_names))
 
+            # Explicit depends_on from workspace config
+            for dep_name in proj.get("depends_on", []):
+                if dep_name == name:
+                    continue  # silently skip self-references
+                if dep_name not in workspace_names:
+                    raise ValueError(
+                        f"Project '{name}' declares depends_on "
+                        f"'{dep_name}' but no workspace project "
+                        f"with that name exists"
+                    )
+                found_deps.append(Dependency(
+                    name=dep_name,
+                    dep_type="explicit",
+                    constraint="",
+                ))
+
             # Deduplicate: same target name only once (first wins)
             seen = set()
             for dep in found_deps:
