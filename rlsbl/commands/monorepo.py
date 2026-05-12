@@ -684,10 +684,13 @@ def _cmd_outdated(flags):
                 status = "workspace"
             elif dep.dep_type == "path":
                 status = "path"
+            elif dep.dep_type == "explicit":
+                status = "explicit"
             else:
                 status = _evaluate_constraint(dep.constraint, current_version)
 
-            rows.append((name, dep.name, dep.constraint, current_version, status))
+            constraint_display = "(explicit)" if dep.dep_type == "explicit" else dep.constraint
+            rows.append((name, dep.name, constraint_display, current_version, status))
 
     if not rows:
         print("No intra-workspace dependencies found.")

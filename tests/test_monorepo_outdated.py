@@ -172,6 +172,43 @@ class TestOutdatedPath:
         assert "file:../core" in captured.out
 
 
+class TestOutdatedExplicit:
+    """Test outdated with explicit (depends_on) dependencies."""
+
+    def test_explicit_dep_status(self, mock_git_repo, capsys):
+        """Explicit dep shows 'explicit' status and '(explicit)' constraint."""
+        _make_npm_project(mock_git_repo, "api", version="1.0.0")
+        _make_npm_project(mock_git_repo, "core", version="2.5.0")
+
+        projects = [
+            {"path": "api", "name": "api", "depends_on": ["core"]},
+            {"path": "core", "name": "core"},
+        ]
+        _init_workspace(mock_git_repo, projects)
+
+        _cmd_outdated({})
+        captured = capsys.readouterr()
+        assert "explicit" in captured.out
+        assert "(explicit)" in captured.out
+
+    def test_explicit_dep_shows_current_version(self, mock_git_repo, capsys):
+        """Explicit dep shows the dependency's current version."""
+        _make_npm_project(mock_git_repo, "frontend", version="0.1.0")
+        _make_npm_project(mock_git_repo, "backend", version="3.7.2")
+
+        projects = [
+            {"path": "frontend", "name": "frontend", "depends_on": ["backend"]},
+            {"path": "backend", "name": "backend"},
+        ]
+        _init_workspace(mock_git_repo, projects)
+
+        _cmd_outdated({})
+        captured = capsys.readouterr()
+        assert "3.7.2" in captured.out
+        assert "frontend" in captured.out
+        assert "backend" in captured.out
+
+
 class TestOutdatedMixed:
     """Test outdated with mixed dependency types."""
 
