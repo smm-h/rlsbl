@@ -8,7 +8,7 @@ import time
 
 from ..workspace import find_workspace_root, load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 from ..workspace_graph import WorkspaceGraph
-from ..targets import detect_targets, TARGETS
+from ..targets import detect_targets, TARGETS, TargetEntry
 
 def _auto_commit(message, files):
     """Best-effort commit of specific files. Failures are silently ignored."""
@@ -43,11 +43,26 @@ def _cmd_add(args, flags):
         print(f"Error: '{path}' is not a directory.", file=sys.stderr)
         sys.exit(1)
 
-    target_entries = detect_targets(path)
-    if not target_entries:
-        print(f"Error: No release target detected in '{path}'. Initialize a project first.", file=sys.stderr)
-        print("Hint: create a project manifest (e.g., package.json, pyproject.toml, go.mod, version.json) in the directory.", file=sys.stderr)
-        sys.exit(1)
+    explicit_target = flags.get("target")
+    if explicit_target:
+        if explicit_target not in TARGETS:
+            print(f"Error: Unknown target '{explicit_target}'.", file=sys.stderr)
+            valid = ", ".join(sorted(TARGETS))
+            print(f"Valid targets: {valid}", file=sys.stderr)
+            sys.exit(1)
+        target_entries = [TargetEntry(name=explicit_target, path=path)]
+        # For plain target, create VERSION file if it doesn't exist
+        if explicit_target == "plain":
+            version_path = os.path.join(path, "VERSION")
+            if not os.path.exists(version_path):
+                with open(version_path, "w", encoding="utf-8") as f:
+                    f.write("0.1.0\n")
+    else:
+        target_entries = detect_targets(path)
+        if not target_entries:
+            print(f"Error: No release target detected in '{path}'. Initialize a project first.", file=sys.stderr)
+            print("Hint: create a project manifest (e.g., package.json, pyproject.toml, go.mod, version.json) in the directory.", file=sys.stderr)
+            sys.exit(1)
 
     name = flags.get("name") or os.path.basename(path.rstrip("/"))
     watch_raw = flags.get("watch")
@@ -801,7 +816,7 @@ SUBCOMMANDS = {
     "add": (
         _cmd_add,
         "Add a project to the workspace",
-        "rlsbl monorepo add <path> [--name <name>] [--watch <globs>] [--subtree-remote <url>] [--depends-on <names>]",
+        "rlsbl monorepo add <path> [--name <name>] [--target <target>] [--watch <globs>] [--subtree-remote <url>] [--depends-on <names>]",
     ),
     "remove": (_cmd_remove, "Remove a project from the workspace", "rlsbl monorepo remove <path>"),
     "list": (_cmd_list, "List all projects in the workspace", "rlsbl monorepo list"),
