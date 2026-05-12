@@ -90,9 +90,25 @@ class TestPlainTargetProperties:
         target = PlainTarget()
         assert target.version_file() == "VERSION"
 
-    def test_template_mappings_empty(self):
+    def test_template_mappings_has_version(self):
         target = PlainTarget()
-        assert target.template_mappings() == []
+        mappings = target.template_mappings()
+        assert len(mappings) == 1
+        assert mappings[0]["template"] == "VERSION.tpl"
+        assert mappings[0]["target"] == "VERSION"
+
+    def test_template_dir_exists(self):
+        target = PlainTarget()
+        d = target.template_dir()
+        assert d is not None
+        assert os.path.isdir(d)
+        assert os.path.isfile(os.path.join(d, "VERSION.tpl"))
+
+    def test_check_project_exists_always_true(self):
+        target = PlainTarget()
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            assert target.check_project_exists(d) is True
 
     def test_template_vars_with_version(self):
         target = PlainTarget()

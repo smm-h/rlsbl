@@ -51,12 +51,6 @@ def _cmd_add(args, flags):
             print(f"Valid targets: {valid}", file=sys.stderr)
             sys.exit(1)
         target_entries = [TargetEntry(name=explicit_target, path=path)]
-        # For plain target, create VERSION file if it doesn't exist
-        if explicit_target == "plain":
-            version_path = os.path.join(path, "VERSION")
-            if not os.path.exists(version_path):
-                with open(version_path, "w", encoding="utf-8") as f:
-                    f.write("0.1.0\n")
     else:
         target_entries = detect_targets(path)
         if not target_entries:
@@ -115,8 +109,11 @@ def _cmd_add(args, flags):
     if not os.path.exists(project_rlsbl):
         print(f"Scaffolding {name}...")
         try:
+            cmd = [sys.executable, "-m", "rlsbl", "scaffold"]
+            if explicit_target:
+                cmd.extend(["--target", explicit_target])
             subprocess.run(
-                [sys.executable, "-m", "rlsbl", "scaffold"],
+                cmd,
                 cwd=path,
                 check=False,
             )

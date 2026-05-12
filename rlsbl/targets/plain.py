@@ -43,8 +43,17 @@ class PlainTarget(BaseTarget):
     def version_file(self):
         return VERSION_FILE
 
+    def template_dir(self):
+        return os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "templates", "plain"
+        )
+
     def template_mappings(self):
-        return []
+        return [{"template": "VERSION.tpl", "target": "VERSION"}]
+
+    def check_project_exists(self, dir_path):
+        # Plain targets are always valid -- scaffold creates the VERSION file.
+        return True
 
     def template_vars(self, dir_path):
         try:
