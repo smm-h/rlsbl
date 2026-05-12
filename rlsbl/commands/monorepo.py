@@ -535,6 +535,166 @@ def _cmd_status(flags):
         print(line)
 
 
+def _parse_version_tuple(version_str):
+    """Parse a version string like '1.2.3' into a tuple of ints.
+
+    Returns None if parsing fails.
+    """
+    parts = []
+    for p in version_str.split("."):
+        try:
+            parts.append(int(p))
+        except ValueError:
+            return None
+    return tuple(parts) if parts else None
+
+
+def _evaluate_constraint(constraint, current_version):
+    """Evaluate a version constraint against a current version.
+
+    Returns "ok" if the constraint is satisfied, "outdated" if not,
+    or "versioned" if the constraint is too complex to parse.
+    """
+    current_tuple = _parse_version_tuple(current_version)
+    if current_tuple is None:
+        return "versioned"
+
+    # Strip leading operator and extract version from simple constraints
+    # Handles: >=1.2.0, ^1.2.0, ~1.2.0, <=1.2.0, >1.2.0, <1.2.0, ==1.2.0, =1.2.0, 1.2.0
+    stripped = constraint.strip()
+    if not stripped:
+        return "versioned"
+
+    # Reject complex constraints (multiple conditions with commas, ||, spaces)
+    if "," in stripped or "||" in stripped:
+        return "versioned"
+
+    # Extract operator and version
+    if stripped.startswith(">="):
+        op, ver_str = ">=", stripped[2:].strip()
+    elif stripped.startswith("<="):
+        op, ver_str = "<=", stripped[2:].strip()
+    elif stripped.startswith("=="):
+        op, ver_str = "==", stripped[2:].strip()
+    elif stripped.startswith("!="):
+        return "versioned"
+    elif stripped.startswith(">"):
+        op, ver_str = ">", stripped[1:].strip()
+    elif stripped.startswith("<"):
+        op, ver_str = "<", stripped[1:].strip()
+    elif stripped.startswith("~="):
+        op, ver_str = "~=", stripped[2:].strip()
+    elif stripped.startswith("^"):
+        op, ver_str = "^", stripped[1:].strip()
+    elif stripped.startswith("~"):
+        op, ver_str = "~", stripped[1:].strip()
+    elif stripped.startswith("="):
+        op, ver_str = "==", stripped[1:].strip()
+    else:
+        # Bare version string like "1.2.0"
+        op, ver_str = "==", stripped
+
+    constraint_tuple = _parse_version_tuple(ver_str)
+    if constraint_tuple is None:
+        return "versioned"
+
+    if op == ">=":
+        return "ok" if current_tuple >= constraint_tuple else "outdated"
+    elif op == ">":
+        return "ok" if current_tuple > constraint_tuple else "outdated"
+    elif op == "<=":
+        return "ok" if current_tuple <= constraint_tuple else "outdated"
+    elif op == "<":
+        return "ok" if current_tuple < constraint_tuple else "outdated"
+    elif op == "==":
+        return "ok" if current_tuple == constraint_tuple else "outdated"
+    elif op == "^":
+        # Caret: >=ver and same major (for major>0), or same major.minor (for 0.x)
+        if current_tuple < constraint_tuple:
+            return "outdated"
+        if constraint_tuple[0] > 0:
+            return "ok" if current_tuple[0] == constraint_tuple[0] else "outdated"
+        # 0.x.y: pin to minor
+        if len(constraint_tuple) >= 2 and len(current_tuple) >= 2:
+            return "ok" if current_tuple[0] == 0 and current_tuple[1] == constraint_tuple[1] else "outdated"
+        return "versioned"
+    elif op == "~" or op == "~=":
+        # Tilde: >=ver and same major.minor
+        if current_tuple < constraint_tuple:
+            return "outdated"
+        if len(constraint_tuple) >= 2 and len(current_tuple) >= 2:
+            return "ok" if (current_tuple[0] == constraint_tuple[0] and
+                           current_tuple[1] == constraint_tuple[1]) else "outdated"
+        return "versioned"
+
+    return "versioned"
+
+
+def _cmd_outdated(flags):
+    root = find_workspace_root(".")
+    if root is None:
+        print("Error: No workspace found. Run 'rlsbl monorepo init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    projects = load_workspace(root)
+    if not projects:
+        print("No projects in workspace.")
+        return
+
+    graph = WorkspaceGraph(root, projects)
+
+    # Build a lookup: project name -> (target_name, target_path) for version reading
+    project_version_info = {}
+    for proj in projects:
+        name = proj["name"]
+        path = proj["path"]
+        target_entries = detect_targets(path)
+        if target_entries and target_entries[0].name in TARGETS:
+            project_version_info[name] = (target_entries[0].name, target_entries[0].path)
+
+    rows = []
+    for proj in projects:
+        name = proj["name"]
+        deps = graph.dependencies(name)
+        for dep in deps:
+            # Read the dependency's current version
+            current_version = "?"
+            if dep.name in project_version_info:
+                target_name, target_path = project_version_info[dep.name]
+                try:
+                    current_version = TARGETS[target_name].read_version(target_path)
+                except Exception:
+                    current_version = "?"
+
+            # Determine status
+            if dep.dep_type == "workspace":
+                status = "workspace"
+            elif dep.dep_type == "path":
+                status = "path"
+            else:
+                status = _evaluate_constraint(dep.constraint, current_version)
+
+            rows.append((name, dep.name, dep.constraint, current_version, status))
+
+    if not rows:
+        print("No intra-workspace dependencies found.")
+        return
+
+    # Print table
+    headers = ("Project", "Dependency", "Constraint", "Current", "Status")
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(cell))
+
+    header_line = "  ".join(h.ljust(widths[i]) for i, h in enumerate(headers))
+    print(header_line)
+
+    for row in rows:
+        line = "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row))
+        print(line)
+
+
 def _cmd_release_order(flags):
     root = find_workspace_root(".")
     if root is None:
@@ -640,6 +800,11 @@ SUBCOMMANDS = {
         _cmd_release_order,
         "Show topological release order for projects",
         "rlsbl monorepo release-order",
+    ),
+    "outdated": (
+        _cmd_outdated,
+        "Show outdated intra-workspace dependencies",
+        "rlsbl monorepo outdated",
     ),
 }
 
