@@ -107,6 +107,34 @@ class TestAdd:
         assert len(projects) == 1
         assert projects[0]["subtree_remote"] == "git@github.com:user/pkg.git"
 
+    def test_depends_on_flag(self, mock_git_repo, capsys):
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "core")
+        _make_npm_project(mock_git_repo, "utils")
+        _make_npm_project(mock_git_repo, "app")
+        _cmd_add(["core"], {})
+        _cmd_add(["utils"], {})
+        capsys.readouterr()
+        _cmd_add(["app"], {"depends-on": "core,utils"})
+        projects = load_workspace(str(mock_git_repo))
+        app_proj = [p for p in projects if p["name"] == "app"][0]
+        assert app_proj["depends_on"] == ["core", "utils"]
+
+    def test_depends_on_nonexistent_errors(self, mock_git_repo, capsys):
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "app")
+        with pytest.raises(SystemExit):
+            _cmd_add(["app"], {"depends-on": "nonexistent"})
+        captured = capsys.readouterr()
+        assert "does not exist" in captured.err
+
+    def test_no_depends_on_omits_field(self, mock_git_repo, capsys):
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "standalone")
+        _cmd_add(["standalone"], {})
+        projects = load_workspace(str(mock_git_repo))
+        assert "depends_on" not in projects[0]
+
 
 class TestRemove:
     def test_removes_project(self, mock_git_repo, capsys):

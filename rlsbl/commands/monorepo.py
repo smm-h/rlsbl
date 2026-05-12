@@ -52,6 +52,7 @@ def _cmd_add(args, flags):
     name = flags.get("name") or os.path.basename(path.rstrip("/"))
     watch_raw = flags.get("watch")
     subtree_remote = flags.get("subtree-remote")
+    depends_on_raw = flags.get("depends-on")
 
     root = find_workspace_root(".")
     if root is None:
@@ -69,11 +70,23 @@ def _cmd_add(args, flags):
             print(f"Error: Project named '{name}' already exists in workspace.", file=sys.stderr)
             sys.exit(1)
 
+    # Validate --depends-on against existing project names
+    depends_on = None
+    if depends_on_raw:
+        depends_on = [d.strip() for d in depends_on_raw.split(",")]
+        existing_names = {proj["name"] for proj in projects}
+        for dep_name in depends_on:
+            if dep_name not in existing_names:
+                print(f"Error: Dependency '{dep_name}' does not exist in workspace.", file=sys.stderr)
+                sys.exit(1)
+
     project = {"path": path, "name": name}
     if watch_raw:
         project["watch"] = [w.strip() for w in watch_raw.split(",")]
     if subtree_remote:
         project["subtree_remote"] = subtree_remote
+    if depends_on:
+        project["depends_on"] = depends_on
     projects.append(project)
     save_workspace(root, projects)
     print(f"Added project '{name}' at {path}")
@@ -785,7 +798,7 @@ SUBCOMMANDS = {
     "add": (
         _cmd_add,
         "Add a project to the workspace",
-        "rlsbl monorepo add <path> [--name <name>] [--watch <globs>] [--subtree-remote <url>]",
+        "rlsbl monorepo add <path> [--name <name>] [--watch <globs>] [--subtree-remote <url>] [--depends-on <names>]",
     ),
     "remove": (_cmd_remove, "Remove a project from the workspace", "rlsbl monorepo remove <path>"),
     "list": (_cmd_list, "List all projects in the workspace", "rlsbl monorepo list"),
