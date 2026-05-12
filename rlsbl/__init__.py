@@ -53,7 +53,7 @@ Usage:
   rlsbl status                                              Show project status
   rlsbl scaffold [--force] [--update] [--private] [--no-commit] [--skip-shared]
                                                             Scaffold release infrastructure
-  rlsbl check <name> --target <npm|pypi|go>                  Check name availability
+  rlsbl check <name> [<name2> ...] --target <npm|pypi|go>     Check name availability
   rlsbl undo [--yes]                                        Revert the last release
   rlsbl discover [--mine]                                   List rlsbl ecosystem projects
   rlsbl watch [<commit-sha>]                                Watch CI runs for a commit

@@ -2,17 +2,21 @@
 
 import subprocess
 import unittest
-from unittest.mock import patch, MagicMock
+from io import StringIO
+from unittest.mock import patch, MagicMock, call
 from urllib.error import HTTPError, URLError
 
 from conftest import FakeResponse
 from rlsbl.commands.check import (
     _check_single_name,
+    _format_single_result,
+    _format_table_row,
     _request_with_backoff,
     check_github_availability,
     check_go_availability,
     check_pypi_availability,
     get_pypi_variants,
+    run_cmd,
 )
 
 
@@ -327,6 +331,74 @@ class TestDelayFlag(unittest.TestCase):
         # Simulating what run_cmd does
         delay_ms = int(flags.get("delay", "200"))
         self.assertEqual(delay_ms, 200)
+
+
+class TestMultiNameCheck(unittest.TestCase):
+    """Tests for multi-name CLI behavior in run_cmd."""
+
+    @patch("rlsbl.commands.check._format_single_result")
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_single_name_uses_verbose_format(self, mock_check, mock_format):
+        """A single name should use the verbose _format_single_result output."""
+        mock_check.return_value = {
+            "name": "foo", "registry": "npm", "status": "available",
+            "variants": [], "github_count": 0,
+        }
+        run_cmd("npm", ["foo"], {})
+        mock_check.assert_called_once_with("foo", "npm")
+        mock_format.assert_called_once_with(mock_check.return_value)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_multiple_names_prints_table(self, mock_check, mock_sleep):
+        """Multiple names should print a compact table with Name and Status columns."""
+        mock_check.side_effect = [
+            {"name": "foo", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+            {"name": "bar", "registry": "npm", "status": "taken",
+             "variants": [], "github_count": 5},
+            {"name": "baz", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+        ]
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            run_cmd("npm", ["foo", "bar", "baz"], {})
+        output = mock_stdout.getvalue()
+        lines = output.strip().split("\n")
+        self.assertEqual(len(lines), 4)  # header + 3 rows
+        self.assertIn("Name", lines[0])
+        self.assertIn("Status", lines[0])
+        self.assertIn("foo", lines[1])
+        self.assertIn("available", lines[1])
+        self.assertIn("bar", lines[2])
+        self.assertIn("taken", lines[2])
+        self.assertIn("baz", lines[3])
+        self.assertIn("available", lines[3])
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_delay_applied_between_names(self, mock_check, mock_sleep):
+        """Delay should be applied between names, not after the last one."""
+        mock_check.side_effect = [
+            {"name": "a", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+            {"name": "b", "registry": "npm", "status": "taken",
+             "variants": [], "github_count": 0},
+            {"name": "c", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+        ]
+        with patch("sys.stdout", new_callable=StringIO):
+            run_cmd("npm", ["a", "b", "c"], {"delay": "500"})
+        # 3 names -> 2 delays between them
+        self.assertEqual(mock_sleep.call_count, 2)
+        mock_sleep.assert_has_calls([call(0.5), call(0.5)])
+
+    def test_empty_args_prints_error_and_exits(self):
+        """No names should print an error to stderr and exit 1."""
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                run_cmd("npm", [], {})
+            self.assertEqual(ctx.exception.code, 1)
+        self.assertIn("missing package name", mock_stderr.getvalue())
 
 
 if __name__ == "__main__":

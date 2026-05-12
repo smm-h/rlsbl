@@ -353,16 +353,33 @@ def run_cmd(registry, args, flags):
     """Check command handler.
 
     Checks package name availability on npm, PyPI, or Go, and warns about similar names.
+    Accepts one or more package names as positional arguments.
     """
-    name = args[0] if args else None
-    if not name:
+    names = args if args else []
+    if not names:
         print(
-            "Error: missing package name. Usage: rlsbl check <name>",
+            "Error: missing package name(s). Usage: rlsbl check <name> [<name2> ...] --target <npm|pypi|go>",
             file=sys.stderr,
         )
         sys.exit(1)
 
     delay_ms = int(flags.get("delay", "200"))
 
-    result = _check_single_name(name, registry)
-    _format_single_result(result)
+    if len(names) == 1:
+        result = _check_single_name(names[0], registry)
+        _format_single_result(result)
+    else:
+        rows = []
+        for i, name in enumerate(names):
+            result = _check_single_name(name, registry)
+            rows.append(_format_table_row(result))
+            if i < len(names) - 1:
+                time.sleep(delay_ms / 1000)
+
+        # Compute column widths for aligned output
+        name_width = max(len(row["name"]) for row in rows)
+        name_width = max(name_width, len("Name"))
+
+        print(f"{'Name':<{name_width}}  Status")
+        for row in rows:
+            print(f"{row['name']:<{name_width}}  {row['status']}")
