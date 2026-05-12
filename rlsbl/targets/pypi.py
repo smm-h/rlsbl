@@ -2,7 +2,9 @@
 
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 import tomllib
 
 import tomlkit
@@ -160,6 +162,78 @@ class PypiTarget(BaseTarget):
             {"template": "ci.yml.tpl", "target": ".github/workflows/ci.yml"},
             {"template": "publish.yml.tpl", "target": ".github/workflows/publish.yml"},
         ]
+
+    def build(self, dir_path, version):
+        """Build the package, rewriting path deps if in a monorepo context.
+
+        When the project has path dependencies (e.g., sibling packages in a
+        monorepo), copies the project to a temp directory with rewritten
+        pyproject.toml so the working tree is never modified.  Otherwise runs
+        ``uv build`` in place.
+        """
+        from ..dep_rewrite import build_rewrite_map, detect_path_deps, rewrite_pyproject_deps
+        from ..workspace import find_workspace_root, load_workspace
+        from ..workspace_graph import WorkspaceGraph
+
+        pyproject_path = os.path.join(dir_path, "pyproject.toml")
+        workspace_root = find_workspace_root(dir_path)
+
+        # Only attempt rewriting when inside a monorepo with path deps
+        if workspace_root and detect_path_deps(pyproject_path):
+            projects = load_workspace(workspace_root)
+            graph = WorkspaceGraph(workspace_root, projects)
+            rewrite_map = build_rewrite_map(workspace_root, projects, graph)
+
+            if rewrite_map:
+                self._build_with_rewrite(dir_path, pyproject_path, rewrite_map)
+                return
+
+        # No monorepo or no path deps -- build in place
+        dist_dir = os.path.join(dir_path, "dist")
+        run("uv", ["build", "--out-dir", dist_dir], env=os.environ)
+
+    # Directories excluded when copying the project to a temp build dir
+    _COPY_EXCLUDE = {".git", "__pycache__", ".rlsbl", ".rlsbl-monorepo", "dist"}
+
+    def _build_with_rewrite(self, dir_path, pyproject_path, rewrite_map):
+        """Copy project to a temp dir with rewritten deps, then build."""
+        from ..dep_rewrite import rewrite_pyproject_deps
+
+        with open(pyproject_path, "r", encoding="utf-8") as f:
+            original_content = f.read()
+
+        rewritten_content = rewrite_pyproject_deps(original_content, rewrite_map)
+
+        tmp_dir = tempfile.mkdtemp(prefix="rlsbl-build-")
+        try:
+            def _ignore(directory, contents):
+                # Only filter at the top level of the project
+                if os.path.realpath(directory) == os.path.realpath(dir_path):
+                    return [c for c in contents if c in self._COPY_EXCLUDE]
+                # Skip __pycache__ and .pyc everywhere
+                return [c for c in contents if c == "__pycache__" or c.endswith(".pyc")]
+
+            tmp_project = os.path.join(tmp_dir, "project")
+            shutil.copytree(dir_path, tmp_project, ignore=_ignore)
+
+            # Overwrite pyproject.toml with rewritten version
+            tmp_pyproject = os.path.join(tmp_project, "pyproject.toml")
+            with open(tmp_pyproject, "w", encoding="utf-8") as f:
+                f.write(rewritten_content)
+
+            # Build in the temp dir, output to the real project's dist/
+            dist_dir = os.path.join(dir_path, "dist")
+            os.makedirs(dist_dir, exist_ok=True)
+            subprocess.run(
+                ["uv", "build", "--out-dir", dist_dir],
+                cwd=tmp_project,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=os.environ,
+            )
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def publish(self, dir_path, version):
         """Publish to PyPI if a token is available, otherwise defer to CI."""
