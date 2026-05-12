@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.21.1
+
+- **`rlsbl release --allow-dirty`.** Release with uncommitted changes in the working tree. Pre-existing dirty files are tracked and excluded from the unexpected-files safety check, so genuinely new unexpected files are still caught.
+- **`monorepo add` passes `--target` to scaffold.** When an explicit target is specified (e.g., `--target plain`), it is forwarded to the scaffold subprocess instead of relying on auto-detection. Removes a special case where `monorepo add` pre-created a VERSION file for plain targets.
+
 ## 0.21.0
 
 - **Cross-registry `depends_on` in workspace.toml.** Monorepo projects can now declare explicit dependencies on siblings in any ecosystem: `depends_on = ["framework"]`. These edges are respected by `release-order`, counted in `status` Deps/Rdeps columns, and shown in `outdated` with status "explicit". Use `monorepo add --depends-on name1,name2` to set them during project registration.
