@@ -19,47 +19,6 @@ def _auto_commit(message, files):
         pass
 
 
-MONOREPO_HELP = """\
-Usage: rlsbl monorepo <subcommand>
-
-Subcommands:
-  init                      Initialize a monorepo workspace
-  add <path> [options]      Add a project to the workspace
-                              --name <n>         Project name (default: dirname)
-                              --watch <globs>    Extra paths to watch (comma-separated)
-                              --subtree-remote <url>  Mirror repo for subtree publishing
-  remove <path>             Remove a project from the workspace
-  list                      List all projects in the workspace
-  sync                      Sync CI workflows to repo root
-  status                    Show status of all projects"""
-
-
-def run_cmd(registry, args, flags):
-    """Dispatch to monorepo subcommand."""
-    if not args:
-        print(MONOREPO_HELP)
-        return
-
-    subcommand = args[0]
-    sub_args = args[1:]
-
-    if subcommand == "init":
-        _cmd_init(flags)
-    elif subcommand == "add":
-        _cmd_add(sub_args, flags)
-    elif subcommand == "remove":
-        _cmd_remove(sub_args, flags)
-    elif subcommand == "list":
-        _cmd_list(flags)
-    elif subcommand == "sync":
-        _cmd_sync(flags)
-    elif subcommand == "status":
-        _cmd_status(flags)
-    else:
-        print(f"Error: unknown monorepo subcommand '{subcommand}'.", file=sys.stderr)
-        sys.exit(1)
-
-
 def _cmd_init(flags):
     ws_file = os.path.join(".", WORKSPACE_DIR, WORKSPACE_FILE)
     if os.path.isfile(ws_file):
@@ -554,3 +513,65 @@ def _cmd_status(flags):
     for cells in display_rows:
         line = "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(cells))
         print(line)
+
+
+# --- Subcommand registry and dispatch ---
+
+SUBCOMMANDS = {
+    "init": (_cmd_init, "Initialize a monorepo workspace", "rlsbl monorepo init"),
+    "add": (
+        _cmd_add,
+        "Add a project to the workspace",
+        "rlsbl monorepo add <path> [--name <name>] [--watch <globs>] [--subtree-remote <url>]",
+    ),
+    "remove": (_cmd_remove, "Remove a project from the workspace", "rlsbl monorepo remove <path>"),
+    "list": (_cmd_list, "List all projects in the workspace", "rlsbl monorepo list"),
+    "sync": (_cmd_sync, "Sync CI workflows from projects to repo root", "rlsbl monorepo sync"),
+    "status": (_cmd_status, "Show status of all projects", "rlsbl monorepo status"),
+}
+
+# Subcommands whose handlers accept (args, flags) instead of just (flags)
+_SUBCOMMANDS_WITH_ARGS = {"add", "remove"}
+
+
+def _print_subcommand_list():
+    """Print the list of all monorepo subcommands with aligned descriptions."""
+    print("Usage: rlsbl monorepo <subcommand>\n")
+    print("Subcommands:")
+    max_name_len = max(len(name) for name in SUBCOMMANDS)
+    for name, (_, description, _) in SUBCOMMANDS.items():
+        padding = " " * (max_name_len - len(name) + 4)
+        print(f"  {name}{padding}{description}")
+
+
+def _print_subcommand_help(name):
+    """Print help for a specific subcommand."""
+    _, description, usage = SUBCOMMANDS[name]
+    print(f"{description}\n")
+    print(f"Usage: {usage}")
+
+
+def run_cmd(registry, args, flags):
+    """Dispatch to monorepo subcommand."""
+    if not args or (len(args) == 1 and args[0] == "--help"):
+        _print_subcommand_list()
+        return
+
+    subcommand = args[0]
+    sub_args = args[1:]
+
+    if subcommand not in SUBCOMMANDS:
+        print(f"Error: unknown monorepo subcommand '{subcommand}'.", file=sys.stderr)
+        valid = ", ".join(SUBCOMMANDS)
+        print(f"Valid subcommands: {valid}", file=sys.stderr)
+        sys.exit(1)
+
+    if "--help" in sub_args:
+        _print_subcommand_help(subcommand)
+        return
+
+    handler, _, _ = SUBCOMMANDS[subcommand]
+    if subcommand in _SUBCOMMANDS_WITH_ARGS:
+        handler(sub_args, flags)
+    else:
+        handler(flags)
