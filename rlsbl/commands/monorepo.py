@@ -319,7 +319,8 @@ def _cmd_sync(flags):
     written_files = []
     current_project_names = set()
 
-    # Track which projects have publish workflows
+    # Track which projects have CI and publish workflows
+    projects_with_ci = []
     projects_with_publish = []
 
     for proj in projects:
@@ -358,15 +359,17 @@ def _cmd_sync(flags):
             os.chmod(dest, 0o444)
             written_files.append(dest)
 
+            if wf_type == "ci":
+                projects_with_ci.append(proj)
             if wf_type == "publish":
                 projects_with_publish.append(proj)
 
-    # Generate CI router
+    # Generate CI router (only for projects that have CI workflows)
     router_path = os.path.join(workflows_dir, "ci-router.yml")
     if os.path.isfile(router_path):
         os.chmod(router_path, 0o644)
     with open(router_path, "w", encoding="utf-8") as f:
-        f.write(_generate_router(projects))
+        f.write(_generate_router(projects_with_ci))
     os.chmod(router_path, 0o444)
     written_files.append(router_path)
 
