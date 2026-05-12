@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.21.2
+
+- **Hook output is now visible.** Pre-release and post-release hooks stream stdout/stderr to the terminal in real-time. On failure, the actual exit code is shown instead of a generic error message.
+- **`RLSBL_HOOK_TIMEOUT` environment variable.** Configure a timeout in seconds for release hooks. Default is no timeout (hooks run to completion), fixing the previous 120-second hard limit that silently killed long-running test suites.
+
 ## 0.21.1
 
 - **`rlsbl release --allow-dirty`.** Release with uncommitted changes in the working tree. Pre-existing dirty files are tracked and excluded from the unexpected-files safety check, so genuinely new unexpected files are still caught.
