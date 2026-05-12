@@ -7,7 +7,7 @@ import subprocess
 import pytest
 
 from rlsbl.commands.monorepo import _cmd_init, _cmd_add, _cmd_status
-from rlsbl.workspace import load_workspace, save_workspace
+from rlsbl.workspace import load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 
 
 def _make_npm_project(base_path, subdir, version="0.1.0"):
@@ -324,3 +324,144 @@ class TestMonorepoStatusRemote:
         core_line = [l for l in lines if "core" in l and "tooling" not in l][0]
         # The last column should be "-" for core (since it has no remote)
         assert "-" in core_line
+
+
+def _make_npm_project_with_deps(base_path, subdir, version="0.1.0", deps=None):
+    """Create an npm project with optional dependencies in package.json."""
+    proj_dir = os.path.join(str(base_path), subdir)
+    os.makedirs(proj_dir, exist_ok=True)
+    pkg = {"name": subdir, "version": version}
+    if deps:
+        pkg["dependencies"] = deps
+    with open(os.path.join(proj_dir, "package.json"), "w") as f:
+        json.dump(pkg, f)
+    return subdir
+
+
+def _setup_workspace_with_deps(base_path):
+    """Create a workspace with three projects where lib-b depends on lib-a,
+    and lib-c depends on both lib-a and lib-b.
+
+    Returns the list of project dicts.
+    """
+    ws_dir = os.path.join(str(base_path), WORKSPACE_DIR)
+    os.makedirs(ws_dir, exist_ok=True)
+
+    _make_npm_project_with_deps(base_path, "lib-a", version="1.0.0")
+    _make_npm_project_with_deps(base_path, "lib-b", version="1.0.0", deps={"lib-a": "^1.0.0"})
+    _make_npm_project_with_deps(base_path, "lib-c", version="1.0.0", deps={"lib-a": "^1.0.0", "lib-b": "^1.0.0"})
+
+    projects = [
+        {"path": "lib-a", "name": "lib-a"},
+        {"path": "lib-b", "name": "lib-b"},
+        {"path": "lib-c", "name": "lib-c"},
+    ]
+    save_workspace(str(base_path), projects)
+    return projects
+
+
+class TestMonorepoStatusDeps:
+    """Tests for Deps and Rdeps columns in monorepo status."""
+
+    def test_deps_rdeps_columns_shown_when_deps_exist(self, mock_git_repo, capsys):
+        """Deps and Rdeps columns appear when projects have intra-workspace deps."""
+        _setup_workspace_with_deps(mock_git_repo)
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        header_line = captured.out.strip().split("\n")[0]
+        assert "Deps" in header_line
+        assert "Rdeps" in header_line
+
+    def test_deps_rdeps_columns_hidden_when_no_deps(self, mock_git_repo, capsys):
+        """Deps and Rdeps columns are hidden when no intra-workspace deps exist."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "standalone-a", version="1.0.0")
+        _make_npm_project(mock_git_repo, "standalone-b", version="1.0.0")
+        _cmd_add(["standalone-a"], {})
+        _cmd_add(["standalone-b"], {})
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        header_line = captured.out.strip().split("\n")[0]
+        assert "Deps" not in header_line
+        assert "Rdeps" not in header_line
+
+    def test_correct_dep_counts(self, mock_git_repo, capsys):
+        """Verify correct dep and rdep counts for a known dependency structure.
+
+        lib-a: 0 deps, 2 rdeps (lib-b and lib-c depend on it)
+        lib-b: 1 dep (lib-a), 1 rdep (lib-c depends on it)
+        lib-c: 2 deps (lib-a, lib-b), 0 rdeps
+        """
+        _setup_workspace_with_deps(mock_git_repo)
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        lines = captured.out.strip().split("\n")
+        header = lines[0]
+
+        # Find column start positions using header text positions
+        deps_start = header.index("Deps")
+        rdeps_start = header.index("Rdeps")
+
+        # Find end positions: next column start or end of line
+        # Columns are separated by 2+ spaces; find next column start after each
+        def _col_end(start, col_name):
+            """Find end of a column: start of next column header or end of line."""
+            after = start + len(col_name)
+            # Look for next non-space char after a gap of spaces
+            rest = header[after:]
+            stripped = rest.lstrip()
+            if not stripped:
+                return None  # last column
+            return after + (len(rest) - len(stripped))
+
+        deps_end = _col_end(deps_start, "Deps")
+        rdeps_end = _col_end(rdeps_start, "Rdeps")
+
+        # Parse each project row using fixed positions
+        for line in lines[1:]:
+            name = line.split()[0]
+            deps_val = line[deps_start:deps_end].strip() if deps_end else line[deps_start:].strip()
+            rdeps_val = line[rdeps_start:rdeps_end].strip() if rdeps_end else line[rdeps_start:].strip()
+
+            if name == "lib-a":
+                assert deps_val == "0", f"lib-a should have 0 deps, got {deps_val}"
+                assert rdeps_val == "2", f"lib-a should have 2 rdeps, got {rdeps_val}"
+            elif name == "lib-b":
+                assert deps_val == "1", f"lib-b should have 1 dep, got {deps_val}"
+                assert rdeps_val == "1", f"lib-b should have 1 rdep, got {rdeps_val}"
+            elif name == "lib-c":
+                assert deps_val == "2", f"lib-c should have 2 deps, got {deps_val}"
+                assert rdeps_val == "0", f"lib-c should have 0 rdeps, got {rdeps_val}"
+
+    def test_deps_columns_before_watch_and_remote(self, mock_git_repo, capsys):
+        """Deps/Rdeps columns appear after Unreleased but before Watch and Remote."""
+        _setup_workspace_with_deps(mock_git_repo)
+
+        # Add watch paths and subtree remote to lib-a
+        projects = load_workspace(".")
+        for p in projects:
+            if p["name"] == "lib-a":
+                p["watch"] = ["shared/**"]
+                p["subtree_remote"] = "git@github.com:user/lib-a.git"
+        save_workspace(".", projects)
+
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        header_line = captured.out.strip().split("\n")[0]
+
+        # All dynamic columns should be present
+        assert "Deps" in header_line
+        assert "Rdeps" in header_line
+        assert "Watch" in header_line
+        assert "Remote" in header_line
+
+        # Verify ordering: Deps before Watch, Rdeps before Watch
+        deps_pos = header_line.index("Deps")
+        rdeps_pos = header_line.index("Rdeps")
+        watch_pos = header_line.index("Watch")
+        remote_pos = header_line.index("Remote")
+        assert deps_pos < rdeps_pos < watch_pos < remote_pos

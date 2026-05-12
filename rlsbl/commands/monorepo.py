@@ -7,6 +7,7 @@ import sys
 import time
 
 from ..workspace import find_workspace_root, load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
+from ..workspace_graph import WorkspaceGraph
 from ..targets import detect_targets, TARGETS
 
 def _auto_commit(message, files):
@@ -405,6 +406,9 @@ def _cmd_status(flags):
         print("No projects in workspace.")
         return
 
+    # Build dependency graph
+    graph = WorkspaceGraph(root, projects)
+
     rows = []
     for proj in projects:
         name = proj["name"]
@@ -468,6 +472,12 @@ def _cmd_status(flags):
             else:
                 unreleased_str = f"{count} entries"
 
+        # Dependency counts
+        deps_count = graph.dep_count(name)
+        rdeps_count = graph.rdep_count(name)
+        deps_str = str(deps_count) if deps_count else "0"
+        rdeps_str = str(rdeps_count) if rdeps_count else "0"
+
         # Watch paths
         watch = proj.get("watch", [])
         watch_str = f"{len(watch)} paths" if watch else "-"
@@ -476,15 +486,20 @@ def _cmd_status(flags):
         remote = proj.get("subtree_remote", "")
         remote_str = remote if remote else "-"
 
-        rows.append((name, path, target_name, version, latest_tag, unreleased_str, watch_str, remote_str))
+        rows.append((name, path, target_name, version, latest_tag, unreleased_str, deps_str, rdeps_str, watch_str, remote_str))
 
-    # Determine if any project has watch paths
-    any_watch = any(row[6] != "-" for row in rows)
-    # Determine if any project has a subtree remote
-    any_remote = any(row[7] != "-" for row in rows)
+    # Determine which dynamic columns to show
+    any_deps = any(row[6] != "0" for row in rows)
+    any_rdeps = any(row[7] != "0" for row in rows)
+    any_watch = any(row[8] != "-" for row in rows)
+    any_remote = any(row[9] != "-" for row in rows)
 
     # Calculate column widths
     base_headers = ("Project", "Path", "Target", "Version", "Tag", "Unreleased")
+    if any_deps:
+        base_headers = base_headers + ("Deps",)
+    if any_rdeps:
+        base_headers = base_headers + ("Rdeps",)
     if any_watch:
         base_headers = base_headers + ("Watch",)
     if any_remote:
@@ -495,10 +510,14 @@ def _cmd_status(flags):
     display_rows = []
     for row in rows:
         cells = list(row[:6])  # base columns: name, path, target, version, tag, unreleased
-        if any_watch:
+        if any_deps:
             cells.append(row[6])
-        if any_remote:
+        if any_rdeps:
             cells.append(row[7])
+        if any_watch:
+            cells.append(row[8])
+        if any_remote:
+            cells.append(row[9])
         display_rows.append(tuple(cells))
 
     widths = [len(h) for h in headers]
