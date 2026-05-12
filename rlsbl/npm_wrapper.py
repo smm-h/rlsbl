@@ -2,6 +2,9 @@
 
 Provides the data structures and helpers needed by scaffold generators
 that produce npm wrapper packages around native binaries (Go, Rust, etc.).
+
+Also provides job generation for npm wrapper publish workflows and
+template mappings for shared npm-wrapper scaffold templates.
 """
 
 from __future__ import annotations
@@ -91,3 +94,110 @@ def build_artifacts(
             )
         )
     return artifacts
+
+
+def build_npm_publish_jobs(
+    npm_scope: str,
+    bin_command: str,
+    artifacts: list[PlatformArtifact],
+) -> str:
+    """Generate YAML for npm wrapper publish jobs in a publish workflow.
+
+    Returns a multi-line string injected at the ``jobs:`` level via
+    the ``{{npmPublishJobs}}`` template variable in publish.yml.tpl.
+
+    ``artifacts`` provides the per-platform archive details (asset pattern,
+    extract command, binary name) so this function is target-agnostic.
+    """
+    # Build the extract step script
+    extract_lines = []
+    for artifact in artifacts:
+        # Resolve {name} and {version} in the asset pattern.
+        # {version} stays as a shell variable reference for CI.
+        asset = artifact.asset_pattern.format(
+            name=bin_command, version="${VERSION}"
+        )
+        npm_dir = artifact.npm_platform
+        if artifact.extract_cmd:
+            if "unzip" in artifact.extract_cmd:
+                extract_lines.append(
+                    f"{artifact.extract_cmd} {asset} -d npm-wrapper/{npm_dir}/"
+                )
+            else:
+                extract_lines.append(
+                    f"{artifact.extract_cmd} {asset} -C npm-wrapper/{npm_dir}/"
+                )
+        else:
+            # No extraction needed -- copy the raw binary
+            extract_lines.append(
+                f"cp {asset} npm-wrapper/{npm_dir}/"
+            )
+    extract_script = "\n          ".join(extract_lines)
+
+    # Build the publish platform packages step script
+    publish_lines = []
+    for artifact in artifacts:
+        d = artifact.npm_platform
+        publish_lines.append(
+            f"cd npm-wrapper/{d} && npm publish --access public && cd ../.."
+        )
+    publish_script = "\n          ".join(publish_lines)
+
+    return f"""
+  npm-publish:
+    needs: [goreleaser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - name: Extract version from tag
+        run: echo "VERSION=${{GITHUB_REF_NAME#v}}" >> $GITHUB_ENV
+      - name: Download release archives
+        run: |
+          gh release download v${{VERSION}} --dir .
+        env:
+          GH_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+      - name: Extract binaries to platform dirs
+        run: |
+          {extract_script}
+      - name: Stamp version
+        run: find npm-wrapper -name package.json -exec sed -i "s/0.0.0/$VERSION/g" {{}} +
+      - name: Publish platform packages
+        run: |
+          {publish_script}
+        env:
+          NODE_AUTH_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
+      - name: Publish wrapper package
+        run: cd npm-wrapper && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
+"""
+
+
+def npm_wrapper_template_mappings() -> list[dict[str, str]]:
+    """Return template mappings for npm wrapper shared templates.
+
+    Each mapping has ``"template"`` (relative to the shared template dir)
+    and ``"target"`` (destination path in the project).
+    """
+    mappings = [
+        {
+            "template": "npm-wrapper/package.json.tpl",
+            "target": "npm-wrapper/package.json",
+        },
+        {
+            "template": "npm-wrapper/bin-index.js.tpl",
+            "target": "npm-wrapper/bin/index.js",
+        },
+    ]
+    for spec in DEFAULT_PLATFORMS:
+        mappings.append(
+            {
+                "template": f"npm-wrapper/platform-{spec.npm_platform}.json.tpl",
+                "target": f"npm-wrapper/{spec.npm_platform}/package.json",
+            }
+        )
+    return mappings

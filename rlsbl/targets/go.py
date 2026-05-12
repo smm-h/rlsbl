@@ -16,78 +16,36 @@ import subprocess
 
 from .base import BaseTarget
 from ..config import read_project_config
+from ..npm_wrapper import (
+    build_artifacts,
+    build_npm_publish_jobs,
+    load_platform_config,
+    npm_wrapper_template_mappings,
+)
 from ..utils import run
 
 VERSION_FILE = "VERSION"
 
 _GO_VERSION_RE = re.compile(r"^go\s+(\d+\.\d+(?:\.\d+)?)", re.MULTILINE)
 
+# Goreleaser archive suffix and extension for each npm platform.
+_GORELEASER_MAP: dict[str, tuple[str, str]] = {
+    "linux-x64": ("linux_amd64", "tar.gz"),
+    "linux-arm64": ("linux_arm64", "tar.gz"),
+    "darwin-x64": ("darwin_amd64", "tar.gz"),
+    "darwin-arm64": ("darwin_arm64", "tar.gz"),
+    "win32-x64": ("windows_amd64", "zip"),
+    "win32-arm64": ("windows_arm64", "zip"),
+}
 
-def _build_npm_publish_jobs(npm_scope, bin_command):
-    """Generate the YAML for npm wrapper publish jobs in the publish workflow.
 
-    Returns a multi-line string that gets injected at the jobs: level via
-    the {{npmPublishJobs}} template variable in publish.yml.tpl.
-    """
-    # Platform mappings: goreleaser archive name suffix -> npm dir, archive format
-    platforms = [
-        ("linux_amd64", "linux-x64", "tar.gz", bin_command),
-        ("linux_arm64", "linux-arm64", "tar.gz", bin_command),
-        ("darwin_amd64", "darwin-x64", "tar.gz", bin_command),
-        ("darwin_arm64", "darwin-arm64", "tar.gz", bin_command),
-        ("windows_amd64", "win32-x64", "zip", bin_command + ".exe"),
-        ("windows_arm64", "win32-arm64", "zip", bin_command + ".exe"),
-    ]
-
-    # Build the extract step script
-    extract_lines = []
-    for goreleaser_suffix, npm_dir, fmt, _bin_name in platforms:
-        archive = f"{bin_command}_${{VERSION}}_{goreleaser_suffix}"
-        if fmt == "zip":
-            extract_lines.append(f"unzip {archive}.zip -d npm-wrapper/{npm_dir}/")
-        else:
-            extract_lines.append(f"tar xzf {archive}.tar.gz -C npm-wrapper/{npm_dir}/")
-    extract_script = "\n          ".join(extract_lines)
-
-    # Build the publish platform packages step script
-    npm_dirs = [p[1] for p in platforms]
-    publish_lines = []
-    for d in npm_dirs:
-        publish_lines.append(f"cd npm-wrapper/{d} && npm publish --access public && cd ../..")
-    publish_script = "\n          ".join(publish_lines)
-
-    return f"""
-  npm-publish:
-    needs: [goreleaser]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
-      - name: Extract version from tag
-        run: echo "VERSION=${{GITHUB_REF_NAME#v}}" >> $GITHUB_ENV
-      - name: Download release archives
-        run: |
-          gh release download v${{VERSION}} --dir .
-        env:
-          GH_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-      - name: Extract binaries to platform dirs
-        run: |
-          {extract_script}
-      - name: Stamp version
-        run: find npm-wrapper -name package.json -exec sed -i "s/0.0.0/$VERSION/g" {{}} +
-      - name: Publish platform packages
-        run: |
-          {publish_script}
-        env:
-          NODE_AUTH_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
-      - name: Publish wrapper package
-        run: cd npm-wrapper && npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{{{ secrets.NPM_TOKEN }}}}
-"""
+def _go_archive_fn(spec, name):
+    """Return (asset_pattern, extract_cmd, binary_name) for a Go/goreleaser build."""
+    suffix, ext = _GORELEASER_MAP[spec.npm_platform]
+    asset = f"{{name}}_{{version}}_{suffix}.{ext}"
+    extract = "tar xzf" if ext == "tar.gz" else "unzip"
+    binary = name + (".exe" if "win32" in spec.npm_platform else "")
+    return (asset, extract, binary)
 
 
 class GoTarget(BaseTarget):
@@ -292,7 +250,11 @@ class GoTarget(BaseTarget):
         # npm wrapper publish job
         npm_publish_jobs = ""
         if npm_scope and not self._is_library(dir_path):
-            npm_publish_jobs = _build_npm_publish_jobs(npm_scope, short_name)
+            specs = load_platform_config(config or {})
+            artifacts = build_artifacts(specs, short_name, _go_archive_fn)
+            npm_publish_jobs = build_npm_publish_jobs(
+                npm_scope, short_name, artifacts
+            )
             publish_setup += "\n- Add NPM_TOKEN secret for npm binary wrapper publishing"
 
         result = {
@@ -345,16 +307,7 @@ class GoTarget(BaseTarget):
             config = read_project_config()
             npm_wrapper_config = config.get("npm_wrapper", {})
             if npm_wrapper_config.get("scope"):
-                mappings.extend([
-                    {"template": "npm-wrapper/package.json.tpl", "target": "npm-wrapper/package.json"},
-                    {"template": "npm-wrapper/bin-index.js.tpl", "target": "npm-wrapper/bin/index.js"},
-                    {"template": "npm-wrapper/platform-linux-x64.json.tpl", "target": "npm-wrapper/linux-x64/package.json"},
-                    {"template": "npm-wrapper/platform-linux-arm64.json.tpl", "target": "npm-wrapper/linux-arm64/package.json"},
-                    {"template": "npm-wrapper/platform-darwin-x64.json.tpl", "target": "npm-wrapper/darwin-x64/package.json"},
-                    {"template": "npm-wrapper/platform-darwin-arm64.json.tpl", "target": "npm-wrapper/darwin-arm64/package.json"},
-                    {"template": "npm-wrapper/platform-win32-x64.json.tpl", "target": "npm-wrapper/win32-x64/package.json"},
-                    {"template": "npm-wrapper/platform-win32-arm64.json.tpl", "target": "npm-wrapper/win32-arm64/package.json"},
-                ])
+                mappings.extend(npm_wrapper_template_mappings())
         return mappings
 
     def check_project_exists(self, dir_path):
