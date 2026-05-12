@@ -16,6 +16,7 @@ from .deno import DenoTarget
 from .cargo import CargoTarget
 from .docker import DockerTarget
 from .maven import MavenTarget
+from .zig import ZigTarget
 from .plain import PlainTarget
 from .protocol import ReleaseTarget
 from .base import BaseTarget
@@ -41,6 +42,7 @@ TARGETS = {
     "cargo": CargoTarget(),
     "docker": DockerTarget(),
     "maven": MavenTarget(),
+    "zig": ZigTarget(),
     "plain": PlainTarget(),
 }
 
