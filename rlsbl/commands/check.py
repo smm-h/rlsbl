@@ -93,120 +93,6 @@ def get_pypi_variants(name):
     return list(variants)
 
 
-def _check_name_npm(name):
-    """Check npm availability and report similar names."""
-    print(f'Checking npm for "{name}"...')
-
-    result = check_npm_availability(name)
-    if result["status"] == "error":
-        print(f"Error checking npm: {result['message']}", file=sys.stderr)
-        sys.exit(1)
-    available = result["status"] == "available"
-    if available:
-        print(f'"{name}" is available on npm.')
-    else:
-        print(f'"{name}" is taken on npm.')
-
-    # Check variants for similarity in parallel; skip variants that error
-    variants = get_npm_variants(name)
-    similar = []
-
-    if _HAS_THREADS and variants:
-        try:
-            with ThreadPoolExecutor(max_workers=len(variants)) as executor:
-                future_to_variant = {
-                    executor.submit(check_npm_availability, v): v
-                    for v in variants
-                }
-                for future in as_completed(future_to_variant):
-                    variant = future_to_variant[future]
-                    try:
-                        var_result = future.result()
-                        if var_result["status"] == "taken":
-                            similar.append(variant)
-                    except Exception:
-                        pass  # Skip variants that error
-        except Exception:
-            # Fall back to sequential on any thread pool error
-            similar = []
-            for variant in variants:
-                var_result = check_npm_availability(variant)
-                if var_result["status"] == "taken":
-                    similar.append(variant)
-    else:
-        for variant in variants:
-            var_result = check_npm_availability(variant)
-            if var_result["status"] == "taken":
-                similar.append(variant)
-
-    if similar:
-        print("\nSimilar names already taken:")
-        for s in similar:
-            print(f"  {s}")
-        if available:
-            print(
-                "\nYour name is available but has similar existing packages. "
-                "Consider if this could cause confusion."
-            )
-
-
-def _check_name_pypi(name):
-    """Check PyPI availability and report similar names."""
-    print(f'Checking PyPI for "{name}"...')
-
-    result = check_pypi_availability(name)
-    if result["status"] == "error":
-        print(f"Error checking PyPI: {result['message']}", file=sys.stderr)
-        sys.exit(1)
-    available = result["status"] == "available"
-    if available:
-        print(f'"{name}" is available on PyPI.')
-    else:
-        print(f'"{name}" is taken on PyPI.')
-
-    # Check variants for similarity (PEP 503 normalization) in parallel; skip variants that error
-    variants = [v for v in get_pypi_variants(name) if v != name]
-    similar = []
-
-    if _HAS_THREADS and variants:
-        try:
-            with ThreadPoolExecutor(max_workers=len(variants)) as executor:
-                future_to_variant = {
-                    executor.submit(check_pypi_availability, v): v
-                    for v in variants
-                }
-                for future in as_completed(future_to_variant):
-                    variant = future_to_variant[future]
-                    try:
-                        var_result = future.result()
-                        if var_result["status"] == "taken":
-                            similar.append(variant)
-                    except Exception:
-                        pass  # Skip variants that error
-        except Exception:
-            # Fall back to sequential on any thread pool error
-            similar = []
-            for variant in variants:
-                var_result = check_pypi_availability(variant)
-                if var_result["status"] == "taken":
-                    similar.append(variant)
-    else:
-        for variant in variants:
-            var_result = check_pypi_availability(variant)
-            if var_result["status"] == "taken":
-                similar.append(variant)
-
-    if similar:
-        print("\nSimilar names already taken:")
-        for s in similar:
-            print(f"  {s}")
-        if available:
-            print(
-                "\nYour name is available but has similar existing packages. "
-                "Consider if this could cause confusion."
-            )
-
-
 def check_go_availability(name):
     """Check if a Go module path exists on pkg.go.dev.
 
@@ -258,32 +144,176 @@ def check_github_availability(name):
         return {"status": "error", "message": str(e) or "Network error"}
 
 
-def _check_github(name):
-    """Show GitHub repo count as informational context (not an availability check)."""
-    result = check_github_availability(name)
-    if result["status"] == "error":
-        return
-    count = result.get("count", 0)
-    if count == 0:
-        print(f"\n  (i) No GitHub repos named \"{name}\")")
+def _check_variants(name, check_fn, get_variants_fn):
+    """Check name variants for similarity using the given availability checker.
+
+    Returns a list of variant names that are taken/exist.
+    """
+    variants = [v for v in get_variants_fn(name) if v != name]
+    similar = []
+
+    if _HAS_THREADS and variants:
+        try:
+            with ThreadPoolExecutor(max_workers=len(variants)) as executor:
+                future_to_variant = {
+                    executor.submit(check_fn, v): v
+                    for v in variants
+                }
+                for future in as_completed(future_to_variant):
+                    variant = future_to_variant[future]
+                    try:
+                        var_result = future.result()
+                        if var_result["status"] == "taken":
+                            similar.append(variant)
+                    except Exception:
+                        pass  # Skip variants that error
+        except Exception:
+            # Fall back to sequential on any thread pool error
+            similar = []
+            for variant in variants:
+                var_result = check_fn(variant)
+                if var_result["status"] == "taken":
+                    similar.append(variant)
     else:
-        print(f"\n  (i) {count} GitHub repo(s) named \"{name}\" (informational, not a registry)")
+        for variant in variants:
+            var_result = check_fn(variant)
+            if var_result["status"] == "taken":
+                similar.append(variant)
+
+    return similar
 
 
-def _check_name_go(name):
-    """Check Go module path on pkg.go.dev."""
-    print(f'Checking pkg.go.dev for "{name}"...')
+def _check_single_name(name, registry):
+    """Check a single name on a given registry, returning a structured result.
 
-    result = check_go_availability(name)
-    if result["status"] == "error":
-        print(f"Error checking pkg.go.dev: {result['message']}", file=sys.stderr)
-        sys.exit(1)
-    if result["status"] == "not_found":
-        print(f'"{name}" not found on pkg.go.dev.')
+    Returns a dict with keys:
+        - name: the package name checked
+        - registry: which registry was checked
+        - status: "available", "taken", "exists", "not_found", or "error"
+        - variants: list of similar names that are taken (npm/pypi only)
+        - github_count: number of GitHub repos with this name (or None on error)
+        - error: error message if status is "error" (absent otherwise)
+        - note: informational note (go only, absent otherwise)
+    """
+    result = {"name": name, "registry": registry, "variants": []}
+
+    # Registry-specific availability check
+    if registry == "npm":
+        check_result = check_npm_availability(name)
+        result["status"] = check_result["status"]
+        if check_result["status"] == "error":
+            result["error"] = check_result["message"]
+        else:
+            result["variants"] = _check_variants(name, check_npm_availability, get_npm_variants)
+
+    elif registry == "pypi":
+        check_result = check_pypi_availability(name)
+        result["status"] = check_result["status"]
+        if check_result["status"] == "error":
+            result["error"] = check_result["message"]
+        else:
+            result["variants"] = _check_variants(name, check_pypi_availability, get_pypi_variants)
+
+    elif registry == "go":
+        check_result = check_go_availability(name)
+        result["status"] = check_result["status"]
+        if check_result["status"] == "error":
+            result["error"] = check_result["message"]
+        if check_result.get("note"):
+            result["note"] = check_result["note"]
+
+    # GitHub informational check
+    gh_result = check_github_availability(name)
+    if gh_result["status"] != "error":
+        result["github_count"] = gh_result.get("count", 0)
     else:
-        print(f'"{name}" exists on pkg.go.dev.')
-    if result.get("note"):
-        print(f"  Note: {result['note']}")
+        result["github_count"] = None
+
+    return result
+
+
+def _format_single_result(result):
+    """Print the verbose output for a single name check result.
+
+    Reproduces the original detailed output format with variant warnings and
+    GitHub info.
+    """
+    name = result["name"]
+    registry = result["registry"]
+    status = result["status"]
+
+    # Registry-specific status output
+    if registry == "npm":
+        print(f'Checking npm for "{name}"...')
+        if status == "error":
+            print(f"Error checking npm: {result['error']}", file=sys.stderr)
+            sys.exit(1)
+        if status == "available":
+            print(f'"{name}" is available on npm.')
+        else:
+            print(f'"{name}" is taken on npm.')
+
+    elif registry == "pypi":
+        print(f'Checking PyPI for "{name}"...')
+        if status == "error":
+            print(f"Error checking PyPI: {result['error']}", file=sys.stderr)
+            sys.exit(1)
+        if status == "available":
+            print(f'"{name}" is available on PyPI.')
+        else:
+            print(f'"{name}" is taken on PyPI.')
+
+    elif registry == "go":
+        print(f'Checking pkg.go.dev for "{name}"...')
+        if status == "error":
+            print(f"Error checking pkg.go.dev: {result['error']}", file=sys.stderr)
+            sys.exit(1)
+        if status == "not_found":
+            print(f'"{name}" not found on pkg.go.dev.')
+        else:
+            print(f'"{name}" exists on pkg.go.dev.')
+        if result.get("note"):
+            print(f"  Note: {result['note']}")
+
+    # Variant warnings (npm/pypi only)
+    available = status in ("available", "not_found")
+    variants = result.get("variants", [])
+    if variants:
+        print("\nSimilar names already taken:")
+        for s in variants:
+            print(f"  {s}")
+        if available:
+            print(
+                "\nYour name is available but has similar existing packages. "
+                "Consider if this could cause confusion."
+            )
+
+    # GitHub informational
+    github_count = result.get("github_count")
+    if github_count is not None:
+        if github_count == 0:
+            print(f"\n  (i) No GitHub repos named \"{name}\")")
+        else:
+            print(f"\n  (i) {github_count} GitHub repo(s) named \"{name}\" (informational, not a registry)")
+
+
+def _format_table_row(result):
+    """Return a compact one-line dict suitable for table rendering.
+
+    Keys: name, status. The status is a short human-readable string.
+    """
+    name = result["name"]
+    status = result["status"]
+    registry = result["registry"]
+
+    if status == "error":
+        display_status = "error"
+    elif registry == "go":
+        display_status = "not found" if status == "not_found" else "exists"
+    else:
+        display_status = status  # "available" or "taken"
+
+    return {"name": name, "status": display_status}
 
 
 def run_cmd(registry, args, flags):
@@ -299,12 +329,5 @@ def run_cmd(registry, args, flags):
         )
         sys.exit(1)
 
-    if registry == "npm":
-        _check_name_npm(name)
-    elif registry == "pypi":
-        _check_name_pypi(name)
-    elif registry == "go":
-        _check_name_go(name)
-
-    # Always check GitHub for repos with this name
-    _check_github(name)
+    result = _check_single_name(name, registry)
+    _format_single_result(result)
