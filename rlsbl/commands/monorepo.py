@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 from ..workspace import find_workspace_root, load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 from ..targets import detect_targets, TARGETS
@@ -515,6 +516,53 @@ def _cmd_status(flags):
         print(line)
 
 
+def _cmd_check_names(args, flags):
+    target = flags.get("target")
+    if not target:
+        print("Error: --target is required. Usage: rlsbl monorepo check-names --target <npm|pypi|go>", file=sys.stderr)
+        sys.exit(1)
+
+    prefix = flags.get("prefix", "")
+    suffix = flags.get("suffix", "")
+    delay_ms = int(flags.get("delay", "200"))
+
+    root = find_workspace_root(".")
+    if root is None:
+        print("Error: No workspace found. Run 'rlsbl monorepo init' first.", file=sys.stderr)
+        sys.exit(1)
+
+    projects = load_workspace(root)
+    if not projects:
+        print("No projects in workspace.")
+        return
+
+    from .check import _check_single_name, _format_table_row
+
+    rows = []
+    for i, proj in enumerate(projects):
+        checked_name = prefix + proj["name"] + suffix
+        result = _check_single_name(checked_name, target)
+        table_row = _format_table_row(result)
+        rows.append({
+            "project": proj["name"],
+            "checked_name": checked_name,
+            "status": table_row["status"],
+        })
+        if i < len(projects) - 1:
+            time.sleep(delay_ms / 1000)
+
+    # Compute column widths
+    proj_width = max(len("Project"), max(len(r["project"]) for r in rows))
+    name_width = max(len("Checked Name"), max(len(r["checked_name"]) for r in rows))
+    status_width = max(len("Status"), max(len(r["status"]) for r in rows))
+
+    header = f"{'Project':<{proj_width}}  {'Checked Name':<{name_width}}  {'Status':<{status_width}}"
+    print(header)
+    for row in rows:
+        line = f"{row['project']:<{proj_width}}  {row['checked_name']:<{name_width}}  {row['status']:<{status_width}}"
+        print(line)
+
+
 # --- Subcommand registry and dispatch ---
 
 SUBCOMMANDS = {
@@ -528,10 +576,15 @@ SUBCOMMANDS = {
     "list": (_cmd_list, "List all projects in the workspace", "rlsbl monorepo list"),
     "sync": (_cmd_sync, "Sync CI workflows from projects to repo root", "rlsbl monorepo sync"),
     "status": (_cmd_status, "Show status of all projects", "rlsbl monorepo status"),
+    "check-names": (
+        _cmd_check_names,
+        "Check name availability for all projects",
+        "rlsbl monorepo check-names --target <npm|pypi|go> [--prefix <str>] [--suffix <str>] [--delay <ms>]",
+    ),
 }
 
 # Subcommands whose handlers accept (args, flags) instead of just (flags)
-_SUBCOMMANDS_WITH_ARGS = {"add", "remove"}
+_SUBCOMMANDS_WITH_ARGS = {"add", "remove", "check-names"}
 
 
 def _print_subcommand_list():

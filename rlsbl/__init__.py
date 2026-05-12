@@ -61,7 +61,8 @@ Usage:
   rlsbl pre-push-check                                     Verify CHANGELOG entry for current version
   rlsbl unreleased [--json]                                 Audit changelog coverage for unreleased commits
   rlsbl targets                                             List available release targets
-  rlsbl monorepo [init|add|remove|list|sync|status]    Manage monorepo workspaces
+  rlsbl monorepo [init|add|remove|list|sync|status|check-names]
+                                                            Manage monorepo workspaces
   rlsbl migrate [--dry-run] [--status]              Run config migrations (via migrable)
   rlsbl deploy [name] [--dry-run] [--force]             Deploy to configured targets
   rlsbl doctor [--fix]                                 Diagnose and repair release state
@@ -95,7 +96,7 @@ def parse_args(argv):
     (e.g. --registry npm). All other --flags are boolean.
     """
     VALUE_FLAGS = ("registry", "target", "width", "height", "font-size", "duration",
-                   "name", "watch", "subtree-remote", "delay")
+                   "name", "watch", "subtree-remote", "delay", "prefix", "suffix")
     raw = argv[1:]
     positional = []
     flags = {}
