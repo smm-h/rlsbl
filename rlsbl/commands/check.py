@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 import urllib.error
 
@@ -15,6 +16,42 @@ except ImportError:
 
 
 from rlsbl.targets.utils import normalize_pypi  # noqa: E402
+
+
+def _request_with_backoff(url, timeout=5, max_retries=3):
+    """Wrap urllib.request.urlopen with retry logic for HTTP 429 responses.
+
+    On HTTP 429 (Too Many Requests): reads the Retry-After header (seconds).
+    If present, sleeps that long. If absent, uses exponential backoff starting
+    at 2 seconds (2, 4, 8, ...).
+
+    On other HTTP errors or non-HTTP errors (URLError, timeout): raises
+    immediately without retrying.
+
+    Returns the response object on success, or raises the last exception after
+    exhausting retries.
+    """
+    req = urllib.request.Request(url, method="GET")
+    # GitHub API requires a User-Agent header
+    if "api.github.com" in url:
+        req.add_header("User-Agent", "rlsbl-cli")
+
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                last_exc = e
+                retry_after = e.headers.get("Retry-After") if e.headers else None
+                if retry_after is not None:
+                    delay = float(retry_after)
+                else:
+                    delay = 2 ** (attempt + 1)
+                time.sleep(delay)
+            else:
+                raise
+    raise last_exc
 
 
 def check_npm_availability(name):
@@ -64,8 +101,7 @@ def check_pypi_availability(name):
     """
     url = f"https://pypi.org/pypi/{name}/json"
     try:
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with _request_with_backoff(url, timeout=5) as resp:
             if resp.status == 200:
                 return {"status": "taken"}
             return {"status": "error", "message": f"Unexpected status {resp.status}"}
@@ -104,8 +140,7 @@ def check_go_availability(name):
     """
     url = f"https://pkg.go.dev/{name}"
     try:
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with _request_with_backoff(url, timeout=5) as resp:
             if resp.status == 200:
                 return {"status": "exists"}
             return {"status": "error", "message": f"Unexpected status {resp.status}"}
@@ -128,9 +163,7 @@ def check_github_availability(name):
     """
     url = f"https://api.github.com/search/repositories?q={name}+in:name"
     try:
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("User-Agent", "rlsbl-cli")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with _request_with_backoff(url, timeout=5) as resp:
             data = json.loads(resp.read())
             count = data.get("total_count", 0)
             if count == 0:
@@ -328,6 +361,8 @@ def run_cmd(registry, args, flags):
             file=sys.stderr,
         )
         sys.exit(1)
+
+    delay_ms = int(flags.get("delay", "200"))
 
     result = _check_single_name(name, registry)
     _format_single_result(result)

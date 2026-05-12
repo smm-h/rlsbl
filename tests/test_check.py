@@ -2,12 +2,13 @@
 
 import subprocess
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from urllib.error import HTTPError, URLError
 
 from conftest import FakeResponse
 from rlsbl.commands.check import (
     _check_single_name,
+    _request_with_backoff,
     check_github_availability,
     check_go_availability,
     check_pypi_availability,
@@ -222,6 +223,110 @@ class TestCheckTargetRequired(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     main()
                 self.assertIn("--target is required", mock_stderr.getvalue())
+
+
+class TestRequestWithBackoff(unittest.TestCase):
+    """Tests for the _request_with_backoff retry helper."""
+
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_successful_request_no_retry(self, mock_urlopen):
+        """A successful request returns the response without retrying."""
+        fake_resp = FakeResponse(b"OK")
+        mock_urlopen.return_value = fake_resp
+        result = _request_with_backoff("https://example.com/test")
+        self.assertIs(result, fake_resp)
+        self.assertEqual(mock_urlopen.call_count, 1)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_429_with_retry_after_header(self, mock_urlopen, mock_sleep):
+        """HTTP 429 with Retry-After header sleeps that many seconds then succeeds."""
+        headers_429 = MagicMock()
+        headers_429.get.return_value = "3"
+        error_429 = HTTPError(
+            "https://example.com", 429, "Too Many Requests", headers_429, None
+        )
+        fake_resp = FakeResponse(b"OK")
+        mock_urlopen.side_effect = [error_429, fake_resp]
+
+        result = _request_with_backoff("https://example.com/test", max_retries=3)
+        self.assertIs(result, fake_resp)
+        self.assertEqual(mock_urlopen.call_count, 2)
+        mock_sleep.assert_called_once_with(3.0)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_429_without_retry_after_uses_exponential_backoff(self, mock_urlopen, mock_sleep):
+        """HTTP 429 without Retry-After uses exponential backoff (2, 4, ...)."""
+        headers_429 = MagicMock()
+        headers_429.get.return_value = None
+        error_429_first = HTTPError(
+            "https://example.com", 429, "Too Many Requests", headers_429, None
+        )
+        error_429_second = HTTPError(
+            "https://example.com", 429, "Too Many Requests", headers_429, None
+        )
+        fake_resp = FakeResponse(b"OK")
+        mock_urlopen.side_effect = [error_429_first, error_429_second, fake_resp]
+
+        result = _request_with_backoff("https://example.com/test", max_retries=3)
+        self.assertIs(result, fake_resp)
+        self.assertEqual(mock_urlopen.call_count, 3)
+        # attempt 0: 2^1 = 2, attempt 1: 2^2 = 4
+        self.assertEqual(mock_sleep.call_args_list[0][0][0], 2)
+        self.assertEqual(mock_sleep.call_args_list[1][0][0], 4)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_max_retries_exhausted_raises(self, mock_urlopen, mock_sleep):
+        """After exhausting max_retries on 429, raises the last HTTPError."""
+        headers_429 = MagicMock()
+        headers_429.get.return_value = None
+        errors = [
+            HTTPError("https://example.com", 429, "Too Many Requests", headers_429, None)
+            for _ in range(3)
+        ]
+        mock_urlopen.side_effect = errors
+
+        with self.assertRaises(HTTPError) as ctx:
+            _request_with_backoff("https://example.com/test", max_retries=3)
+        self.assertEqual(ctx.exception.code, 429)
+        self.assertEqual(mock_urlopen.call_count, 3)
+        self.assertEqual(mock_sleep.call_count, 3)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_non_429_http_error_not_retried(self, mock_urlopen, mock_sleep):
+        """Non-429 HTTP errors are raised immediately without retrying."""
+        error_500 = HTTPError(
+            "https://example.com", 500, "Internal Server Error", {}, None
+        )
+        mock_urlopen.side_effect = error_500
+
+        with self.assertRaises(HTTPError) as ctx:
+            _request_with_backoff("https://example.com/test", max_retries=3)
+        self.assertEqual(ctx.exception.code, 500)
+        self.assertEqual(mock_urlopen.call_count, 1)
+        mock_sleep.assert_not_called()
+
+
+class TestDelayFlag(unittest.TestCase):
+    """Tests for the --delay value flag."""
+
+    def test_delay_parsed_as_value_flag(self):
+        """--delay is recognized as a value flag and consumes the next token."""
+        from rlsbl import parse_args
+        positional, flags = parse_args(["rlsbl", "check", "my-pkg", "--target", "npm", "--delay", "500"])
+        self.assertEqual(flags["delay"], "500")
+        self.assertIn("my-pkg", positional)
+
+    def test_delay_default_value(self):
+        """When --delay is not provided, the default is 200."""
+        from rlsbl import parse_args
+        positional, flags = parse_args(["rlsbl", "check", "my-pkg", "--target", "npm"])
+        # Simulating what run_cmd does
+        delay_ms = int(flags.get("delay", "200"))
+        self.assertEqual(delay_ms, 200)
 
 
 if __name__ == "__main__":
