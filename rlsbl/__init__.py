@@ -53,7 +53,7 @@ Usage:
   rlsbl status                                              Show project status
   rlsbl scaffold [--force] [--update] [--private] [--no-commit] [--skip-shared]
                                                             Scaffold release infrastructure
-  rlsbl check <name>                                        Check name availability
+  rlsbl check <name> --target <npm|pypi|go>                  Check name availability
   rlsbl undo [--yes]                                        Revert the last release
   rlsbl discover [--mine]                                   List rlsbl ecosystem projects
   rlsbl watch [<commit-sha>]                                Watch CI runs for a commit
@@ -238,18 +238,14 @@ def main():
             sys.exit(1)
 
         if command == "check":
-            # check: if registry given, check that one; otherwise check npm and pypi.
-            # Go is excluded from the default set because Go modules use repository
-            # paths (e.g. github.com/user/repo), not a flat claimable namespace, so
-            # "available" would be misleading.  Pass --registry go explicitly to check.
-            if registry:
-                handler.run_cmd(registry, args, flags)
-            else:
-                default_registries = ["npm", "pypi"]
-                for i, r in enumerate(default_registries):
-                    handler.run_cmd(r, args, flags)
-                    if i < len(default_registries) - 1:
-                        print("")
+            if not registry:
+                print(
+                    "Error: --target is required. "
+                    "Usage: rlsbl check <name> --target <npm|pypi|go>",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            handler.run_cmd(registry, args, flags)
         elif command == "scaffold":
             if registry:
                 handler.run_cmd(registry, args, flags)
