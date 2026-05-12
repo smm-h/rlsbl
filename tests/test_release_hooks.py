@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+from rlsbl.utils import get_hook_timeout
+
 
 def _setup_project(tmp_path, hook_name, hook_body):
     """Create a minimal project with a hook script.
@@ -209,3 +211,60 @@ class TestPostReleaseHookOutput:
 
         captured = capsys.readouterr()
         assert "exited with code 3" in captured.err
+
+
+class TestHookTimeout:
+    """Tests for RLSBL_HOOK_TIMEOUT integration with hooks."""
+
+    def test_get_hook_timeout_no_env(self, monkeypatch):
+        monkeypatch.delenv("RLSBL_HOOK_TIMEOUT", raising=False)
+        assert get_hook_timeout() is None
+
+    def test_get_hook_timeout_valid(self, monkeypatch):
+        monkeypatch.setenv("RLSBL_HOOK_TIMEOUT", "60")
+        assert get_hook_timeout() == 60
+
+    def test_get_hook_timeout_invalid_warns(self, monkeypatch, capsys):
+        monkeypatch.setenv("RLSBL_HOOK_TIMEOUT", "abc")
+        assert get_hook_timeout() is None
+        captured = capsys.readouterr()
+        assert "invalid RLSBL_HOOK_TIMEOUT" in captured.err
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_pre_release_timeout_message_includes_seconds(
+        self,
+        _gh_inst,
+        _gh_auth,
+        _clean,
+        _branch,
+        _commit_tool,
+        mock_run,
+        _push,
+        tmp_project,
+        monkeypatch,
+        capsys,
+    ):
+        """When a pre-release hook times out, the error message includes the configured seconds."""
+        monkeypatch.setenv("RLSBL_HOOK_TIMEOUT", "45")
+        _setup_project(tmp_project, "pre-release.sh", "#!/bin/bash\nsleep 999\n")
+        mock_run.side_effect = ["", "0", "v1.0.0", ""]
+
+        with patch("rlsbl.commands.release.subprocess") as mock_sp:
+            mock_sp.run.side_effect = subprocess.TimeoutExpired("bash", 45)
+            mock_sp.CalledProcessError = subprocess.CalledProcessError
+            mock_sp.TimeoutExpired = subprocess.TimeoutExpired
+
+            from rlsbl.commands.release import run_cmd
+
+            with pytest.raises(SystemExit) as exc_info:
+                run_cmd("npm", ["patch"], {"quiet": True, "yes": True})
+
+            assert exc_info.value.code == 1
+            captured = capsys.readouterr()
+            assert "timed out after 45s" in captured.err

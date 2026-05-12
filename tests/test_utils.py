@@ -1,11 +1,11 @@
-"""Tests for rlsbl.utils — bump_version and extract_changelog_entry."""
+"""Tests for rlsbl.utils — bump_version, extract_changelog_entry, and timeout helpers."""
 
 import os
 import shutil
 import tempfile
 import unittest
 
-from rlsbl.utils import bump_version, extract_changelog_entry
+from rlsbl.utils import bump_version, extract_changelog_entry, get_hook_timeout
 
 
 class TestBumpVersion(unittest.TestCase):
@@ -133,6 +133,72 @@ class TestExtractChangelogEntry(unittest.TestCase):
             extract_changelog_entry(path, "1.0.0"),
             "- Feature A\n- Feature B\n- Feature C",
         )
+
+
+class TestGetHookTimeout(unittest.TestCase):
+    """Tests for get_hook_timeout()."""
+
+    def test_no_env_var_returns_none(self):
+        os.environ.pop("RLSBL_HOOK_TIMEOUT", None)
+        self.assertIsNone(get_hook_timeout())
+
+    def test_valid_value_returns_int(self):
+        os.environ["RLSBL_HOOK_TIMEOUT"] = "30"
+        try:
+            self.assertEqual(get_hook_timeout(), 30)
+        finally:
+            del os.environ["RLSBL_HOOK_TIMEOUT"]
+
+    def test_invalid_string_warns_and_returns_none(self, ):
+        os.environ["RLSBL_HOOK_TIMEOUT"] = "not-a-number"
+        try:
+            import io
+            import sys
+            captured = io.StringIO()
+            old_stderr = sys.stderr
+            sys.stderr = captured
+            try:
+                result = get_hook_timeout()
+            finally:
+                sys.stderr = old_stderr
+            self.assertIsNone(result)
+            self.assertIn("invalid RLSBL_HOOK_TIMEOUT", captured.getvalue())
+        finally:
+            del os.environ["RLSBL_HOOK_TIMEOUT"]
+
+    def test_zero_warns_and_returns_none(self):
+        os.environ["RLSBL_HOOK_TIMEOUT"] = "0"
+        try:
+            import io
+            import sys
+            captured = io.StringIO()
+            old_stderr = sys.stderr
+            sys.stderr = captured
+            try:
+                result = get_hook_timeout()
+            finally:
+                sys.stderr = old_stderr
+            self.assertIsNone(result)
+            self.assertIn("invalid RLSBL_HOOK_TIMEOUT", captured.getvalue())
+        finally:
+            del os.environ["RLSBL_HOOK_TIMEOUT"]
+
+    def test_negative_warns_and_returns_none(self):
+        os.environ["RLSBL_HOOK_TIMEOUT"] = "-5"
+        try:
+            import io
+            import sys
+            captured = io.StringIO()
+            old_stderr = sys.stderr
+            sys.stderr = captured
+            try:
+                result = get_hook_timeout()
+            finally:
+                sys.stderr = old_stderr
+            self.assertIsNone(result)
+            self.assertIn("invalid RLSBL_HOOK_TIMEOUT", captured.getvalue())
+        finally:
+            del os.environ["RLSBL_HOOK_TIMEOUT"]
 
 
 if __name__ == "__main__":

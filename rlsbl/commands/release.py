@@ -18,6 +18,7 @@ from ..utils import (
     extract_changelog_entry,
     find_commit_tool,
     get_current_branch,
+    get_hook_timeout,
     get_push_timeout,
     is_clean_tree,
     push_if_needed,
@@ -263,15 +264,16 @@ def run_cmd(registry, args, flags):
     pre_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-release.sh")
     if os.path.exists(pre_release_script):
         log("Running pre-release hook...")
+        hook_timeout = get_hook_timeout()
         try:
             env = os.environ.copy()
             env["RLSBL_VERSION"] = new_version
-            subprocess.run(["bash", pre_release_script], env=env, check=True)
+            subprocess.run(["bash", pre_release_script], env=env, check=True, timeout=hook_timeout)
         except subprocess.CalledProcessError as e:
             print(f"Error: pre-release hook exited with code {e.returncode}.", file=sys.stderr)
             sys.exit(1)
         except subprocess.TimeoutExpired:
-            print("Error: pre-release hook timed out.", file=sys.stderr)
+            print(f"Error: pre-release hook timed out after {hook_timeout}s.", file=sys.stderr)
             sys.exit(1)
 
     # Commit message: scoped in monorepo mode, plain tag otherwise
@@ -626,14 +628,15 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     post_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "post-release.sh")
     if os.path.exists(post_release_script):
         log("Running post-release hook...")
+        hook_timeout = get_hook_timeout()
         try:
             env = os.environ.copy()
             env["RLSBL_VERSION"] = new_version
-            subprocess.run(["bash", post_release_script], env=env, check=True)
+            subprocess.run(["bash", post_release_script], env=env, check=True, timeout=hook_timeout)
         except subprocess.CalledProcessError as e:
             print(f"Warning: post-release hook exited with code {e.returncode}.", file=sys.stderr)
         except subprocess.TimeoutExpired:
-            print("Warning: post-release hook timed out.", file=sys.stderr)
+            print(f"Warning: post-release hook timed out after {hook_timeout}s.", file=sys.stderr)
 
     # Hint: how to watch CI for this release
     try:

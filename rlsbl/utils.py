@@ -61,6 +61,26 @@ def get_push_timeout():
         return 120
 
 
+def get_hook_timeout():
+    """Return the hook timeout in seconds, from RLSBL_HOOK_TIMEOUT or default None.
+
+    If not set, returns None (no timeout — hooks run to completion).
+    If set, parses as a positive integer.
+    On invalid value, prints a warning and returns None.
+    """
+    raw = os.environ.get("RLSBL_HOOK_TIMEOUT")
+    if raw is None:
+        return None
+    try:
+        val = int(raw)
+        if val <= 0:
+            raise ValueError
+        return val
+    except ValueError:
+        print(f'Warning: invalid RLSBL_HOOK_TIMEOUT="{raw}", ignoring (no timeout)', file=sys.stderr)
+        return None
+
+
 def push_if_needed(branch):
     """Push the branch to origin if local is ahead of remote."""
     timeout = get_push_timeout()
