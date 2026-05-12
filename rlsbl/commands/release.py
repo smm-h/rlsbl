@@ -128,7 +128,7 @@ def run_cmd(registry, args, flags):
         sys.exit(1)
 
     # Clean working tree
-    if not is_clean_tree():
+    if not flags.get("allow-dirty") and not is_clean_tree():
         print("Error: working tree is not clean. Commit your changes first.", file=sys.stderr)
         sys.exit(1)
 
