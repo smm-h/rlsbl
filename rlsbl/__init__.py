@@ -96,7 +96,8 @@ def parse_args(argv):
     (e.g. --registry npm). All other --flags are boolean.
     """
     VALUE_FLAGS = ("registry", "target", "width", "height", "font-size", "duration",
-                   "name", "watch", "subtree-remote", "delay", "prefix", "suffix")
+                   "name", "watch", "subtree-remote", "delay", "prefix", "suffix",
+                   "depends-on")
     raw = argv[1:]
     positional = []
     flags = {}
