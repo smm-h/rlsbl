@@ -220,6 +220,19 @@ def _check_variants(name, check_fn, get_variants_fn):
     return similar
 
 
+def _check_stdlib_collision(name):
+    """Check if a name collides with a Python standard library module.
+
+    PEP 503 normalizes both the candidate and each stdlib name, then compares.
+    Returns the stdlib module name on collision, or None.
+    """
+    normalized = normalize_pypi(name)
+    for module in sys.stdlib_module_names:
+        if normalize_pypi(module) == normalized:
+            return module
+    return None
+
+
 def _check_single_name(name, registry):
     """Check a single name on a given registry, returning a structured result.
 
@@ -244,12 +257,17 @@ def _check_single_name(name, registry):
             result["variants"] = _check_variants(name, check_npm_availability, get_npm_variants)
 
     elif registry == "pypi":
-        check_result = check_pypi_availability(name)
-        result["status"] = check_result["status"]
-        if check_result["status"] == "error":
-            result["error"] = check_result["message"]
+        stdlib_module = _check_stdlib_collision(name)
+        if stdlib_module is not None:
+            result["status"] = "taken"
+            result["note"] = f"conflicts with Python stdlib module '{stdlib_module}'"
         else:
-            result["variants"] = _check_variants(name, check_pypi_availability, get_pypi_variants)
+            check_result = check_pypi_availability(name)
+            result["status"] = check_result["status"]
+            if check_result["status"] == "error":
+                result["error"] = check_result["message"]
+            else:
+                result["variants"] = _check_variants(name, check_pypi_availability, get_pypi_variants)
 
     elif registry == "go":
         check_result = check_go_availability(name)
@@ -299,6 +317,8 @@ def _format_single_result(result):
             print(f'"{name}" is available on PyPI.')
         else:
             print(f'"{name}" is taken on PyPI.')
+        if result.get("note"):
+            print(f"  Note: {result['note']}")
 
     elif registry == "go":
         print(f'Checking pkg.go.dev for "{name}"...')

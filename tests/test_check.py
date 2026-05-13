@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from conftest import FakeResponse
 from rlsbl.commands.check import (
     _check_single_name,
+    _check_stdlib_collision,
     _format_single_result,
     _format_table_row,
     _request_with_backoff,
@@ -424,6 +425,47 @@ class TestMultiNameCheck(unittest.TestCase):
                 run_cmd("npm", [], {})
             self.assertEqual(ctx.exception.code, 1)
         self.assertIn("missing package name", mock_stderr.getvalue())
+
+
+class TestStdlibCollision(unittest.TestCase):
+    """Tests for _check_stdlib_collision."""
+
+    def test_queue_collides(self):
+        """'queue' is a stdlib module and should be detected."""
+        result = _check_stdlib_collision("queue")
+        self.assertEqual(result, "queue")
+
+    def test_json_collides(self):
+        """'json' is a stdlib module and should be detected."""
+        result = _check_stdlib_collision("json")
+        self.assertEqual(result, "json")
+
+    def test_unique_name_no_collision(self):
+        """A name that is not a stdlib module returns None."""
+        result = _check_stdlib_collision("myuniquepkg")
+        self.assertIsNone(result)
+
+    def test_os_path_no_collision(self):
+        """'os-path' normalizes to 'os-path', not 'os' -- should NOT collide."""
+        result = _check_stdlib_collision("os-path")
+        self.assertIsNone(result)
+
+
+class TestStdlibCollisionIntegration(unittest.TestCase):
+    """Integration test: _check_single_name short-circuits for stdlib collisions."""
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_stdlib_name_skips_network(self, mock_pypi, mock_gh):
+        """Checking 'queue' on pypi returns taken with stdlib note, no HTTP call."""
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("queue", "pypi")
+        self.assertEqual(result["status"], "taken")
+        self.assertIn("stdlib module", result["note"])
+        self.assertIn("queue", result["note"])
+        # PyPI availability check should NOT have been called
+        mock_pypi.assert_not_called()
 
 
 if __name__ == "__main__":
