@@ -352,7 +352,7 @@ def _check_single_name(name, registry):
         - error: error message if status is "error" (absent otherwise)
         - note: informational note (go only, absent otherwise)
     """
-    result = {"name": name, "registry": registry, "status": "", "variants": [], "github_count": None, "reason": None}
+    result = {"name": name, "registry": registry, "status": "", "variants": None, "github_count": None, "reason": None}
 
     # Registry-specific availability check
     if registry == "npm":
@@ -365,6 +365,7 @@ def _check_single_name(name, registry):
         elif check_result["status"] == "available":
             result["variants"] = _check_variants(name, check_npm_availability, get_npm_variants)
             conflicts = _search_npm_similar(name)
+            result["moniker_checked"] = True
             if conflicts:
                 result["status"] = "taken"
                 result["reason"] = "moniker"
@@ -510,6 +511,22 @@ def _format_single_result(result):
             print(f"\n  (i) No GitHub repos named \"{name}\")")
         else:
             print(f"\n  (i) {github_count} GitHub repo(s) named \"{name}\" (informational, not a registry)")
+
+    # Steps-run summary
+    _REGISTRY_DISPLAY = {"npm": "npm", "pypi": "PyPI", "go": "pkg.go.dev"}
+    steps = [_REGISTRY_DISPLAY.get(registry, registry)]
+    if registry == "pypi":
+        # stdlib check always runs for PyPI (it's local)
+        steps.append("stdlib")
+    if result.get("variants") is not None:
+        steps.append("variants")
+    if result.get("moniker_checked"):
+        steps.append("moniker similarity")
+    if result.get("github_count") is not None:
+        steps.append("GitHub repos")
+    if result.get("ultranorm_caveat"):
+        steps.append("ultranormalization")
+    print(f"\nChecked: {', '.join(steps)}")
 
 
 def _format_table_row(result):

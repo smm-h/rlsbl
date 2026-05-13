@@ -1147,5 +1147,87 @@ class TestPyPICaveats(unittest.TestCase):
         self.assertNotIn("--ultranormalized-variants", output)
 
 
+class TestStepsSummary(unittest.TestCase):
+    """Tests for the steps-run summary line in verbose output."""
+
+    def test_pypi_available_summary(self):
+        """PyPI available result includes PyPI, stdlib, variants, GitHub repos."""
+        result = {
+            "name": "my-new-pkg", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0, "reason": None,
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        # Find the Checked: line
+        checked_line = [l for l in output.split("\n") if l.startswith("Checked:")][0]
+        self.assertIn("PyPI", checked_line)
+        self.assertIn("stdlib", checked_line)
+        self.assertIn("variants", checked_line)
+        self.assertIn("GitHub repos", checked_line)
+
+    def test_pypi_taken_by_stdlib_summary(self):
+        """PyPI taken by stdlib includes only PyPI and stdlib."""
+        result = {
+            "name": "queue", "registry": "pypi", "status": "taken",
+            "variants": None, "github_count": None, "reason": "stdlib",
+            "note": "conflicts with Python stdlib module 'queue'",
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        checked_line = [l for l in output.split("\n") if l.startswith("Checked:")][0]
+        self.assertIn("PyPI", checked_line)
+        self.assertIn("stdlib", checked_line)
+        self.assertNotIn("variants", checked_line)
+        self.assertNotIn("GitHub repos", checked_line)
+
+    def test_npm_available_summary(self):
+        """npm available result includes npm, variants, moniker similarity, GitHub repos."""
+        result = {
+            "name": "my-new-pkg", "registry": "npm", "status": "available",
+            "variants": [], "github_count": 0, "reason": None,
+            "moniker_checked": True,
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        checked_line = [l for l in output.split("\n") if l.startswith("Checked:")][0]
+        self.assertIn("npm", checked_line)
+        self.assertIn("variants", checked_line)
+        self.assertIn("moniker similarity", checked_line)
+        self.assertIn("GitHub repos", checked_line)
+        self.assertNotIn("stdlib", checked_line)
+
+    def test_npm_taken_summary(self):
+        """npm taken result includes only npm."""
+        result = {
+            "name": "express", "registry": "npm", "status": "taken",
+            "variants": None, "github_count": None, "reason": "registered",
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        checked_line = [l for l in output.split("\n") if l.startswith("Checked:")][0]
+        self.assertEqual(checked_line, "Checked: npm")
+
+    def test_pypi_with_ultranorm_flag_summary(self):
+        """PyPI available with ultranorm flag includes ultranormalization."""
+        result = {
+            "name": "my-new-pkg", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0, "reason": None,
+            "ultranorm_caveat": True,
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        checked_line = [l for l in output.split("\n") if l.startswith("Checked:")][0]
+        self.assertIn("PyPI", checked_line)
+        self.assertIn("stdlib", checked_line)
+        self.assertIn("variants", checked_line)
+        self.assertIn("GitHub repos", checked_line)
+        self.assertIn("ultranormalization", checked_line)
+
+
 if __name__ == "__main__":
     unittest.main()
