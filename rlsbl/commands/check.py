@@ -121,6 +121,42 @@ def _generate_ultranorm_variants(name):
     return variants
 
 
+def _normalize_npm_moniker(name):
+    """Normalize an npm package name using npm's moniker collision algorithm.
+
+    Strips all '-', '.', '_' characters and lowercases the result.
+    Two packages whose monikers match are considered conflicting by npm.
+    """
+    return re.sub(r"[-._]", "", name).lower()
+
+
+def _search_npm_similar(name):
+    """Search the npm registry for packages with conflicting monikers.
+
+    Queries the npm search API for packages similar to ``name``, then
+    compares each result's normalized moniker against the candidate's.
+    Returns a list of original package names that conflict.
+
+    On any failure (network, JSON parse), returns an empty list for
+    graceful degradation.
+    """
+    candidate_moniker = _normalize_npm_moniker(name)
+    url = f"https://registry.npmjs.org/-/v1/search?text={name}&size=20"
+    try:
+        with _request_with_backoff(url) as resp:
+            data = json.loads(resp.read())
+        conflicts = []
+        for obj in data.get("objects", []):
+            pkg_name = obj.get("package", {}).get("name")
+            if pkg_name is None:
+                continue
+            if _normalize_npm_moniker(pkg_name) == candidate_moniker and pkg_name != name:
+                conflicts.append(pkg_name)
+        return conflicts
+    except Exception:
+        return []
+
+
 def check_npm_availability(name):
     """Check if an npm package name is available.
 

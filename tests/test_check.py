@@ -13,7 +13,9 @@ from rlsbl.commands.check import (
     _format_single_result,
     _format_table_row,
     _generate_ultranorm_variants,
+    _normalize_npm_moniker,
     _request_with_backoff,
+    _search_npm_similar,
     _ultranormalize,
     check_github_availability,
     check_go_availability,
@@ -527,6 +529,68 @@ class TestGenerateUltranormVariants(unittest.TestCase):
         with patch("sys.stderr", new_callable=StringIO):
             variants = _generate_ultranorm_variants(name)
         self.assertLessEqual(len(variants), 64)
+
+
+class TestNpmMonikerNormalize(unittest.TestCase):
+    """Tests for _normalize_npm_moniker."""
+
+    def test_strips_dashes(self):
+        """'self-doc' normalizes to 'selfdoc'."""
+        self.assertEqual(_normalize_npm_moniker("self-doc"), "selfdoc")
+
+    def test_already_normalized(self):
+        """'selfdoc' stays 'selfdoc'."""
+        self.assertEqual(_normalize_npm_moniker("selfdoc"), "selfdoc")
+
+    def test_strips_all_separators(self):
+        """Dots, underscores, and dashes are all stripped."""
+        self.assertEqual(_normalize_npm_moniker("my.package_name"), "mypackagename")
+
+    def test_empty_string(self):
+        """Empty string returns empty string."""
+        self.assertEqual(_normalize_npm_moniker(""), "")
+
+
+class TestSearchNpmSimilar(unittest.TestCase):
+    """Tests for _search_npm_similar."""
+
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_finds_moniker_conflict(self, mock_urlopen):
+        """When API returns a package with matching moniker, it is reported."""
+        mock_urlopen.return_value = FakeResponse({
+            "objects": [
+                {"package": {"name": "self-doc"}},
+                {"package": {"name": "unrelated-pkg"}},
+            ]
+        })
+        result = _search_npm_similar("selfdoc")
+        self.assertEqual(result, ["self-doc"])
+
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_no_similar_results(self, mock_urlopen):
+        """When API returns no results, returns empty list."""
+        mock_urlopen.return_value = FakeResponse({"objects": []})
+        result = _search_npm_similar("selfdoc")
+        self.assertEqual(result, [])
+
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_network_error_returns_empty(self, mock_urlopen):
+        """Network errors degrade gracefully to empty list."""
+        mock_urlopen.side_effect = URLError("Connection refused")
+        result = _search_npm_similar("selfdoc")
+        self.assertEqual(result, [])
+
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_no_moniker_match(self, mock_urlopen):
+        """When results exist but none have matching monikers, returns empty."""
+        mock_urlopen.return_value = FakeResponse({
+            "objects": [
+                {"package": {"name": "completely-different"}},
+                {"package": {"name": "also-unrelated"}},
+            ]
+        })
+        result = _search_npm_similar("selfdoc")
+        self.assertEqual(result, [])
 
 
 if __name__ == "__main__":
