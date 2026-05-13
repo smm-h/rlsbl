@@ -1,4 +1,5 @@
 {
+  "base_url": "https://rlsbl.smmh.dev",
   "language": "python",
   "source": ["rlsbl/"],
   "docs": "docs/",
