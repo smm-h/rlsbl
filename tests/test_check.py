@@ -8,6 +8,7 @@ from urllib.error import HTTPError, URLError
 
 from conftest import FakeResponse
 from rlsbl.commands.check import (
+    _apply_ultranorm_check,
     _check_single_name,
     _check_stdlib_collision,
     _format_single_result,
@@ -646,6 +647,64 @@ class TestNpmMonikerIntegration(unittest.TestCase):
         result = _check_single_name("express", "npm")
         self.assertEqual(result["status"], "taken")
         mock_similar.assert_not_called()
+
+
+class TestUltranormIntegration(unittest.TestCase):
+    """Integration tests: ultranormalization variant checking wired into run_cmd."""
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_flag_with_variant_exists_adds_conflicts(self, mock_pypi, mock_sleep):
+        """Available name with flag + existing variant adds ultranorm_conflicts."""
+        # "cli" generates variants: "cl1", "c1i", "c11"
+        result = {
+            "name": "cli", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0,
+        }
+        def pypi_side_effect(name):
+            if name == "cl1":
+                return {"status": "taken"}
+            return {"status": "available"}
+        mock_pypi.side_effect = pypi_side_effect
+
+        _apply_ultranorm_check(result, "pypi", True, 200)
+        self.assertIn("ultranorm_conflicts", result)
+        self.assertIn("cl1", result["ultranorm_conflicts"])
+        self.assertTrue(result.get("ultranorm_caveat"))
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_flag_no_variant_exists_no_conflicts_but_caveat(self, mock_pypi, mock_sleep):
+        """Available name with flag + no existing variants has caveat but no conflicts."""
+        result = {
+            "name": "cli", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0,
+        }
+        mock_pypi.return_value = {"status": "available"}
+
+        _apply_ultranorm_check(result, "pypi", True, 200)
+        self.assertNotIn("ultranorm_conflicts", result)
+        self.assertTrue(result.get("ultranorm_caveat"))
+
+    def test_no_flag_skips_ultranorm(self):
+        """Without the flag, no ultranorm checking occurs at all."""
+        result = {
+            "name": "cli", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0,
+        }
+        _apply_ultranorm_check(result, "pypi", False, 200)
+        self.assertNotIn("ultranorm_conflicts", result)
+        self.assertNotIn("ultranorm_caveat", result)
+
+    def test_flag_with_non_pypi_registry_skips(self):
+        """Flag with non-pypi registry does no ultranorm checking."""
+        result = {
+            "name": "cli", "registry": "npm", "status": "available",
+            "variants": [], "github_count": 0,
+        }
+        _apply_ultranorm_check(result, "npm", True, 200)
+        self.assertNotIn("ultranorm_conflicts", result)
+        self.assertNotIn("ultranorm_caveat", result)
 
 
 if __name__ == "__main__":

@@ -453,6 +453,19 @@ def _format_single_result(result):
                 "Consider if this could cause confusion."
             )
 
+    # Ultranormalization warnings
+    ultranorm_conflicts = result.get("ultranorm_conflicts")
+    if ultranorm_conflicts:
+        print(
+            f"\nWarning: '{name}' ultranormalizes to the same value as: "
+            f"{', '.join(ultranorm_conflicts)}"
+        )
+    if result.get("ultranorm_caveat"):
+        print(
+            "\nNote: PyPI may also reject names on its prohibited names list "
+            "(not publicly available)."
+        )
+
     # GitHub informational
     github_count = result.get("github_count")
     if github_count is not None:
@@ -475,10 +488,42 @@ def _format_table_row(result):
         display_status = "error"
     elif registry == "go":
         display_status = "not found" if status == "not_found" else "exists"
+    elif result.get("ultranorm_conflicts"):
+        display_status = "CONFLICT"
     else:
         display_status = status  # "available" or "taken"
 
     return {"name": name, "status": display_status}
+
+
+def _apply_ultranorm_check(result, registry, ultranorm_flag, delay_ms):
+    """Apply ultranormalization variant checking to a result dict (in-place).
+
+    Only runs for PyPI when the --ultranormalized-variants flag is set and
+    the name was initially available. Checks each generated variant against
+    PyPI Simple API, applying a delay between requests. Sets
+    ``ultranorm_conflicts`` (list of taken variant names) and
+    ``ultranorm_caveat`` (always True when the flag is used) on the result.
+    """
+    if not ultranorm_flag or registry != "pypi":
+        return
+
+    result["ultranorm_caveat"] = True
+
+    if result["status"] != "available":
+        return
+
+    variants = _generate_ultranorm_variants(result["name"])
+    conflicts = []
+    for i, variant in enumerate(variants):
+        if i > 0:
+            time.sleep(delay_ms / 1000)
+        var_result = check_pypi_availability(variant)
+        if var_result["status"] == "taken":
+            conflicts.append(variant)
+
+    if conflicts:
+        result["ultranorm_conflicts"] = conflicts
 
 
 def run_cmd(registry, args, flags):
@@ -497,13 +542,17 @@ def run_cmd(registry, args, flags):
 
     delay_ms = int(flags.get("delay", "200"))
 
+    ultranorm_flag = flags.get("ultranormalized-variants")
+
     if len(names) == 1:
         result = _check_single_name(names[0], registry)
+        _apply_ultranorm_check(result, registry, ultranorm_flag, delay_ms)
         _format_single_result(result)
     else:
         rows = []
         for i, name in enumerate(names):
             result = _check_single_name(name, registry)
+            _apply_ultranorm_check(result, registry, ultranorm_flag, delay_ms)
             rows.append(_format_table_row(result))
             if i < len(names) - 1:
                 time.sleep(delay_ms / 1000)
