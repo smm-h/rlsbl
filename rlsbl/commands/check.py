@@ -416,6 +416,14 @@ def _format_single_result(result):
     name = result["name"]
     registry = result["registry"]
     status = result["status"]
+    reason = result.get("reason")
+
+    # Reason-specific explanations (printed after the status line, before notes)
+    _REASON_EXPLANATIONS = {
+        "stdlib": "  PyPI blocks names that match Python standard library modules.",
+        "moniker": "  npm considers names identical after removing dashes, dots, and underscores.",
+        "ultranorm": "  PyPI blocks names that are visually similar (l/1/i and o/0 substitutions).",
+    }
 
     # Registry-specific status output
     if registry == "npm":
@@ -427,6 +435,8 @@ def _format_single_result(result):
             print(f'"{name}" is available on npm.')
         else:
             print(f'"{name}" is taken on npm.')
+        if reason in _REASON_EXPLANATIONS:
+            print(_REASON_EXPLANATIONS[reason])
 
     elif registry == "pypi":
         print(f'Checking PyPI for "{name}"...')
@@ -437,6 +447,8 @@ def _format_single_result(result):
             print(f'"{name}" is available on PyPI.')
         else:
             print(f'"{name}" is taken on PyPI.')
+        if reason in _REASON_EXPLANATIONS:
+            print(_REASON_EXPLANATIONS[reason])
         if result.get("note"):
             print(f"  Note: {result['note']}")
 
@@ -449,6 +461,8 @@ def _format_single_result(result):
             print(f'"{name}" not found on pkg.go.dev.')
         else:
             print(f'"{name}" exists on pkg.go.dev.')
+        if reason in _REASON_EXPLANATIONS:
+            print(_REASON_EXPLANATIONS[reason])
         if result.get("note"):
             print(f"  Note: {result['note']}")
 

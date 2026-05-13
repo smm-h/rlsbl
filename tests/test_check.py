@@ -863,6 +863,69 @@ class TestReasonField(unittest.TestCase):
         self.assertIn("cl1", result["ultranorm_conflicts"])
 
 
+class TestReasonExplanations(unittest.TestCase):
+    """Tests for reason-specific explanations in verbose output."""
+
+    def test_pypi_stdlib_explanation(self):
+        """PyPI stdlib reason prints standard library explanation."""
+        result = {
+            "name": "queue", "registry": "pypi", "status": "taken",
+            "variants": [], "github_count": None, "reason": "stdlib",
+            "note": "conflicts with Python stdlib module 'queue'",
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        self.assertIn("standard library modules", mock_stdout.getvalue())
+
+    def test_npm_moniker_explanation(self):
+        """npm moniker reason prints punctuation-stripping explanation."""
+        result = {
+            "name": "selfdoc", "registry": "npm", "status": "taken",
+            "variants": [], "github_count": None, "reason": "moniker",
+            "note": "moniker conflict with 'self-doc' (npm strips punctuation)",
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        self.assertIn("removing dashes, dots, and underscores", mock_stdout.getvalue())
+
+    def test_pypi_ultranorm_explanation(self):
+        """PyPI ultranorm reason prints visual similarity explanation."""
+        result = {
+            "name": "cli", "registry": "pypi", "status": "taken",
+            "variants": [], "github_count": None, "reason": "ultranorm",
+            "ultranorm_conflicts": ["cl1"],
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        self.assertIn("visually similar", mock_stdout.getvalue())
+
+    def test_pypi_registered_no_explanation(self):
+        """PyPI registered reason does NOT print any reason explanation."""
+        result = {
+            "name": "requests", "registry": "pypi", "status": "taken",
+            "variants": [], "github_count": None, "reason": "registered",
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        self.assertNotIn("standard library modules", output)
+        self.assertNotIn("removing dashes, dots, and underscores", output)
+        self.assertNotIn("visually similar", output)
+
+    def test_npm_available_no_explanation(self):
+        """npm available result does NOT print any reason explanation."""
+        result = {
+            "name": "my-unique-pkg", "registry": "npm", "status": "available",
+            "variants": [], "github_count": 0, "reason": None,
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        self.assertNotIn("standard library modules", output)
+        self.assertNotIn("removing dashes, dots, and underscores", output)
+        self.assertNotIn("visually similar", output)
+
+
 class TestShortCircuit(unittest.TestCase):
     """Tests for short-circuit behavior: skip variants and GitHub when taken."""
 
