@@ -27,7 +27,7 @@ class TestCheckPyPI(unittest.TestCase):
     def test_pypi_available_on_404(self, mock_urlopen):
         """HTTPError with code 404 means the package name is available."""
         mock_urlopen.side_effect = HTTPError(
-            "https://pypi.org/pypi/nonexistent/json", 404, "Not Found", {}, None
+            "https://pypi.org/simple/nonexistent/", 404, "Not Found", {}, None
         )
         result = check_pypi_availability("nonexistent")
         self.assertEqual(result["status"], "available")
@@ -46,6 +46,31 @@ class TestCheckPyPI(unittest.TestCase):
         result = check_pypi_availability("some-package")
         self.assertEqual(result["status"], "error")
         self.assertIn("message", result)
+
+    @patch("urllib.request.urlopen")
+    def test_pypi_registered_but_empty_is_taken(self, mock_urlopen):
+        """A registered-but-empty package (no releases) should be 'taken'.
+
+        The JSON API returns 404 for these, but the Simple API correctly
+        returns 200. This test verifies we use the Simple API.
+        """
+        # Simple API returns 200 for registered packages even with no releases
+        mock_urlopen.return_value = FakeResponse(b"<html></html>")
+        result = check_pypi_availability("cost")
+        self.assertEqual(result["status"], "taken")
+        # Verify the URL uses the Simple API with normalized name
+        called_url = mock_urlopen.call_args[0][0].full_url
+        self.assertIn("/simple/cost/", called_url)
+        self.assertNotIn("/pypi/", called_url)
+
+    @patch("urllib.request.urlopen")
+    def test_pypi_uses_normalized_name_in_url(self, mock_urlopen):
+        """The Simple API URL should use PEP 503 normalized names."""
+        mock_urlopen.return_value = FakeResponse(b"<html></html>")
+        check_pypi_availability("My_Package.Name")
+        called_url = mock_urlopen.call_args[0][0].full_url
+        # PEP 503: lowercase, runs of [-_.] replaced with single hyphen
+        self.assertIn("/simple/my-package-name/", called_url)
 
     def test_pypi_variants(self):
         """get_pypi_variants generates PEP 503 normalized forms."""

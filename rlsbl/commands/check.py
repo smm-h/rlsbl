@@ -96,10 +96,14 @@ def get_npm_variants(name):
 def check_pypi_availability(name):
     """Check if a PyPI package name is available.
 
+    Uses the Simple API (PEP 503) which correctly returns 200 for registered
+    packages even if they have no releases (unlike the JSON API which 404s).
+
     Returns {"status": "available"|"taken"|"error", "message"?: str}.
     Distinguishes 404 (truly available) from network/other errors.
     """
-    url = f"https://pypi.org/pypi/{name}/json"
+    normalized = normalize_pypi(name)
+    url = f"https://pypi.org/simple/{normalized}/"
     try:
         with _request_with_backoff(url, timeout=5) as resp:
             if resp.status == 200:
