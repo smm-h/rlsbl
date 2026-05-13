@@ -15,6 +15,8 @@ except ImportError:
     _HAS_THREADS = False
 
 
+from itertools import product  # noqa: E402
+
 from rlsbl.targets.utils import normalize_pypi  # noqa: E402
 
 
@@ -52,6 +54,71 @@ def _request_with_backoff(url, timeout=5, max_retries=3):
             else:
                 raise
     raise last_exc
+
+
+def _ultranormalize(name):
+    """Ultranormalize a package name for typosquatting detection.
+
+    Strips all separators (-, _, .), replaces visually ambiguous characters
+    (l, L, i, I -> 1; o, O -> 0), and lowercases the result.
+    """
+    stripped = re.sub(r"[-_.]", "", name)
+    result = []
+    for ch in stripped:
+        if ch in ("l", "L", "i", "I"):
+            result.append("1")
+        elif ch in ("o", "O"):
+            result.append("0")
+        else:
+            result.append(ch.lower())
+    return "".join(result)
+
+
+_ULTRANORM_VARIANT_CAP = 64
+
+
+def _generate_ultranorm_variants(name):
+    """Generate name variants that share the same ultranormalized form.
+
+    Starting from the PEP 503 normalized form (lowercase, separators normalized),
+    produces all combinations of ambiguous character substitutions:
+      l <-> 1, o <-> 0, i <-> 1
+    Returns up to 64 variants, excluding the original name itself.
+    """
+    normalized = normalize_pypi(name)
+    # Build a list of character options per position
+    char_options = []
+    for ch in normalized:
+        if ch in ("l", "1"):
+            char_options.append(("l", "1"))
+        elif ch in ("o", "0"):
+            char_options.append(("o", "0"))
+        elif ch == "i":
+            char_options.append(("i", "1"))
+        else:
+            char_options.append((ch,))
+
+    # Count total combinations without materializing
+    total = 1
+    for opts in char_options:
+        total *= len(opts)
+
+    if total > _ULTRANORM_VARIANT_CAP:
+        print(
+            f"Warning: {total} ultranorm variants for '{name}', "
+            f"capping at {_ULTRANORM_VARIANT_CAP}",
+            file=sys.stderr,
+        )
+
+    variants = []
+    for combo in product(*char_options):
+        if len(variants) >= _ULTRANORM_VARIANT_CAP:
+            break
+        variant = "".join(combo)
+        if variant != normalized:
+            variants.append(variant)
+
+    return variants
 
 
 def check_npm_availability(name):

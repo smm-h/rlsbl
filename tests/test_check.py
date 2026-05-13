@@ -12,7 +12,9 @@ from rlsbl.commands.check import (
     _check_stdlib_collision,
     _format_single_result,
     _format_table_row,
+    _generate_ultranorm_variants,
     _request_with_backoff,
+    _ultranormalize,
     check_github_availability,
     check_go_availability,
     check_pypi_availability,
@@ -466,6 +468,65 @@ class TestStdlibCollisionIntegration(unittest.TestCase):
         self.assertIn("queue", result["note"])
         # PyPI availability check should NOT have been called
         mock_pypi.assert_not_called()
+
+
+class TestUltranormalize(unittest.TestCase):
+    """Tests for _ultranormalize."""
+
+    def test_cli(self):
+        """l->1 and i->1."""
+        self.assertEqual(_ultranormalize("cli"), "c11")
+
+    def test_hello(self):
+        """l->1 twice, o->0."""
+        self.assertEqual(_ultranormalize("hello"), "he110")
+
+    def test_foo_bar_with_dash(self):
+        """Strips dash, o->0 twice."""
+        self.assertEqual(_ultranormalize("foo-bar"), "f00bar")
+
+    def test_no_ambiguous_chars(self):
+        """No ambiguous chars, just lowercased."""
+        self.assertEqual(_ultranormalize("MyPackage"), "mypackage")
+
+    def test_empty_string(self):
+        """Empty string returns empty string."""
+        self.assertEqual(_ultranormalize(""), "")
+
+
+class TestGenerateUltranormVariants(unittest.TestCase):
+    """Tests for _generate_ultranorm_variants."""
+
+    def test_cli_variants(self):
+        """'cli' generates variants with l<->1 and i<->1, excluding itself."""
+        variants = _generate_ultranorm_variants("cli")
+        self.assertIn("cl1", variants)
+        self.assertIn("c1i", variants)
+        self.assertIn("c11", variants)
+        self.assertNotIn("cli", variants)
+
+    def test_hello_variants(self):
+        """'hello' generates variants with l<->1 and o<->0 substitutions."""
+        variants = _generate_ultranorm_variants("hello")
+        # Some expected variants
+        self.assertIn("he1lo", variants)
+        self.assertIn("hel1o", variants)
+        self.assertIn("hell0", variants)
+        self.assertIn("he110", variants)
+        self.assertNotIn("hello", variants)
+
+    def test_no_ambiguous_chars(self):
+        """'abc' has no ambiguous characters, returns empty list."""
+        variants = _generate_ultranorm_variants("abc")
+        self.assertEqual(variants, [])
+
+    def test_cap_at_64(self):
+        """Name with >6 ambiguous chars is capped at 64 variants."""
+        # 7 ambiguous chars -> 2^7 = 128 combinations, minus original = 127
+        name = "lllllll"
+        with patch("sys.stderr", new_callable=StringIO):
+            variants = _generate_ultranorm_variants(name)
+        self.assertLessEqual(len(variants), 64)
 
 
 if __name__ == "__main__":
