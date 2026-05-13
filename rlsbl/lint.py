@@ -158,9 +158,19 @@ class _SourceVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+_EXCLUDED_DIRS = frozenset({
+    ".venv", "venv", "__pycache__", ".git", "node_modules",
+    "build", "dist", ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+})
+
+
 def _walk_python_files(project_path):
     """Yield relative paths of .py files under project_path, excluding test files."""
-    for dirpath, _dirnames, filenames in os.walk(project_path):
+    for dirpath, dirs, filenames in os.walk(project_path):
+        dirs[:] = [
+            d for d in dirs
+            if d not in _EXCLUDED_DIRS and not d.endswith(".egg-info")
+        ]
         for filename in filenames:
             if not filename.endswith(".py"):
                 continue

@@ -137,6 +137,40 @@ class TestIgnoreList:
         assert "argparse" in results[0].message
 
 
+class TestDirectoryExclusion:
+    """Files in excluded directories (e.g., .venv) should not be linted."""
+
+    def test_venv_excluded(self, tmp_path):
+        venv_dir = tmp_path / ".venv" / "somepkg"
+        venv_dir.mkdir(parents=True)
+        (venv_dir / "bad.py").write_text("import flask\n")
+        results = lint_library(str(tmp_path))
+        assert results == [], f"Expected no findings from .venv, got: {results}"
+
+    def test_node_modules_excluded(self, tmp_path):
+        nm_dir = tmp_path / "node_modules" / "somepkg"
+        nm_dir.mkdir(parents=True)
+        (nm_dir / "bad.py").write_text("import flask\n")
+        results = lint_library(str(tmp_path))
+        assert results == []
+
+    def test_egg_info_excluded(self, tmp_path):
+        egg_dir = tmp_path / "mypkg.egg-info"
+        egg_dir.mkdir()
+        (egg_dir / "bad.py").write_text("import flask\n")
+        results = lint_library(str(tmp_path))
+        assert results == []
+
+    def test_source_still_linted(self, tmp_path):
+        """Non-excluded directories are still linted normally."""
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        (src_dir / "lib.py").write_text("import flask\n")
+        results = lint_library(str(tmp_path))
+        assert len(results) == 1
+        assert results[0].rule == "forbidden-import"
+
+
 class TestCleanLibrary:
     """A project with no violations returns an empty list."""
 
