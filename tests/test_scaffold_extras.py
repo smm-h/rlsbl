@@ -117,10 +117,10 @@ def test_template_author_never_literal(tmp_project):
     assert "{{author}}" not in content
 
 
-def test_force_does_not_overwrite_hooks(tmp_project):
-    """--force must NOT overwrite hook files in .rlsbl/hooks/."""
+def test_force_overwrites_hooks(tmp_project):
+    """--force MUST overwrite hook files (hooks are managed, not user-owned)."""
     hook_path = ".rlsbl/hooks/pre-release.sh"
-    assert hook_path in USER_OWNED
+    assert hook_path not in USER_OWNED
 
     # Pre-existing user hook
     hook_file = tmp_project / ".rlsbl" / "hooks" / "pre-release.sh"
@@ -138,12 +138,10 @@ def test_force_does_not_overwrite_hooks(tmp_project):
         str(tpl_dir), mappings, {}, force=True, update=False,
     )
 
-    # Hook must be skipped as user-owned, not overwritten
-    assert hook_file.read_text() == "#!/bin/bash\necho 'my custom hook'\n"
-    skipped_targets = [t for t, _ in skipped]
-    assert hook_path in skipped_targets
+    # Hook must be overwritten since it's no longer user-owned
+    assert hook_file.read_text() == "#!/bin/bash\necho 'template hook'\n"
     created_targets = [t for t, _ in created]
-    assert hook_path not in created_targets
+    assert hook_path in created_targets
 
 
 def test_force_overwrites_non_user_owned(tmp_project):
