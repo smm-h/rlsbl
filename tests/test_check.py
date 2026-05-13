@@ -253,14 +253,12 @@ class TestCheckTargetRequired(unittest.TestCase):
 
     def test_missing_target_error_message(self):
         """Error message should mention --target is required."""
-        from rlsbl import main
-        from io import StringIO
+        from rlsbl import app
 
-        with patch("sys.argv", ["rlsbl", "check", "some-name"]):
-            with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
-                with self.assertRaises(SystemExit):
-                    main()
-                self.assertIn("--target is required", mock_stderr.getvalue())
+        result = app.test(["check"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("target", result.stderr)
+        self.assertIn("required", result.stderr)
 
 
 class TestRequestWithBackoff(unittest.TestCase):
@@ -351,20 +349,42 @@ class TestRequestWithBackoff(unittest.TestCase):
 class TestDelayFlag(unittest.TestCase):
     """Tests for the --delay value flag."""
 
-    def test_delay_parsed_as_value_flag(self):
-        """--delay is recognized as a value flag and consumes the next token."""
-        from rlsbl import parse_args
-        positional, flags = parse_args(["rlsbl", "check", "my-pkg", "--target", "npm", "--delay", "500"])
-        self.assertEqual(flags["delay"], "500")
-        self.assertIn("my-pkg", positional)
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_delay_parsed_as_value_flag(self, mock_check):
+        """--delay is recognized as a value flag and passed to run_cmd."""
+        mock_check.return_value = {
+            "name": "my-pkg", "registry": "npm", "status": "available",
+            "variants": [], "github_count": 0,
+        }
+        import rlsbl
+        # Set the variadic args that _extract_variadic_args would populate
+        rlsbl._variadic_args = ["my-pkg"]
+        try:
+            result = rlsbl.app.test(["check", "--target", "npm", "--delay", "500"])
+        finally:
+            rlsbl._variadic_args = []
+        self.assertEqual(result.exit_code, 0)
+        mock_check.assert_called_once_with("my-pkg", "npm")
 
-    def test_delay_default_value(self):
-        """When --delay is not provided, the default is 200."""
-        from rlsbl import parse_args
-        positional, flags = parse_args(["rlsbl", "check", "my-pkg", "--target", "npm"])
-        # Simulating what run_cmd does
-        delay_ms = int(flags.get("delay", "200"))
-        self.assertEqual(delay_ms, 200)
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_delay_default_value(self, mock_check, mock_sleep):
+        """When --delay is not provided, the default is 200ms."""
+        mock_check.side_effect = [
+            {"name": "a", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+            {"name": "b", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+        ]
+        import rlsbl
+        rlsbl._variadic_args = ["a", "b"]
+        try:
+            result = rlsbl.app.test(["check", "--target", "npm"])
+        finally:
+            rlsbl._variadic_args = []
+        self.assertEqual(result.exit_code, 0)
+        # Default delay is 200ms = 0.2s between names
+        mock_sleep.assert_called_once_with(0.2)
 
 
 class TestMultiNameCheck(unittest.TestCase):

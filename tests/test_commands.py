@@ -972,10 +972,11 @@ class TestMigrateCommand(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
 
     def test_migrate_shows_help_text(self):
-        """The migrate command should appear in HELP text."""
-        from rlsbl import HELP
+        """The migrate command should appear in the CLI help output."""
+        from rlsbl import app
 
-        self.assertIn("migrate", HELP)
+        result = app.test(["--help"])
+        self.assertIn("migrate", result.stdout)
 
 
 class TestScaffoldAutoDetection:

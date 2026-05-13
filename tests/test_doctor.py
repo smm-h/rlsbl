@@ -109,14 +109,15 @@ class TestDoctorRegistration:
     """Tests for command registration in rlsbl."""
 
     def test_doctor_in_commands(self):
-        """'doctor' should be in the COMMANDS tuple."""
-        from rlsbl import COMMANDS
-        assert "doctor" in COMMANDS
+        """'doctor' should be registered as a CLI command."""
+        from rlsbl import app
+        assert "doctor" in app._commands
 
     def test_doctor_in_help(self):
-        """'doctor' should appear in the HELP text."""
-        from rlsbl import HELP
-        assert "doctor" in HELP
+        """'doctor' should appear in the CLI help output."""
+        from rlsbl import app
+        result = app.test(["--help"])
+        assert "doctor" in result.stdout
 
 
 class TestDoctorMonorepo:

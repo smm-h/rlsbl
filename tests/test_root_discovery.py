@@ -76,15 +76,13 @@ class TestMainRootDiscovery:
         subdir.mkdir()
         monkeypatch.chdir(subdir)
 
-        # Patch sys.argv for a project command and mock the command handler
-        monkeypatch.setattr(sys, "argv", ["rlsbl", "status"])
-        mock_module = MagicMock()
-        with patch("rlsbl._get_command_module", return_value=mock_module):
+        # Mock the status command's run_cmd to avoid actual execution
+        with patch("rlsbl.commands.status.run_cmd") as mock_run:
             with patch("rlsbl.detect_registries", return_value=["npm"]):
-                from rlsbl import main
-                main()
+                from rlsbl import app
+                app.test(["status"])
 
-        # After main(), cwd should be the project root
+        # After dispatch, cwd should be the project root
         assert os.getcwd() == str(tmp_path)
 
     def test_main_no_chdir_for_independent_commands(self, tmp_path, monkeypatch):
@@ -95,23 +93,19 @@ class TestMainRootDiscovery:
         monkeypatch.chdir(subdir)
         original_cwd = os.getcwd()
 
-        monkeypatch.setattr(sys, "argv", ["rlsbl", "discover"])
-        mock_module = MagicMock()
-        with patch("rlsbl._get_command_module", return_value=mock_module):
-            from rlsbl import main
-            main()
+        with patch("rlsbl.commands.discover.run_cmd") as mock_run:
+            from rlsbl import app
+            app.test(["discover"])
 
         assert os.getcwd() == original_cwd
 
     def test_main_errors_when_no_root_found(self, tmp_path, monkeypatch):
         """Project commands fail with error when no .rlsbl/ found."""
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(sys, "argv", ["rlsbl", "status"])
 
-        from rlsbl import main
-        with pytest.raises(SystemExit) as exc_info:
-            main()
-        assert exc_info.value.code == 1
+        from rlsbl import app
+        result = app.test(["status"])
+        assert result.exit_code == 1
 
     def test_scaffold_stays_in_cwd_for_new_project(self, tmp_path, monkeypatch):
         """Scaffold with no .rlsbl/ stays in cwd (new project init)."""
@@ -119,13 +113,11 @@ class TestMainRootDiscovery:
         monkeypatch.chdir(tmp_path)
         original_cwd = os.getcwd()
 
-        monkeypatch.setattr(sys, "argv", ["rlsbl", "scaffold"])
-        mock_module = MagicMock()
-        with patch("rlsbl._get_command_module", return_value=mock_module):
+        with patch("rlsbl.commands.init_cmd.run_cmd") as mock_run:
             with patch("rlsbl.detect_registries", return_value=["npm"]):
-                with patch("rlsbl.commands.init_cmd.read_project_config", return_value={}):
-                    from rlsbl import main
-                    main()
+                with patch("rlsbl.config.read_project_config", return_value={}):
+                    from rlsbl import app
+                    app.test(["scaffold"])
 
         assert os.getcwd() == original_cwd
 
@@ -137,12 +129,10 @@ class TestMainRootDiscovery:
         subdir.mkdir()
         monkeypatch.chdir(subdir)
 
-        monkeypatch.setattr(sys, "argv", ["rlsbl", "scaffold"])
-        mock_module = MagicMock()
-        with patch("rlsbl._get_command_module", return_value=mock_module):
+        with patch("rlsbl.commands.init_cmd.run_cmd") as mock_run:
             with patch("rlsbl.detect_registries", return_value=["npm"]):
-                with patch("rlsbl.commands.init_cmd.read_project_config", return_value={}):
-                    from rlsbl import main
-                    main()
+                with patch("rlsbl.config.read_project_config", return_value={}):
+                    from rlsbl import app
+                    app.test(["scaffold"])
 
         assert os.getcwd() == str(tmp_path)
