@@ -21,10 +21,8 @@ rlsbl supports 12 release targets, each handling version management and scaffold
 
 All targets implement the `ReleaseTarget` protocol, which defines the interface for version management, scaffolding, and optional build/publish steps.
 
-:::module rlsbl.targets.protocol
-:::
+:-: ref path="rlsbl.targets.protocol"
 
 ## Target implementations
 
-:::module rlsbl.targets.base
-:::
+:-: ref path="rlsbl.targets.base"

@@ -45,8 +45,7 @@ Fields per project:
 
 ## Workspace module
 
-:::module rlsbl.workspace
-:::
+:-: ref path="rlsbl.workspace"
 
 ## Watch paths
 

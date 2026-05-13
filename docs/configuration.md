@@ -4,8 +4,7 @@
 
 Project-level configuration file. Created by `rlsbl config init` or `rlsbl scaffold`.
 
-:::config .rlsbl/config.json
-:::
+:-: table-config path=".rlsbl/config.json"
 
 ### Key reference
 
@@ -16,19 +15,16 @@ Project-level configuration file. Created by `rlsbl config init` or `rlsbl scaff
 
 Configuration precedence for tagging: CLI flag (`--no-tag`) > project config > user config (`~/.rlsbl/config.json`) > default (true).
 
-:::module rlsbl.config
-:::
+:-: ref path="rlsbl.config"
 
 ## .rlsbl-monorepo/workspace.toml
 
 Monorepo workspace definition. See the [monorepo guide](monorepo.md) for details.
 
-:::config .rlsbl-monorepo/workspace.toml
-:::
+:-: table-config path=".rlsbl-monorepo/workspace.toml"
 
 ## selfdoc.json
 
 When present, enables the `docs` release target. See the [selfdoc documentation](https://github.com/smm-h/selfdoc) for the full schema.
 
-:::schema selfdoc.json
-:::
+:-: table-schema path="selfdoc.json"
