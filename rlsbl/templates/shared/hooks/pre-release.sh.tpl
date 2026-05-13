@@ -28,4 +28,14 @@ if [ -f package.json ] && node -e "process.exit(require('./package.json').script
   npm test
 fi
 
+# Library lint (monorepo only)
+if command -v rlsbl &>/dev/null; then
+  if rlsbl doctor --check library-lint 2>/dev/null; then
+    :
+  else
+    echo "  Library lint check failed"
+    exit 1
+  fi
+fi
+
 echo "Pre-release checks passed."

@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+from pathlib import Path
 
 from rlsbl.commands.init_cmd import (
     USER_OWNED,
@@ -17,6 +18,20 @@ def _write_file(path, content):
         os.makedirs(parent, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
+
+
+def test_pre_release_template_contains_library_lint():
+    """pre-release.sh.tpl must invoke rlsbl doctor --check library-lint."""
+    tpl_path = (
+        Path(__file__).resolve().parent.parent
+        / "rlsbl"
+        / "templates"
+        / "shared"
+        / "hooks"
+        / "pre-release.sh.tpl"
+    )
+    content = tpl_path.read_text()
+    assert "rlsbl doctor --check library-lint" in content
 
 
 def test_force_does_not_overwrite_changelog(tmp_project):
