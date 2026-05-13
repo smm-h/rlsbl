@@ -593,5 +593,60 @@ class TestSearchNpmSimilar(unittest.TestCase):
         self.assertEqual(result, [])
 
 
+class TestNpmMonikerIntegration(unittest.TestCase):
+    """Integration tests: moniker similarity wired into _check_single_name for npm."""
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._search_npm_similar")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_available_with_moniker_conflict_becomes_taken(
+        self, mock_npm, mock_variants, mock_similar, mock_gh
+    ):
+        """Available name with a moniker conflict is marked taken with note."""
+        mock_npm.return_value = {"status": "available"}
+        mock_variants.return_value = []
+        mock_similar.return_value = ["self-doc"]
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("selfdoc", "npm")
+        self.assertEqual(result["status"], "taken")
+        self.assertIn("moniker conflict", result["note"])
+        self.assertIn("self-doc", result["note"])
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._search_npm_similar")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_available_without_moniker_conflict_stays_available(
+        self, mock_npm, mock_variants, mock_similar, mock_gh
+    ):
+        """Available name with no moniker conflicts stays available."""
+        mock_npm.return_value = {"status": "available"}
+        mock_variants.return_value = []
+        mock_similar.return_value = []
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("uniquepkg", "npm")
+        self.assertEqual(result["status"], "available")
+        self.assertNotIn("note", result)
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._search_npm_similar")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_taken_name_skips_moniker_search(
+        self, mock_npm, mock_variants, mock_similar, mock_gh
+    ):
+        """Already-taken name does not trigger moniker search."""
+        mock_npm.return_value = {"status": "taken"}
+        mock_variants.return_value = []
+        mock_gh.return_value = {"status": "exists", "count": 5, "note": "5 repos"}
+
+        result = _check_single_name("express", "npm")
+        self.assertEqual(result["status"], "taken")
+        mock_similar.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

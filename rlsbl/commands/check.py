@@ -358,6 +358,11 @@ def _check_single_name(name, registry):
             result["error"] = check_result["message"]
         else:
             result["variants"] = _check_variants(name, check_npm_availability, get_npm_variants)
+            if result["status"] == "available":
+                conflicts = _search_npm_similar(name)
+                if conflicts:
+                    result["status"] = "taken"
+                    result["note"] = f"moniker conflict with '{conflicts[0]}' (npm strips punctuation)"
 
     elif registry == "pypi":
         stdlib_module = _check_stdlib_collision(name)
