@@ -17,6 +17,7 @@ fi
 if [ -f pyproject.toml ]; then
   echo "  Python: pytest"
   if command -v uv &>/dev/null; then
+    uv sync --quiet
     uv run pytest
   elif command -v pytest &>/dev/null; then
     pytest
