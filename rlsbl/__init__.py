@@ -97,7 +97,7 @@ def parse_args(argv):
     """
     VALUE_FLAGS = ("registry", "target", "width", "height", "font-size", "duration",
                    "name", "watch", "subtree-remote", "delay", "prefix", "suffix",
-                   "depends-on")
+                   "depends-on", "library", "check")
     raw = argv[1:]
     positional = []
     flags = {}
