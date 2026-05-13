@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.22.1
+
+- **Name check short-circuiting.** When a name is already taken, variant checking and GitHub repo lookups are now skipped, reducing API calls from 6 to 1-2 per taken name. Ultranormalization breaks after the first conflict instead of checking all 64 variants.
+- **Reason-specific explanations.** Check results now explain WHY a name was rejected: stdlib module conflict, npm moniker collision, or visual similarity. Previously only the status ("taken") was shown.
+- **PyPI caveats for available names.** Available PyPI names now always show the prohibited names list warning and suggest `--ultranormalized-variants` when the flag wasn't used.
+- **Steps-run summary.** Verbose check output ends with a "Checked:" line listing which validations ran (registry, stdlib, variants, GitHub, ultranormalization, moniker similarity).
+- **Multi-name summary.** Batch checks now print an aggregate summary ("N available, M taken") and the delay setting after the table.
+- **Rate limit retry visibility.** HTTP 429 retries now print "Rate limited, retrying in Ns..." to stderr instead of sleeping silently.
+
 ## 0.22.0
 
 - **Library boundary lint.** Tag monorepo projects with `library = true` in workspace.toml (or `monorepo add --library true`) to enforce library discipline. `rlsbl doctor --check library-lint` detects forbidden imports (argparse, flask, click, etc.), `print()` calls, and CLI entry points in library source files via Python AST analysis. Logging usage is flagged as a warning. Violations block releases via the pre-release hook. Supports `.rlsbl/lint.toml` ignore lists for false positives.
