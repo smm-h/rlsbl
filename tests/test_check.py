@@ -168,24 +168,26 @@ class TestCheckSingleName(unittest.TestCase):
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_npm_availability")
     def test_npm_taken_result(self, mock_npm, mock_gh):
-        """Taken npm name returns correct structured result."""
+        """Taken npm name returns correct structured result; GitHub check skipped."""
         mock_npm.return_value = {"status": "taken"}
         mock_gh.return_value = {"status": "exists", "count": 5, "note": "5 repos"}
 
         result = _check_single_name("express", "npm")
         self.assertEqual(result["status"], "taken")
-        self.assertEqual(result["github_count"], 5)
+        self.assertIsNone(result["github_count"])
+        mock_gh.assert_not_called()
 
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_npm_availability")
     def test_npm_error_result(self, mock_npm, mock_gh):
-        """Error checking npm returns error in result."""
+        """Error checking npm returns error in result; GitHub skipped."""
         mock_npm.return_value = {"status": "error", "message": "npm CLI not found"}
         mock_gh.return_value = {"status": "available", "count": 0}
 
         result = _check_single_name("some-pkg", "npm")
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["error"], "npm CLI not found")
+        mock_gh.assert_not_called()
 
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_pypi_availability")
@@ -217,13 +219,14 @@ class TestCheckSingleName(unittest.TestCase):
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_go_availability")
     def test_go_exists_result(self, mock_go, mock_gh):
-        """Existing Go module returns 'exists' status."""
+        """Existing Go module returns 'exists' status; GitHub check skipped."""
         mock_go.return_value = {"status": "exists"}
         mock_gh.return_value = {"status": "exists", "count": 3, "note": "3 repos"}
 
         result = _check_single_name("github.com/gorilla/mux", "go")
         self.assertEqual(result["status"], "exists")
-        self.assertEqual(result["github_count"], 3)
+        self.assertIsNone(result["github_count"])
+        mock_gh.assert_not_called()
 
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_npm_availability")
@@ -471,6 +474,8 @@ class TestStdlibCollisionIntegration(unittest.TestCase):
         self.assertIn("queue", result["note"])
         # PyPI availability check should NOT have been called
         mock_pypi.assert_not_called()
+        # GitHub check should also be skipped for taken names
+        mock_gh.assert_not_called()
 
 
 class TestUltranormalize(unittest.TestCase):
@@ -604,7 +609,7 @@ class TestNpmMonikerIntegration(unittest.TestCase):
     def test_available_with_moniker_conflict_becomes_taken(
         self, mock_npm, mock_variants, mock_similar, mock_gh
     ):
-        """Available name with a moniker conflict is marked taken with note."""
+        """Available name with a moniker conflict is marked taken with note; GitHub skipped."""
         mock_npm.return_value = {"status": "available"}
         mock_variants.return_value = []
         mock_similar.return_value = ["self-doc"]
@@ -614,6 +619,7 @@ class TestNpmMonikerIntegration(unittest.TestCase):
         self.assertEqual(result["status"], "taken")
         self.assertIn("moniker conflict", result["note"])
         self.assertIn("self-doc", result["note"])
+        mock_gh.assert_not_called()
 
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check._search_npm_similar")
@@ -639,7 +645,7 @@ class TestNpmMonikerIntegration(unittest.TestCase):
     def test_taken_name_skips_moniker_search(
         self, mock_npm, mock_variants, mock_similar, mock_gh
     ):
-        """Already-taken name does not trigger moniker search."""
+        """Already-taken name does not trigger moniker search or GitHub check."""
         mock_npm.return_value = {"status": "taken"}
         mock_variants.return_value = []
         mock_gh.return_value = {"status": "exists", "count": 5, "note": "5 repos"}
@@ -647,6 +653,7 @@ class TestNpmMonikerIntegration(unittest.TestCase):
         result = _check_single_name("express", "npm")
         self.assertEqual(result["status"], "taken")
         mock_similar.assert_not_called()
+        mock_gh.assert_not_called()
 
 
 class TestUltranormIntegration(unittest.TestCase):
@@ -749,24 +756,26 @@ class TestReasonField(unittest.TestCase):
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_pypi_availability")
     def test_pypi_stdlib_collision_reason(self, mock_pypi, mock_gh):
-        """PyPI stdlib collision sets reason='stdlib'."""
+        """PyPI stdlib collision sets reason='stdlib'; GitHub skipped."""
         mock_gh.return_value = {"status": "available", "count": 0}
 
         result = _check_single_name("queue", "pypi")
         self.assertEqual(result["status"], "taken")
         self.assertEqual(result["reason"], "stdlib")
         mock_pypi.assert_not_called()
+        mock_gh.assert_not_called()
 
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_pypi_availability")
     def test_pypi_registered_reason(self, mock_pypi, mock_gh):
-        """PyPI registered package sets reason='registered'."""
+        """PyPI registered package sets reason='registered'; GitHub skipped."""
         mock_pypi.return_value = {"status": "taken"}
         mock_gh.return_value = {"status": "available", "count": 0}
 
         result = _check_single_name("requests", "pypi")
         self.assertEqual(result["status"], "taken")
         self.assertEqual(result["reason"], "registered")
+        mock_gh.assert_not_called()
 
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_pypi_availability")
@@ -782,20 +791,21 @@ class TestReasonField(unittest.TestCase):
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_npm_availability")
     def test_npm_registered_reason(self, mock_npm, mock_gh):
-        """npm registered package sets reason='registered'."""
+        """npm registered package sets reason='registered'; GitHub skipped."""
         mock_npm.return_value = {"status": "taken"}
         mock_gh.return_value = {"status": "exists", "count": 5, "note": "5 repos"}
 
         result = _check_single_name("express", "npm")
         self.assertEqual(result["status"], "taken")
         self.assertEqual(result["reason"], "registered")
+        mock_gh.assert_not_called()
 
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check._search_npm_similar")
     @patch("rlsbl.commands.check._check_variants")
     @patch("rlsbl.commands.check.check_npm_availability")
     def test_npm_moniker_conflict_reason(self, mock_npm, mock_variants, mock_similar, mock_gh):
-        """npm moniker conflict sets reason='moniker'."""
+        """npm moniker conflict sets reason='moniker'; GitHub skipped."""
         mock_npm.return_value = {"status": "available"}
         mock_variants.return_value = []
         mock_similar.return_value = ["self-doc"]
@@ -804,6 +814,7 @@ class TestReasonField(unittest.TestCase):
         result = _check_single_name("selfdoc", "npm")
         self.assertEqual(result["status"], "taken")
         self.assertEqual(result["reason"], "moniker")
+        mock_gh.assert_not_called()
 
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check._search_npm_similar")
@@ -823,13 +834,14 @@ class TestReasonField(unittest.TestCase):
     @patch("rlsbl.commands.check.check_github_availability")
     @patch("rlsbl.commands.check.check_go_availability")
     def test_go_exists_reason(self, mock_go, mock_gh):
-        """Go existing module sets reason='registered'."""
+        """Go existing module sets reason='registered'; GitHub skipped."""
         mock_go.return_value = {"status": "exists"}
         mock_gh.return_value = {"status": "exists", "count": 3, "note": "3 repos"}
 
         result = _check_single_name("github.com/gorilla/mux", "go")
         self.assertEqual(result["status"], "exists")
         self.assertEqual(result["reason"], "registered")
+        mock_gh.assert_not_called()
 
     @patch("rlsbl.commands.check.time.sleep")
     @patch("rlsbl.commands.check.check_pypi_availability")
@@ -849,6 +861,106 @@ class TestReasonField(unittest.TestCase):
         self.assertEqual(result["status"], "taken")
         self.assertEqual(result["reason"], "ultranorm")
         self.assertIn("cl1", result["ultranorm_conflicts"])
+
+
+class TestShortCircuit(unittest.TestCase):
+    """Tests for short-circuit behavior: skip variants and GitHub when taken."""
+
+    # -- 1A: Skip variants when taken --
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_npm_taken_skips_variants(self, mock_npm, mock_variants, mock_gh):
+        """npm taken name does not call _check_variants."""
+        mock_npm.return_value = {"status": "taken"}
+
+        result = _check_single_name("express", "npm")
+        self.assertEqual(result["status"], "taken")
+        mock_variants.assert_not_called()
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._search_npm_similar")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_npm_available_calls_variants(self, mock_npm, mock_variants, mock_similar, mock_gh):
+        """npm available name calls _check_variants."""
+        mock_npm.return_value = {"status": "available"}
+        mock_variants.return_value = []
+        mock_similar.return_value = []
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("my-unique-pkg", "npm")
+        self.assertEqual(result["status"], "available")
+        mock_variants.assert_called_once()
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_pypi_taken_skips_variants(self, mock_pypi, mock_variants, mock_gh):
+        """PyPI taken name does not call _check_variants."""
+        mock_pypi.return_value = {"status": "taken"}
+
+        result = _check_single_name("requests", "pypi")
+        self.assertEqual(result["status"], "taken")
+        mock_variants.assert_not_called()
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_pypi_stdlib_skips_variants_and_github(self, mock_pypi, mock_variants, mock_gh):
+        """PyPI stdlib collision skips both _check_variants and GitHub check."""
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("queue", "pypi")
+        self.assertEqual(result["status"], "taken")
+        self.assertEqual(result["reason"], "stdlib")
+        mock_variants.assert_not_called()
+        mock_pypi.assert_not_called()
+        mock_gh.assert_not_called()
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_pypi_available_calls_variants_and_github(self, mock_pypi, mock_variants, mock_gh):
+        """PyPI available name calls both _check_variants and GitHub check."""
+        mock_pypi.return_value = {"status": "available"}
+        mock_variants.return_value = []
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("my-unique-pkg", "pypi")
+        self.assertEqual(result["status"], "available")
+        mock_variants.assert_called_once()
+        mock_gh.assert_called_once()
+
+    # -- 1B: Skip GitHub when taken --
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_npm_taken_skips_github(self, mock_npm, mock_gh):
+        """npm taken name does not call check_github_availability."""
+        mock_npm.return_value = {"status": "taken"}
+
+        result = _check_single_name("express", "npm")
+        self.assertEqual(result["status"], "taken")
+        self.assertIsNone(result["github_count"])
+        mock_gh.assert_not_called()
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._search_npm_similar")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_npm_available_calls_github(self, mock_npm, mock_variants, mock_similar, mock_gh):
+        """npm available name calls check_github_availability."""
+        mock_npm.return_value = {"status": "available"}
+        mock_variants.return_value = []
+        mock_similar.return_value = []
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("my-unique-pkg", "npm")
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["github_count"], 0)
+        mock_gh.assert_called_once()
 
 
 if __name__ == "__main__":

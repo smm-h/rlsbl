@@ -362,14 +362,13 @@ def _check_single_name(name, registry):
             result["error"] = check_result["message"]
         elif check_result["status"] == "taken":
             result["reason"] = "registered"
-        else:
+        elif check_result["status"] == "available":
             result["variants"] = _check_variants(name, check_npm_availability, get_npm_variants)
-            if result["status"] == "available":
-                conflicts = _search_npm_similar(name)
-                if conflicts:
-                    result["status"] = "taken"
-                    result["reason"] = "moniker"
-                    result["note"] = f"moniker conflict with '{conflicts[0]}' (npm strips punctuation)"
+            conflicts = _search_npm_similar(name)
+            if conflicts:
+                result["status"] = "taken"
+                result["reason"] = "moniker"
+                result["note"] = f"moniker conflict with '{conflicts[0]}' (npm strips punctuation)"
 
     elif registry == "pypi":
         stdlib_module = _check_stdlib_collision(name)
@@ -384,7 +383,7 @@ def _check_single_name(name, registry):
                 result["error"] = check_result["message"]
             elif check_result["status"] == "taken":
                 result["reason"] = "registered"
-            else:
+            elif check_result["status"] == "available":
                 result["variants"] = _check_variants(name, check_pypi_availability, get_pypi_variants)
 
     elif registry == "go":
@@ -397,12 +396,13 @@ def _check_single_name(name, registry):
         if check_result.get("note"):
             result["note"] = check_result["note"]
 
-    # GitHub informational check
-    gh_result = check_github_availability(name)
-    if gh_result["status"] != "error":
-        result["github_count"] = gh_result.get("count", 0)
-    else:
-        result["github_count"] = None
+    # GitHub informational check (skip when name is already taken/exists)
+    if result["status"] in ("available", "not_found"):
+        gh_result = check_github_availability(name)
+        if gh_result["status"] != "error":
+            result["github_count"] = gh_result.get("count", 0)
+        else:
+            result["github_count"] = None
 
     return result
 
