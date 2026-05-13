@@ -162,6 +162,55 @@ class TestRunCmdMulti:
         assert "CI" in content
 
 
+class TestPypiPrimaryNpmSecondary:
+    """Integration tests for pypi+npm scaffold with pypi as primary."""
+
+    @pytest.fixture
+    def pypi_npm_project(self, mock_git_repo):
+        """Set up a project with pyproject.toml (primary) and package.json (secondary)."""
+        root = mock_git_repo
+
+        pyproject = (
+            "[project]\n"
+            'name = "my-dual-pkg"\n'
+            'version = "0.2.0"\n'
+            'requires-python = ">=3.11"\n'
+        )
+        (root / "pyproject.toml").write_text(pyproject)
+
+        pkg = {
+            "name": "my-dual-pkg",
+            "version": "0.2.0",
+            "bin": {"my-dual-pkg": "./bin/cli.js"},
+        }
+        (root / "package.json").write_text(json.dumps(pkg, indent=2) + "\n")
+
+        return root
+
+    def test_npm_registry_url_resolved_when_secondary(self, pypi_npm_project):
+        """{{registryUrl}} in npm publish template resolves when npm is secondary.
+
+        Regression: when pypi was primary and npm secondary, {{registryUrl}}
+        was left unresolved because only pypi vars were un-namespaced.
+        """
+        with patch("sys.stdout", new_callable=StringIO):
+            run_cmd_multi(["pypi", "npm"], [], {})
+
+        publish_path = os.path.join(".github", "workflows", "publish.yml")
+        assert os.path.exists(publish_path)
+
+        with open(publish_path) as f:
+            content = f.read()
+
+        # {{registryUrl}} must not remain as an unresolved placeholder
+        assert "{{registryUrl}}" not in content
+        # The actual registry URL should be present
+        assert "registry.npmjs.org" in content
+        # Both jobs must be present
+        assert "\n  pypi:" in content
+        assert "\n  npm:" in content
+
+
 class TestMergedPublishCombinations:
     """Unit tests for _generate_merged_publish with diverse target combinations."""
 
@@ -208,6 +257,38 @@ class TestMergedPublishCombinations:
         assert "\n  cargo:" not in result
         assert "\n  go:" not in result
         assert "\n  deno:" not in result
+
+    def test_secondary_npm_registry_url_resolved(self):
+        """When npm is a secondary target, {{registryUrl}} must resolve from namespaced vars.
+
+        Regression test: previously, only the primary target's vars were
+        un-namespaced, so {{registryUrl}} in npm's template stayed unresolved
+        when npm was secondary (e.g., pypi+npm project).
+        """
+        # Simulate a pypi-primary, npm-secondary merged vars dict:
+        # pypi vars are un-namespaced, npm vars are only namespaced.
+        vars_dict = {
+            "name": "test-pkg",
+            "version": "1.0.0",
+            "repoName": "user/repo",
+            "minRequiredPython": "3.11",
+            "pypi.name": "test-pkg",
+            "pypi.version": "1.0.0",
+            "pypi.repoName": "user/repo",
+            "pypi.minRequiredPython": "3.11",
+            "npm.name": "test-pkg",
+            "npm.version": "1.0.0",
+            "npm.repoName": "user/repo",
+            "npm.registryUrl": "https://registry.npmjs.org",
+            "npm.binCommand": "test-pkg",
+            "npm.author": "",
+            "npm.packageManager": "npm",
+        }
+        result = _generate_merged_publish(["pypi", "npm"], vars_dict)
+
+        # {{registryUrl}} in npm's template must be resolved
+        assert "{{registryUrl}}" not in result
+        assert "registry.npmjs.org" in result
 
     def test_permissions_merged(self):
         """Merged permissions use the most permissive value for each key.

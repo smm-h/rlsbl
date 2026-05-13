@@ -810,8 +810,17 @@ def _generate_merged_publish(targets, template_vars):
         with open(tpl_path, "r", encoding="utf-8") as f:
             raw = f.read()
 
+        # Build per-target vars: start with the full merged dict, then overlay
+        # this target's own vars un-namespaced so {{registryUrl}} etc. resolve
+        # even when this target is not the primary.
+        prefix = f"{target_name}."
+        per_target_vars = dict(template_vars)
+        for key, value in template_vars.items():
+            if key.startswith(prefix):
+                per_target_vars[key[len(prefix):]] = value
+
         # Process template variables
-        content, _ = process_template(raw, template_vars)
+        content, _ = process_template(raw, per_target_vars)
         lines = content.splitlines(keepends=True)
 
         # Extract top-level permissions block
