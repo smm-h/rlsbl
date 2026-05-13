@@ -707,5 +707,113 @@ class TestUltranormIntegration(unittest.TestCase):
         self.assertNotIn("ultranorm_caveat", result)
 
 
+class TestReasonField(unittest.TestCase):
+    """Tests for the reason field on check result dicts."""
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_pypi_stdlib_collision_reason(self, mock_pypi, mock_gh):
+        """PyPI stdlib collision sets reason='stdlib'."""
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("queue", "pypi")
+        self.assertEqual(result["status"], "taken")
+        self.assertEqual(result["reason"], "stdlib")
+        mock_pypi.assert_not_called()
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_pypi_registered_reason(self, mock_pypi, mock_gh):
+        """PyPI registered package sets reason='registered'."""
+        mock_pypi.return_value = {"status": "taken"}
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("requests", "pypi")
+        self.assertEqual(result["status"], "taken")
+        self.assertEqual(result["reason"], "registered")
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_pypi_available_reason_none(self, mock_pypi, mock_gh):
+        """PyPI available package has reason=None."""
+        mock_pypi.return_value = {"status": "available"}
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("my-unique-pkg-xyz", "pypi")
+        self.assertEqual(result["status"], "available")
+        self.assertIsNone(result["reason"])
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_npm_registered_reason(self, mock_npm, mock_gh):
+        """npm registered package sets reason='registered'."""
+        mock_npm.return_value = {"status": "taken"}
+        mock_gh.return_value = {"status": "exists", "count": 5, "note": "5 repos"}
+
+        result = _check_single_name("express", "npm")
+        self.assertEqual(result["status"], "taken")
+        self.assertEqual(result["reason"], "registered")
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._search_npm_similar")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_npm_moniker_conflict_reason(self, mock_npm, mock_variants, mock_similar, mock_gh):
+        """npm moniker conflict sets reason='moniker'."""
+        mock_npm.return_value = {"status": "available"}
+        mock_variants.return_value = []
+        mock_similar.return_value = ["self-doc"]
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("selfdoc", "npm")
+        self.assertEqual(result["status"], "taken")
+        self.assertEqual(result["reason"], "moniker")
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check._search_npm_similar")
+    @patch("rlsbl.commands.check._check_variants")
+    @patch("rlsbl.commands.check.check_npm_availability")
+    def test_npm_available_no_conflict_reason_none(self, mock_npm, mock_variants, mock_similar, mock_gh):
+        """npm available with no moniker conflict has reason=None."""
+        mock_npm.return_value = {"status": "available"}
+        mock_variants.return_value = []
+        mock_similar.return_value = []
+        mock_gh.return_value = {"status": "available", "count": 0}
+
+        result = _check_single_name("uniquepkg", "npm")
+        self.assertEqual(result["status"], "available")
+        self.assertIsNone(result["reason"])
+
+    @patch("rlsbl.commands.check.check_github_availability")
+    @patch("rlsbl.commands.check.check_go_availability")
+    def test_go_exists_reason(self, mock_go, mock_gh):
+        """Go existing module sets reason='registered'."""
+        mock_go.return_value = {"status": "exists"}
+        mock_gh.return_value = {"status": "exists", "count": 3, "note": "3 repos"}
+
+        result = _check_single_name("github.com/gorilla/mux", "go")
+        self.assertEqual(result["status"], "exists")
+        self.assertEqual(result["reason"], "registered")
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_ultranorm_conflict_reason(self, mock_pypi, mock_sleep):
+        """Ultranorm conflict sets reason='ultranorm' and status='taken'."""
+        result = {
+            "name": "cli", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0, "reason": None,
+        }
+        def pypi_side_effect(name):
+            if name == "cl1":
+                return {"status": "taken"}
+            return {"status": "available"}
+        mock_pypi.side_effect = pypi_side_effect
+
+        _apply_ultranorm_check(result, "pypi", True, 200)
+        self.assertEqual(result["status"], "taken")
+        self.assertEqual(result["reason"], "ultranorm")
+        self.assertIn("cl1", result["ultranorm_conflicts"])
+
+
 if __name__ == "__main__":
     unittest.main()

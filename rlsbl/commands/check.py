@@ -345,10 +345,13 @@ def _check_single_name(name, registry):
         - status: "available", "taken", "exists", "not_found", or "error"
         - variants: list of similar names that are taken (npm/pypi only)
         - github_count: number of GitHub repos with this name (or None on error)
+        - reason: why the name is taken/unavailable, or None if available/error.
+          Values: "registered", "stdlib", "moniker", "ultranorm" (set by
+          _apply_ultranorm_check), or None.
         - error: error message if status is "error" (absent otherwise)
         - note: informational note (go only, absent otherwise)
     """
-    result = {"name": name, "registry": registry, "variants": []}
+    result = {"name": name, "registry": registry, "status": "", "variants": [], "github_count": None, "reason": None}
 
     # Registry-specific availability check
     if registry == "npm":
@@ -356,24 +359,30 @@ def _check_single_name(name, registry):
         result["status"] = check_result["status"]
         if check_result["status"] == "error":
             result["error"] = check_result["message"]
+        elif check_result["status"] == "taken":
+            result["reason"] = "registered"
         else:
             result["variants"] = _check_variants(name, check_npm_availability, get_npm_variants)
             if result["status"] == "available":
                 conflicts = _search_npm_similar(name)
                 if conflicts:
                     result["status"] = "taken"
+                    result["reason"] = "moniker"
                     result["note"] = f"moniker conflict with '{conflicts[0]}' (npm strips punctuation)"
 
     elif registry == "pypi":
         stdlib_module = _check_stdlib_collision(name)
         if stdlib_module is not None:
             result["status"] = "taken"
+            result["reason"] = "stdlib"
             result["note"] = f"conflicts with Python stdlib module '{stdlib_module}'"
         else:
             check_result = check_pypi_availability(name)
             result["status"] = check_result["status"]
             if check_result["status"] == "error":
                 result["error"] = check_result["message"]
+            elif check_result["status"] == "taken":
+                result["reason"] = "registered"
             else:
                 result["variants"] = _check_variants(name, check_pypi_availability, get_pypi_variants)
 
@@ -382,6 +391,8 @@ def _check_single_name(name, registry):
         result["status"] = check_result["status"]
         if check_result["status"] == "error":
             result["error"] = check_result["message"]
+        elif check_result["status"] == "exists":
+            result["reason"] = "registered"
         if check_result.get("note"):
             result["note"] = check_result["note"]
 
@@ -523,6 +534,8 @@ def _apply_ultranorm_check(result, registry, ultranorm_flag, delay_ms):
             conflicts.append(variant)
 
     if conflicts:
+        result["status"] = "taken"
+        result["reason"] = "ultranorm"
         result["ultranorm_conflicts"] = conflicts
 
 
