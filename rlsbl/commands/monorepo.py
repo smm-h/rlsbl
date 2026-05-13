@@ -830,6 +830,22 @@ def _cmd_check_names(args, flags):
         line = f"{row['project']:<{proj_width}}  {row['checked_name']:<{name_width}}  {row['status']:<{status_width}}"
         print(line)
 
+    # Summary line
+    available_count = sum(1 for r in rows if r["status"] in ("available", "not found"))
+    taken_count = sum(1 for r in rows if r["status"] in ("taken", "exists", "CONFLICT"))
+    error_count = sum(1 for r in rows if r["status"] == "error")
+    total = len(rows)
+    if error_count:
+        print(f"\nSummary: {available_count} available, {taken_count} taken, {error_count} error(s) ({total} total)")
+    else:
+        print(f"\nSummary: {available_count} available, {taken_count} taken ({total} total)")
+
+    # Batch context note
+    msg = f"Checked with {delay_ms}ms delay between names."
+    if delay_ms == 200:
+        msg += " Increase --delay if rate limited."
+    print(msg)
+
 
 # --- Subcommand registry and dispatch ---
 

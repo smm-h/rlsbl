@@ -398,7 +398,8 @@ class TestMultiNameCheck(unittest.TestCase):
             run_cmd("npm", ["foo", "bar", "baz"], {})
         output = mock_stdout.getvalue()
         lines = output.strip().split("\n")
-        self.assertEqual(len(lines), 4)  # header + 3 rows
+        # header + 3 rows + blank + summary + batch note = 7 lines
+        self.assertEqual(len(lines), 7)
         self.assertIn("Name", lines[0])
         self.assertIn("Status", lines[0])
         self.assertIn("foo", lines[1])
@@ -1227,6 +1228,96 @@ class TestStepsSummary(unittest.TestCase):
         self.assertIn("variants", checked_line)
         self.assertIn("GitHub repos", checked_line)
         self.assertIn("ultranormalization", checked_line)
+
+
+class TestMultiNameSummary(unittest.TestCase):
+    """Tests for multi-name summary line and batch context note."""
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_two_available_one_taken(self, mock_check, mock_sleep):
+        """3 names: 2 available, 1 taken -> summary says '2 available, 1 taken (3 total)'."""
+        mock_check.side_effect = [
+            {"name": "foo", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+            {"name": "bar", "registry": "npm", "status": "taken",
+             "variants": [], "github_count": None},
+            {"name": "baz", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+        ]
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            run_cmd("npm", ["foo", "bar", "baz"], {})
+        output = mock_stdout.getvalue()
+        self.assertIn("Summary: 2 available, 1 taken (3 total)", output)
+        # No error count in summary
+        self.assertNotIn("error(s)", output)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_summary_includes_error_count(self, mock_check, mock_sleep):
+        """3 names: 1 error -> summary includes error count."""
+        mock_check.side_effect = [
+            {"name": "foo", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+            {"name": "bar", "registry": "npm", "status": "error",
+             "variants": [], "github_count": None, "error": "timeout"},
+            {"name": "baz", "registry": "npm", "status": "taken",
+             "variants": [], "github_count": None},
+        ]
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            run_cmd("npm", ["foo", "bar", "baz"], {})
+        output = mock_stdout.getvalue()
+        self.assertIn("Summary: 1 available, 1 taken, 1 error(s) (3 total)", output)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_all_available_no_error_in_summary(self, mock_check, mock_sleep):
+        """3 names: all available -> no error in summary."""
+        mock_check.side_effect = [
+            {"name": "foo", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+            {"name": "bar", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+            {"name": "baz", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+        ]
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            run_cmd("npm", ["foo", "bar", "baz"], {})
+        output = mock_stdout.getvalue()
+        self.assertIn("Summary: 3 available, 0 taken (3 total)", output)
+        self.assertNotIn("error(s)", output)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_default_delay_shows_increase_tip(self, mock_check, mock_sleep):
+        """Default delay -> output contains 'Increase --delay if rate limited'."""
+        mock_check.side_effect = [
+            {"name": "foo", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+            {"name": "bar", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+        ]
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            run_cmd("npm", ["foo", "bar"], {})
+        output = mock_stdout.getvalue()
+        self.assertIn("Checked with 200ms delay between names.", output)
+        self.assertIn("Increase --delay if rate limited.", output)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._check_single_name")
+    def test_custom_delay_no_increase_tip(self, mock_check, mock_sleep):
+        """Custom delay -> output does NOT contain the increase tip."""
+        mock_check.side_effect = [
+            {"name": "foo", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+            {"name": "bar", "registry": "npm", "status": "available",
+             "variants": [], "github_count": 0},
+        ]
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            run_cmd("npm", ["foo", "bar"], {"delay": "500"})
+        output = mock_stdout.getvalue()
+        self.assertIn("Checked with 500ms delay between names.", output)
+        self.assertNotIn("Increase --delay if rate limited.", output)
 
 
 if __name__ == "__main__":

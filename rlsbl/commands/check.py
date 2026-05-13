@@ -621,3 +621,19 @@ def run_cmd(registry, args, flags):
         print(f"{'Name':<{name_width}}  Status")
         for row in rows:
             print(f"{row['name']:<{name_width}}  {row['status']}")
+
+        # Summary line
+        available_count = sum(1 for r in rows if r["status"] in ("available", "not found"))
+        taken_count = sum(1 for r in rows if r["status"] in ("taken", "exists", "CONFLICT"))
+        error_count = sum(1 for r in rows if r["status"] == "error")
+        total = len(rows)
+        if error_count:
+            print(f"\nSummary: {available_count} available, {taken_count} taken, {error_count} error(s) ({total} total)")
+        else:
+            print(f"\nSummary: {available_count} available, {taken_count} taken ({total} total)")
+
+        # Batch context note
+        msg = f"Checked with {delay_ms}ms delay between names."
+        if delay_ms == 200:
+            msg += " Increase --delay if rate limited."
+        print(msg)

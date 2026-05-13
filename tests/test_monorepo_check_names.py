@@ -60,7 +60,8 @@ class TestBasicCheckNames:
 
         captured = capsys.readouterr()
         lines = captured.out.strip().split("\n")
-        assert len(lines) == 4  # header + 3 rows
+        # header + 3 rows + blank + summary + batch note = 7 lines
+        assert len(lines) == 7
 
         # Header
         assert "Project" in lines[0]
@@ -74,6 +75,10 @@ class TestBasicCheckNames:
         assert "taken" in lines[2]
         assert "utils" in lines[3]
         assert "available" in lines[3]
+
+        # Summary and batch note
+        assert "Summary: 2 available, 1 taken (3 total)" in captured.out
+        assert "Checked with 200ms delay between names." in captured.out
 
         # Verify _check_single_name was called with correct names
         assert mock_check.call_count == 3
