@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.22.0
+
+- **Library boundary lint.** Tag monorepo projects with `library = true` in workspace.toml (or `monorepo add --library true`) to enforce library discipline. `rlsbl doctor --check library-lint` detects forbidden imports (argparse, flask, click, etc.), `print()` calls, and CLI entry points in library source files via Python AST analysis. Logging usage is flagged as a warning. Violations block releases via the pre-release hook. Supports `.rlsbl/lint.toml` ignore lists for false positives.
+- **`rlsbl doctor --check <name>`.** Run a single diagnostic check by name instead of all checks. Useful in CI and pre-release hooks.
+- **Library column in `monorepo status`.** Shows which projects are tagged as libraries. Dynamic column — hidden when no projects have `library = true`.
+- **PyPI check: Simple API.** Switched from the JSON API to the Simple API for availability checks. Fixes false "available" results for package names that are registered but have no releases.
+- **PyPI check: stdlib collision detection.** Names that conflict with Python standard library modules (like `queue`, `json`, `os`) are now reported as taken without hitting the network.
+- **PyPI check: `--ultranormalized-variants`.** New flag that generates visual-similarity variants (l/1/i and o/0 substitutions) and checks each against PyPI. Catches names like `cli` that PyPI rejects due to collision with `cl1`.
+- **npm check: moniker similarity detection.** The npm check now queries the search API to detect moniker conflicts — names that npm considers identical after stripping punctuation. Catches cases like `selfdoc` conflicting with `self-doc`.
+- **Fix: scaffold template variable resolution for secondary targets.** Multi-target projects (e.g., pypi+npm) no longer leave `{{registryUrl}}` unresolved when npm is a secondary target.
+
 ## 0.21.2
 
 - **Hook output is now visible.** Pre-release and post-release hooks stream stdout/stderr to the terminal in real-time. On failure, the actual exit code is shown instead of a generic error message.
