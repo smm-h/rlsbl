@@ -479,7 +479,7 @@ def _format_single_result(result):
                 "Consider if this could cause confusion."
             )
 
-    # Ultranormalization warnings
+    # Ultranormalization warnings and PyPI caveats
     ultranorm_conflicts = result.get("ultranorm_conflicts")
     if ultranorm_conflicts:
         print(
@@ -487,9 +487,20 @@ def _format_single_result(result):
             f"{', '.join(ultranorm_conflicts)}"
         )
     if result.get("ultranorm_caveat"):
+        # Flag was used: print the existing caveat (includes prohibited names note)
         print(
             "\nNote: PyPI may also reject names on its prohibited names list "
             "(not publicly available)."
+        )
+    elif registry == "pypi" and status == "available":
+        # Flag was NOT used: print prohibited names note + suggest the flag
+        print(
+            "\nNote: PyPI may reject names on its prohibited names list "
+            "(not publicly available)."
+        )
+        print(
+            "Tip: use --ultranormalized-variants to check for visual similarity "
+            "conflicts (l/1/i, o/0)."
         )
 
     # GitHub informational

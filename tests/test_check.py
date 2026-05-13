@@ -1090,5 +1090,62 @@ class TestUltranormEarlyExit(unittest.TestCase):
         self.assertEqual(result["reason"], "ultranorm")
 
 
+class TestPyPICaveats(unittest.TestCase):
+    """Tests for PyPI-specific caveats in _format_single_result output."""
+
+    def test_pypi_available_no_flag_shows_prohibited_note_and_tip(self):
+        """PyPI available without --ultranormalized-variants shows prohibited names note and tip."""
+        result = {
+            "name": "my-new-pkg", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0, "reason": None,
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        self.assertIn("PyPI may reject names on its prohibited names list", output)
+        self.assertIn("--ultranormalized-variants", output)
+
+    def test_pypi_available_with_flag_shows_ultranorm_caveat_no_duplicate(self):
+        """PyPI available with --ultranormalized-variants shows ultranorm caveat, no duplicate."""
+        result = {
+            "name": "my-new-pkg", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0, "reason": None,
+            "ultranorm_caveat": True,
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        self.assertIn("PyPI may also reject names on its prohibited names list", output)
+        # Should NOT contain the tip to use the flag (it was already used)
+        self.assertNotIn("--ultranormalized-variants", output)
+        # Should not print the prohibited names note twice
+        count = output.count("prohibited names list")
+        self.assertEqual(count, 1)
+
+    def test_pypi_taken_no_caveats(self):
+        """PyPI taken name does not show prohibited names note or ultranorm tip."""
+        result = {
+            "name": "requests", "registry": "pypi", "status": "taken",
+            "variants": [], "github_count": None, "reason": "registered",
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        self.assertNotIn("prohibited names list", output)
+        self.assertNotIn("--ultranormalized-variants", output)
+
+    def test_npm_available_no_pypi_caveats(self):
+        """npm available name does not show PyPI-specific caveats."""
+        result = {
+            "name": "my-new-pkg", "registry": "npm", "status": "available",
+            "variants": [], "github_count": 0, "reason": None,
+        }
+        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+            _format_single_result(result)
+        output = mock_stdout.getvalue()
+        self.assertNotIn("prohibited names list", output)
+        self.assertNotIn("--ultranormalized-variants", output)
+
+
 if __name__ == "__main__":
     unittest.main()
