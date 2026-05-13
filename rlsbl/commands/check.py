@@ -50,6 +50,7 @@ def _request_with_backoff(url, timeout=5, max_retries=3):
                     delay = float(retry_after)
                 else:
                     delay = 2 ** (attempt + 1)
+                print(f"Rate limited, retrying in {delay}s...", file=sys.stderr)
                 time.sleep(delay)
             else:
                 raise

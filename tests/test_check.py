@@ -707,6 +707,42 @@ class TestUltranormIntegration(unittest.TestCase):
         self.assertNotIn("ultranorm_caveat", result)
 
 
+class TestRetryVisibility(unittest.TestCase):
+    """Tests for retry visibility: _request_with_backoff prints to stderr on 429."""
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_429_with_retry_after_prints_to_stderr(self, mock_urlopen, mock_sleep):
+        """HTTP 429 with Retry-After header prints rate-limit message to stderr."""
+        headers_429 = MagicMock()
+        headers_429.get.return_value = "3"
+        error_429 = HTTPError(
+            "https://example.com", 429, "Too Many Requests", headers_429, None
+        )
+        fake_resp = FakeResponse(b"OK")
+        mock_urlopen.side_effect = [error_429, fake_resp]
+
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            _request_with_backoff("https://example.com/test", max_retries=3)
+        self.assertIn("Rate limited, retrying in", mock_stderr.getvalue())
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check.urllib.request.urlopen")
+    def test_429_without_retry_after_prints_to_stderr(self, mock_urlopen, mock_sleep):
+        """HTTP 429 without Retry-After header prints rate-limit message to stderr."""
+        headers_429 = MagicMock()
+        headers_429.get.return_value = None
+        error_429 = HTTPError(
+            "https://example.com", 429, "Too Many Requests", headers_429, None
+        )
+        fake_resp = FakeResponse(b"OK")
+        mock_urlopen.side_effect = [error_429, fake_resp]
+
+        with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+            _request_with_backoff("https://example.com/test", max_retries=3)
+        self.assertIn("Rate limited, retrying in", mock_stderr.getvalue())
+
+
 class TestReasonField(unittest.TestCase):
     """Tests for the reason field on check result dicts."""
 
