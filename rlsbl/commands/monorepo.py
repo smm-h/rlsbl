@@ -524,20 +524,26 @@ def _cmd_status(flags):
         watch = proj.get("watch", [])
         watch_str = f"{len(watch)} paths" if watch else "-"
 
+        # Library flag
+        library_str = "yes" if proj.get("library", False) else ""
+
         # Subtree remote
         remote = proj.get("subtree_remote", "")
         remote_str = remote if remote else "-"
 
-        rows.append((name, path, target_name, version, latest_tag, unreleased_str, deps_str, rdeps_str, watch_str, remote_str))
+        rows.append((name, path, target_name, version, latest_tag, unreleased_str, library_str, deps_str, rdeps_str, watch_str, remote_str))
 
     # Determine which dynamic columns to show
-    any_deps = any(row[6] != "0" for row in rows)
-    any_rdeps = any(row[7] != "0" for row in rows)
-    any_watch = any(row[8] != "-" for row in rows)
-    any_remote = any(row[9] != "-" for row in rows)
+    any_library = any(row[6] != "" for row in rows)
+    any_deps = any(row[7] != "0" for row in rows)
+    any_rdeps = any(row[8] != "0" for row in rows)
+    any_watch = any(row[9] != "-" for row in rows)
+    any_remote = any(row[10] != "-" for row in rows)
 
     # Calculate column widths
     base_headers = ("Project", "Path", "Target", "Version", "Tag", "Unreleased")
+    if any_library:
+        base_headers = base_headers + ("Library",)
     if any_deps:
         base_headers = base_headers + ("Deps",)
     if any_rdeps:
@@ -552,14 +558,16 @@ def _cmd_status(flags):
     display_rows = []
     for row in rows:
         cells = list(row[:6])  # base columns: name, path, target, version, tag, unreleased
-        if any_deps:
+        if any_library:
             cells.append(row[6])
-        if any_rdeps:
+        if any_deps:
             cells.append(row[7])
-        if any_watch:
+        if any_rdeps:
             cells.append(row[8])
-        if any_remote:
+        if any_watch:
             cells.append(row[9])
+        if any_remote:
+            cells.append(row[10])
         display_rows.append(tuple(cells))
 
     widths = [len(h) for h in headers]

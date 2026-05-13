@@ -360,6 +360,59 @@ def _setup_workspace_with_deps(base_path):
     return projects
 
 
+class TestMonorepoStatusLibrary:
+    """Tests for Library column in monorepo status."""
+
+    def test_library_column_shown_when_project_is_library(self, mock_git_repo, capsys):
+        """Library column appears with 'yes' when a project has library = true."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "mylib", version="1.0.0")
+        _cmd_add(["mylib"], {"library": "true"})
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        header_line = captured.out.strip().split("\n")[0]
+        assert "Library" in header_line
+        data_line = captured.out.strip().split("\n")[1]
+        assert "yes" in data_line
+
+    def test_library_column_hidden_when_no_library_projects(self, mock_git_repo, capsys):
+        """Library column is omitted when no project has library = true."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "app-a", version="1.0.0")
+        _make_npm_project(mock_git_repo, "app-b", version="2.0.0")
+        _cmd_add(["app-a"], {})
+        _cmd_add(["app-b"], {})
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        header_line = captured.out.strip().split("\n")[0]
+        assert "Library" not in header_line
+
+    def test_library_column_mixed_workspace(self, mock_git_repo, capsys):
+        """Mixed workspace: column shown, 'yes' for library projects, blank for others."""
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "mylib", version="1.0.0")
+        _make_npm_project(mock_git_repo, "myapp", version="2.0.0")
+        _cmd_add(["mylib"], {"library": "true"})
+        _cmd_add(["myapp"], {})
+        capsys.readouterr()
+        _cmd_status({})
+        captured = capsys.readouterr()
+        header_line = captured.out.strip().split("\n")[0]
+        assert "Library" in header_line
+        lines = captured.out.strip().split("\n")
+        lib_line = [l for l in lines[1:] if "mylib" in l][0]
+        app_line = [l for l in lines[1:] if "myapp" in l][0]
+        # Find Library column position from header
+        lib_col_start = header_line.index("Library")
+        lib_col_end = lib_col_start + len("Library")
+        # Check that mylib has "yes" in the Library column area
+        assert lib_line[lib_col_start:lib_col_end].strip() == "yes"
+        # Check that myapp has blank in the Library column area
+        assert app_line[lib_col_start:lib_col_end].strip() == ""
+
+
 class TestMonorepoStatusDeps:
     """Tests for Deps and Rdeps columns in monorepo status."""
 
