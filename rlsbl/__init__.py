@@ -65,7 +65,7 @@ Usage:
                                                             Manage monorepo workspaces
   rlsbl migrate [--dry-run] [--status]              Run config migrations (via migrable)
   rlsbl deploy [name] [--dry-run] [--force]             Deploy to configured targets
-  rlsbl doctor [--fix]                                 Diagnose and repair release state
+  rlsbl doctor [--fix] [--check <name>]                 Diagnose and repair release state
   rlsbl record-gif [--width N] [--height N] [--font-size N] [--duration N]
                                                             Record a demo GIF with vhs
 

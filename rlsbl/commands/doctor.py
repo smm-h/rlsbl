@@ -16,6 +16,27 @@ from ..utils import (
 )
 
 
+# Check name registry: maps short names to (function_name, needs_tag, needs_version).
+# Function is looked up by name on the module at call time so that unittest.mock
+# patches work correctly.
+CHECK_REGISTRY = {}
+
+_this_module = sys.modules[__name__]
+
+
+def _register_check(name, needs_tag=False, needs_version=False):
+    """Decorator to register a named check function."""
+    def decorator(fn):
+        CHECK_REGISTRY[name] = {
+            "fn_name": fn.__name__,
+            "needs_tag": needs_tag,
+            "needs_version": needs_version,
+        }
+        return fn
+    return decorator
+
+
+@_register_check("lock")
 def _check_stale_lock():
     """Check for stale lock files.
 
@@ -31,6 +52,7 @@ def _check_stale_lock():
     return ("PASS", "no lock file")
 
 
+@_register_check("versions")
 def _check_version_consistency():
     """Check that all detected targets report the same version."""
     target_entries = detect_targets(".")
@@ -68,6 +90,7 @@ def _normalize_name(target_name, raw_name):
     return normalizer(raw_name)
 
 
+@_register_check("names")
 def _check_name_consistency():
     """Check that all detected targets report the same package name."""
     target_entries = detect_targets(".")
@@ -105,6 +128,7 @@ def _check_name_consistency():
     return ("WARN", f"name mismatch: {detail}")
 
 
+@_register_check("license")
 def _check_license_consistency():
     """Check that all detected targets report the same license."""
     target_entries = detect_targets(".")
@@ -135,6 +159,7 @@ def _check_license_consistency():
     return ("WARN", f"license mismatch: {detail}")
 
 
+@_register_check("description")
 def _check_description_consistency():
     """Check that all detected targets report the same description."""
     target_entries = detect_targets(".")
@@ -165,6 +190,7 @@ def _check_description_consistency():
     return ("WARN", f"description mismatch: {detail}")
 
 
+@_register_check("local-tag", needs_tag=True)
 def _check_local_tag(tag):
     """Check if a git tag exists locally."""
     output = run("git", ["tag", "-l", tag])
@@ -173,6 +199,7 @@ def _check_local_tag(tag):
     return ("WARN", f"{tag} not found locally")
 
 
+@_register_check("remote-tag", needs_tag=True)
 def _check_remote_tag(tag):
     """Check if a git tag exists on the remote."""
     output = run("git", ["ls-remote", "--tags", "origin", tag])
@@ -181,6 +208,7 @@ def _check_remote_tag(tag):
     return ("WARN", f"{tag} not found on origin")
 
 
+@_register_check("github-release", needs_tag=True)
 def _check_github_release(tag):
     """Check if a GitHub Release exists for the tag."""
     if not check_gh_installed():
@@ -197,6 +225,7 @@ def _check_github_release(tag):
         return ("WARN", f"{tag} not found on GitHub")
 
 
+@_register_check("branch-sync")
 def _check_branch_sync():
     """Check if the local branch is in sync with origin."""
     branch = get_current_branch()
@@ -220,6 +249,7 @@ def _check_branch_sync():
     return ("FAIL", f"{behind} behind, {ahead} ahead of origin/{branch}")
 
 
+@_register_check("changelog", needs_version=True)
 def _check_changelog(version):
     """Check if CHANGELOG.md has an entry for the version."""
     changelog_path = "CHANGELOG.md"
@@ -230,6 +260,47 @@ def _check_changelog(version):
     if entry:
         return ("PASS", f"entry for {version}")
     return ("WARN", f"no entry for {version}")
+
+
+@_register_check("library-lint")
+def _check_library_lint():
+    """Check library projects for boundary violations."""
+    try:
+        from ..workspace import find_workspace_root, load_workspace
+    except Exception:
+        return ("PASS", "not in a monorepo workspace")
+
+    ws_root = find_workspace_root(".")
+    if not ws_root:
+        return ("PASS", "not in a monorepo workspace")
+
+    try:
+        projects = load_workspace(ws_root)
+    except Exception:
+        return ("PASS", "not in a monorepo workspace")
+
+    library_projects = [p for p in projects if p.get("library")]
+    if not library_projects:
+        return ("PASS", "no library projects configured")
+
+    from ..lint import lint_library
+
+    total_errors = 0
+    total_warnings = 0
+    for proj in library_projects:
+        proj_path = os.path.join(ws_root, proj["path"])
+        results = lint_library(proj_path)
+        for r in results:
+            if r.severity == "error":
+                total_errors += 1
+            elif r.severity == "warning":
+                total_warnings += 1
+
+    if total_errors > 0:
+        return ("FAIL", f"{total_errors} error(s), {total_warnings} warning(s)")
+    if total_warnings > 0:
+        return ("WARN", f"{total_warnings} warning(s)")
+    return ("PASS", "all library projects clean")
 
 
 def _apply_fixes(results, tag, version):
@@ -324,48 +395,82 @@ def _check_project_targets(projects):
     return ("PASS", f"all {len(projects)} project(s) have targets")
 
 
-def run_cmd(registry, args, flags):
-    """Run diagnostic checks on the release state."""
+def _resolve_version_and_tag():
+    """Detect version and tag from project targets.
+
+    Returns (version, tag) tuple; either may be None.
+    """
     target_entries = detect_targets(".")
     if not target_entries:
-        print("Warning: no targets detected.", file=sys.stderr)
+        return None, None
+
+    first_name, first_path = target_entries[0]
+    target = TARGETS[first_name]
+    try:
+        version = target.read_version(first_path)
+    except Exception:
         version = None
-        tag = None
-    else:
-        first_name, first_path = target_entries[0]
-        target = TARGETS[first_name]
-        try:
-            version = target.read_version(first_path)
-        except Exception:
-            version = None
-        if version:
-            tag = target.tag_format(version)
-        else:
-            tag = None
+    tag = target.tag_format(version) if version else None
+    return version, tag
+
+
+def _run_single_check(check_name, tag, version):
+    """Run a single registered check by name.
+
+    Looks up the function by name on the module at call time so that
+    unittest.mock patches are respected.
+
+    Returns (status, message) tuple.
+    """
+    entry = CHECK_REGISTRY[check_name]
+    fn = getattr(_this_module, entry["fn_name"])
+
+    if entry["needs_tag"]:
+        if not tag:
+            return ("WARN", "no version detected")
+        return fn(tag)
+    if entry["needs_version"]:
+        if not version:
+            return ("WARN", "no version detected")
+        return fn(version)
+    return fn()
+
+
+def run_cmd(registry, args, flags):
+    """Run diagnostic checks on the release state."""
+    check_name = flags.get("check")
+
+    # --check <name>: run a single check and exit
+    if check_name:
+        if check_name not in CHECK_REGISTRY:
+            valid = ", ".join(sorted(CHECK_REGISTRY.keys()))
+            print(f"Error: unknown check '{check_name}'. Valid checks: {valid}",
+                  file=sys.stderr)
+            sys.exit(1)
+
+        version, tag = _resolve_version_and_tag()
+        status, message = _run_single_check(check_name, tag, version)
+        print(f"{check_name}: {status} -- {message}")
+        sys.exit(1 if status == "FAIL" else 0)
+
+    # No --check: run all checks (original behavior)
+    version, tag = _resolve_version_and_tag()
+    if not detect_targets("."):
+        print("Warning: no targets detected.", file=sys.stderr)
 
     # Run checks
     results = {}
-    results["Lock file"] = _check_stale_lock()
-    results["Version files"] = _check_version_consistency()
-    results["Package names"] = _check_name_consistency()
-    results["License"] = _check_license_consistency()
-    results["Description"] = _check_description_consistency()
-
-    if tag:
-        results["Local tag"] = _check_local_tag(tag)
-        results["Remote tag"] = _check_remote_tag(tag)
-        results["GitHub Release"] = _check_github_release(tag)
-    else:
-        results["Local tag"] = ("WARN", "no version detected")
-        results["Remote tag"] = ("WARN", "no version detected")
-        results["GitHub Release"] = ("WARN", "no version detected")
-
-    results["Branch sync"] = _check_branch_sync()
-
-    if version:
-        results["Changelog"] = _check_changelog(version)
-    else:
-        results["Changelog"] = ("WARN", "no version detected")
+    results["Lock file"] = _run_single_check("lock", tag, version)
+    results["Version files"] = _run_single_check("versions", tag, version)
+    results["Package names"] = _run_single_check("names", tag, version)
+    results["License"] = _run_single_check("license", tag, version)
+    results["Description"] = _run_single_check("description", tag, version)
+    results["Local tag"] = _run_single_check("local-tag", tag, version)
+    results["Remote tag"] = _run_single_check("remote-tag", tag, version)
+    results["GitHub Release"] = _run_single_check("github-release", tag, version)
+    results["Branch sync"] = _run_single_check("branch-sync", tag, version)
+    results["Changelog"] = _run_single_check("changelog", tag, version)
+    results["Library lint"] = _run_single_check("library-lint", tag, version)
 
     # Print aligned table
     label_width = max(len(label) for label in results)
