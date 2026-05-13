@@ -62,6 +62,18 @@ def _cmd_add(args, flags):
     watch_raw = flags.get("watch")
     subtree_remote = flags.get("subtree-remote")
     depends_on_raw = flags.get("depends-on")
+    library_raw = flags.get("library")
+
+    # Parse --library as boolean
+    library = None
+    if library_raw is not None:
+        if library_raw == "true":
+            library = True
+        elif library_raw == "false":
+            library = False
+        else:
+            print(f"Error: --library must be 'true' or 'false', got '{library_raw}'.", file=sys.stderr)
+            sys.exit(1)
 
     root = find_workspace_root(".")
     if root is None:
@@ -96,6 +108,8 @@ def _cmd_add(args, flags):
         project["subtree_remote"] = subtree_remote
     if depends_on:
         project["depends_on"] = depends_on
+    if library is True:
+        project["library"] = True
     projects.append(project)
     save_workspace(root, projects)
     print(f"Added project '{name}' at {path}")
@@ -816,7 +830,7 @@ SUBCOMMANDS = {
     "add": (
         _cmd_add,
         "Add a project to the workspace",
-        "rlsbl monorepo add <path> [--name <name>] [--target <target>] [--watch <globs>] [--subtree-remote <url>] [--depends-on <names>]",
+        "rlsbl monorepo add <path> [--name <name>] [--target <target>] [--watch <globs>] [--subtree-remote <url>] [--depends-on <names>] [--library true|false]",
     ),
     "remove": (_cmd_remove, "Remove a project from the workspace", "rlsbl monorepo remove <path>"),
     "list": (_cmd_list, "List all projects in the workspace", "rlsbl monorepo list"),

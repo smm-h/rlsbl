@@ -135,6 +135,35 @@ class TestAdd:
         projects = load_workspace(str(mock_git_repo))
         assert "depends_on" not in projects[0]
 
+    def test_library_true_sets_field(self, mock_git_repo, capsys):
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "mylib")
+        _cmd_add(["mylib"], {"library": "true"})
+        projects = load_workspace(str(mock_git_repo))
+        assert projects[0]["library"] is True
+
+    def test_library_false_omits_field(self, mock_git_repo, capsys):
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "myapp")
+        _cmd_add(["myapp"], {"library": "false"})
+        projects = load_workspace(str(mock_git_repo))
+        assert "library" not in projects[0]
+
+    def test_no_library_flag_omits_field(self, mock_git_repo, capsys):
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "noflag")
+        _cmd_add(["noflag"], {})
+        projects = load_workspace(str(mock_git_repo))
+        assert "library" not in projects[0]
+
+    def test_library_invalid_errors(self, mock_git_repo, capsys):
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "badlib")
+        with pytest.raises(SystemExit):
+            _cmd_add(["badlib"], {"library": "invalid"})
+        captured = capsys.readouterr()
+        assert "--library must be 'true' or 'false'" in captured.err
+
 
 class TestRemove:
     def test_removes_project(self, mock_git_repo, capsys):
