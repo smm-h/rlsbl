@@ -533,6 +533,7 @@ def _apply_ultranorm_check(result, registry, ultranorm_flag, delay_ms):
         var_result = check_pypi_availability(variant)
         if var_result["status"] == "taken":
             conflicts.append(variant)
+            break
 
     if conflicts:
         result["status"] = "taken"

@@ -963,5 +963,69 @@ class TestShortCircuit(unittest.TestCase):
         mock_gh.assert_called_once()
 
 
+class TestUltranormEarlyExit(unittest.TestCase):
+    """Tests for early exit in ultranorm variant checking."""
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._generate_ultranorm_variants")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_first_variant_taken_stops_checking(self, mock_pypi, mock_variants, mock_sleep):
+        """When the first variant is taken, only 1 check_pypi_availability call is made."""
+        mock_variants.return_value = ["var1", "var2", "var3"]
+        mock_pypi.return_value = {"status": "taken"}
+
+        result = {
+            "name": "test-pkg", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0,
+        }
+        _apply_ultranorm_check(result, "pypi", True, 200)
+
+        self.assertEqual(mock_pypi.call_count, 1)
+        mock_pypi.assert_called_once_with("var1")
+        self.assertIn("ultranorm_conflicts", result)
+        self.assertEqual(result["ultranorm_conflicts"], ["var1"])
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._generate_ultranorm_variants")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_no_variants_taken_checks_all(self, mock_pypi, mock_variants, mock_sleep):
+        """When no variants are taken, all 3 check_pypi_availability calls are made."""
+        mock_variants.return_value = ["var1", "var2", "var3"]
+        mock_pypi.return_value = {"status": "available"}
+
+        result = {
+            "name": "test-pkg", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0,
+        }
+        _apply_ultranorm_check(result, "pypi", True, 200)
+
+        self.assertEqual(mock_pypi.call_count, 3)
+        self.assertNotIn("ultranorm_conflicts", result)
+
+    @patch("rlsbl.commands.check.time.sleep")
+    @patch("rlsbl.commands.check._generate_ultranorm_variants")
+    @patch("rlsbl.commands.check.check_pypi_availability")
+    def test_single_conflict_reported(self, mock_pypi, mock_variants, mock_sleep):
+        """The single conflict found via early exit is reported in ultranorm_conflicts."""
+        mock_variants.return_value = ["var1", "var2", "var3"]
+        def pypi_side_effect(name):
+            if name == "var2":
+                return {"status": "taken"}
+            return {"status": "available"}
+        mock_pypi.side_effect = pypi_side_effect
+
+        result = {
+            "name": "test-pkg", "registry": "pypi", "status": "available",
+            "variants": [], "github_count": 0,
+        }
+        _apply_ultranorm_check(result, "pypi", True, 200)
+
+        # var1 available, var2 taken -> break, var3 never checked
+        self.assertEqual(mock_pypi.call_count, 2)
+        self.assertEqual(result["ultranorm_conflicts"], ["var2"])
+        self.assertEqual(result["status"], "taken")
+        self.assertEqual(result["reason"], "ultranorm")
+
+
 if __name__ == "__main__":
     unittest.main()
