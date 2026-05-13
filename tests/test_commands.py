@@ -13,6 +13,7 @@ from unittest.mock import patch
 from rlsbl.commands.init_cmd import (
     BASES_DIR,
     HASHES_FILE,
+    USER_OWNED,
     _load_base,
     _save_base,
     _three_way_merge,
@@ -421,6 +422,67 @@ class TestScaffold(unittest.TestCase):
             run_cmd("npm", [], {"update": True})
 
         self.assertTrue(os.path.exists(ci_path))
+
+    def test_hooks_not_user_owned(self):
+        """Hooks should not be in USER_OWNED, allowing scaffold --update to merge them."""
+        self.assertNotIn(".rlsbl/hooks/pre-release.sh", USER_OWNED)
+        self.assertNotIn(".rlsbl/hooks/post-release.sh", USER_OWNED)
+
+    def test_update_merges_hook_changes(self):
+        """scaffold --update should three-way merge pre-release.sh when template changes."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(os.path.join(tpl_dir, "hooks"))
+
+        # Initial template version (7 lines so changes are well-separated)
+        tpl_v1 = (
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "echo start\n"
+            "step_one\n"
+            "step_two\n"
+            "step_three\n"
+            "echo done\n"
+        )
+        with open(os.path.join(tpl_dir, "hooks", "pre-release.sh.tpl"), "w") as f:
+            f.write(tpl_v1)
+
+        mappings = [{"template": "hooks/pre-release.sh.tpl",
+                      "target": ".rlsbl/hooks/pre-release.sh"}]
+        process_mappings(tpl_dir, mappings, {}, force=False)
+
+        # User modifies line 3 (echo start -> echo user_start)
+        with open(".rlsbl/hooks/pre-release.sh", "w") as f:
+            f.write(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "echo user_start\n"
+                "step_one\n"
+                "step_two\n"
+                "step_three\n"
+                "echo done\n"
+            )
+
+        # Template changes line 7 (echo done -> echo finished), non-adjacent
+        tpl_v2 = (
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "echo start\n"
+            "step_one\n"
+            "step_two\n"
+            "step_three\n"
+            "echo finished\n"
+        )
+        with open(os.path.join(tpl_dir, "hooks", "pre-release.sh.tpl"), "w") as f:
+            f.write(tpl_v2)
+
+        created, skipped, warnings, _ = process_mappings(tpl_dir, mappings, {}, force=False)
+        with open(".rlsbl/hooks/pre-release.sh") as f:
+            result = f.read()
+
+        # Both user customization and template update should be present
+        self.assertIn("echo user_start", result)
+        self.assertIn("echo finished", result)
+        self.assertTrue(any(s == "merged" for _, s in created))
 
 
 class TestHashFunctions(unittest.TestCase):

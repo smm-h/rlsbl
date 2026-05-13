@@ -48,8 +48,6 @@ def _check_npm_lockfile_missing():
 USER_OWNED = {
     "CHANGELOG.md",
     "LICENSE",
-    ".rlsbl/hooks/pre-release.sh",
-    ".rlsbl/hooks/post-release.sh",
 }
 
 def file_hash(path):
