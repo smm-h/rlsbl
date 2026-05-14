@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.23.0
+
+- **Breaking: `rlsbl init` removed.** The `init` alias for `scaffold` has been dropped. Use `rlsbl scaffold` directly.
+- **Breaking: `--registry` flag removed.** Use `--target` instead. The `--registry` flag was deprecated since 0.20.0.
+- **Breaking: hooks are now scaffold-managed.** `pre-release.sh` and `post-release.sh` are no longer user-owned. `scaffold --update` merges template improvements into existing hooks via three-way merge.
+- **Per-command help.** CLI dispatch migrated to strictcli. Every command and monorepo subcommand now has its own `--help` with typed flags, arguments, and descriptions.
+- **Multi-ecosystem library lint.** Library boundary lint now supports Go and npm in addition to Python. Go lint detects forbidden imports (`net/http`, `cobra`, `urfave/cli`), `fmt.Println`, and `func main()`. npm lint detects forbidden imports (`express`, `koa`, `commander`, etc.), `console.log`, and `bin` entry points.
+- **AST and regex lint backends.** Each language has two lint implementations: tree-sitter AST (accurate, default) and regex (lightweight fallback). Select via `parser = "regex"` in `.rlsbl/lint.toml`.
+- **Per-language lint config.** Lint rules are now configured in `.rlsbl/lint/python.toml`, `go.toml`, and `npm.toml` with `[forbidden-imports]`, `[stdout]`, and `[entry-point]` sections. Scaffold generates these with sensible defaults. The old `lint.toml` ignore list is deprecated; a warning is shown if detected.
+- **Built-in pre-release checks.** `rlsbl release` now runs tests and lint automatically before releasing. No hook customization needed for standard checks. Skip with `--skip-tests` or `--skip-lint`.
+- **Two-hook model.** New `pre-checks.sh` hook runs before built-in checks (for setup tasks). The existing `pre-release.sh` runs after (for custom validation).
+- **Standalone library lint.** `rlsbl doctor --check library-lint` now works on any project, not just monorepo libraries.
+- **Fix: lint false positives from vendored code.** The lint file walker no longer descends into `.venv/`, `node_modules/`, `__pycache__/`, and other non-source directories.
+- **Fix: stale venv before pytest.** The pre-release hook template now runs `uv sync --quiet` before `uv run pytest`.
+
 ## 0.22.1
 
 - **Name check short-circuiting.** When a name is already taken, variant checking and GitHub repo lookups are now skipped, reducing API calls from 6 to 1-2 per taken name. Ultranormalization breaks after the first conflict instead of checking all 64 variants.
