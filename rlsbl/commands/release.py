@@ -7,6 +7,13 @@ import subprocess
 import sys
 import time
 
+from ..changelog import (
+    changes_dir_exists,
+    finalize_version,
+    generate_changelog,
+    get_changes_dir,
+    validate_unreleased,
+)
 from ..config import read_deploy_config, read_json_config, read_project_config, should_tag
 from ..deploy import deploy_target
 from ..lock import acquire_lock, release_lock
@@ -331,6 +338,23 @@ def run_cmd(registry, args, flags):
         sys.exit(1)
 
     # Validate changelog entry
+    # JSONL changelog: if .rlsbl/changes/ exists, validate and generate from JSONL
+    uses_jsonl = changes_dir_exists(version_dir)
+    if uses_jsonl:
+        changes_dir = get_changes_dir(version_dir)
+        validation = validate_unreleased(changes_dir)
+        if not validation["passed"]:
+            print("Error: JSONL changelog validation failed:", file=sys.stderr)
+            for check_name, (passed, details) in validation.items():
+                if check_name == "passed":
+                    continue
+                if not passed:
+                    for detail in details:
+                        print(f"  {check_name}: {detail}", file=sys.stderr)
+            sys.exit(1)
+        generate_changelog(version_dir)
+        log("Generated CHANGELOG.md from JSONL entries")
+
     changelog_path = os.path.join(version_dir, "CHANGELOG.md")
     if not os.path.exists(changelog_path):
         print(
@@ -339,18 +363,20 @@ def run_cmd(registry, args, flags):
         )
         sys.exit(1)
     changelog_entry = extract_changelog_entry(changelog_path, new_version)
-    if not changelog_entry:
-        print(
-            f"Error: no changelog entry found for version {new_version} in CHANGELOG.md.",
-            file=sys.stderr,
-        )
-        print(f'Add a "## {new_version}" section describing the changes.', file=sys.stderr)
-        sys.exit(1)
-    if len(changelog_entry.strip()) < 10:
-        print(
-            f"Warning: changelog entry for {new_version} is very short. Consider adding more detail.",
-            file=sys.stderr,
-        )
+    if not uses_jsonl:
+        # Manual changelog: validate heading exists
+        if not changelog_entry:
+            print(
+                f"Error: no changelog entry found for version {new_version} in CHANGELOG.md.",
+                file=sys.stderr,
+            )
+            print(f'Add a "## {new_version}" section describing the changes.', file=sys.stderr)
+            sys.exit(1)
+        if len(changelog_entry.strip()) < 10:
+            print(
+                f"Warning: changelog entry for {new_version} is very short. Consider adding more detail.",
+                file=sys.stderr,
+            )
 
     # Run pre-checks hook if present
     pre_checks_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-checks.sh")
@@ -456,6 +482,7 @@ def run_cmd(registry, args, flags):
             target_paths=target_paths,
             lock_dir=lock_dir,
             pre_existing_dirty=pre_existing_dirty,
+            uses_jsonl=uses_jsonl,
         )
     finally:
         release_lock()
@@ -468,7 +495,8 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
                           version_dir=".", commit_msg=None,
                           primary_path=None, target_paths=None,
                           lock_dir=".rlsbl",
-                          pre_existing_dirty=None):
+                          pre_existing_dirty=None,
+                          uses_jsonl=False):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     if commit_msg is None:
         commit_msg = tag
@@ -574,6 +602,12 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         except Exception:
             pass
 
+    # When JSONL changelog is active, include the generated CHANGELOG.md in the commit
+    if uses_jsonl:
+        changelog_file = vpath("CHANGELOG.md")
+        if changelog_file not in files_to_commit:
+            files_to_commit.append(changelog_file)
+
     # Build step (no-op for npm/pypi/go targets)
     try:
         target.build(primary_path, new_version)
@@ -624,6 +658,27 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         log(f"Committed: {commit_msg}")
     elif not needs_commit:
         log("No changes to commit")
+
+    # Finalize JSONL changelog: rename unreleased.jsonl to x.y.z.jsonl
+    if uses_jsonl:
+        changes_dir = get_changes_dir(version_dir)
+        finalize_version(changes_dir, new_version)
+        log(f"Finalized JSONL changelog for {new_version}")
+        # Commit the finalized JSONL file and the new empty unreleased.jsonl
+        jsonl_finalized = os.path.normpath(os.path.join(changes_dir, f"{new_version}.jsonl"))
+        jsonl_unreleased = os.path.normpath(os.path.join(changes_dir, "unreleased.jsonl"))
+        # Also commit the generated per-version .md file if it exists
+        jsonl_md = os.path.normpath(os.path.join(changes_dir, f"{new_version}.md"))
+        finalize_files = [jsonl_finalized, jsonl_unreleased]
+        if os.path.exists(jsonl_md):
+            finalize_files.append(jsonl_md)
+        commit_tool = find_commit_tool()
+        if commit_tool == "safegit":
+            run(commit_tool, ["commit", "-m", f"chore: finalize changelog for {new_version}", "--", *finalize_files])
+        else:
+            run("git", ["add", *finalize_files])
+            run("git", ["commit", "-m", f"chore: finalize changelog for {new_version}"])
+        log(f"Committed finalized changelog files")
 
     # Create local git tag
     run("git", ["tag", tag])
