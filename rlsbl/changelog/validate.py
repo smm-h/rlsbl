@@ -46,6 +46,48 @@ def _git_head() -> str | None:
         return None
 
 
+_CHANGELOG_PATTERNS = (
+    ".rlsbl/changes/",
+    "CHANGELOG.md",
+)
+
+
+def _is_changelog_only_commit(sha: str) -> bool:
+    """Check if a commit only touches changelog-maintenance files.
+
+    Returns True if every file in the commit matches a changelog pattern
+    (files under .rlsbl/changes/ or CHANGELOG.md). Merge commits with no
+    files are treated as structural and return True. On subprocess errors,
+    returns False (don't skip if we can't determine).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return False
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+    files = [line.strip() for line in result.stdout.strip().splitlines() if line.strip()]
+
+    # Merge commits with no files listed are structural commits
+    if not files:
+        return True
+
+    for path in files:
+        if not any(
+            path.startswith(pat) if pat.endswith("/") else path == pat
+            for pat in _CHANGELOG_PATTERNS
+        ):
+            return False
+
+    return True
+
+
 def _is_ancestor(ancestor: str, descendant: str) -> bool:
     """Check if ancestor is an ancestor of descendant."""
     try:
@@ -181,7 +223,11 @@ def check_in_range(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:
 
 
 def check_coverage(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:
-    """Check that every unreleased commit appears in at least one entry."""
+    """Check that every unreleased commit appears in at least one entry.
+
+    Commits that only touch changelog files (.rlsbl/changes/*, CHANGELOG.md)
+    are automatically skipped -- they can never cover themselves.
+    """
     details: list[str] = []
     unreleased_commits = set(_git_log_hashes("origin/main..HEAD"))
 
@@ -192,11 +238,20 @@ def check_coverage(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:
     resolved = resolve_hashes(all_hashes)
     covered = {full for full in resolved.values() if full is not None}
 
+    skipped = 0
+    uncovered = 0
     for commit in sorted(unreleased_commits):
         if commit not in covered:
+            if _is_changelog_only_commit(commit):
+                skipped += 1
+                continue
+            uncovered += 1
             details.append(f"unreleased commit not covered: {commit[:12]}")
 
-    return (len(details) == 0, details)
+    if skipped > 0:
+        details.append(f"skipped {skipped} changelog-only commit(s)")
+
+    return (uncovered == 0, details)
 
 
 def check_no_orphans(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:

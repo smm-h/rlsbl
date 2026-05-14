@@ -11,6 +11,7 @@ from rlsbl.changelog.schema import ChangelogEntry
 from rlsbl.changelog.files import append_entry, read_unreleased
 from rlsbl.changelog.validate import (
     _is_cache_valid,
+    _is_changelog_only_commit,
     _read_cache,
     _write_cache,
     check_coverage,
@@ -340,3 +341,122 @@ class TestValidateUnreleasedReturnStructure:
             passed, details = value
             assert isinstance(passed, bool), f"check {name} passed is not bool"
             assert isinstance(details, list), f"check {name} details is not list"
+
+
+class TestIsChangelogOnlyCommit:
+    """Unit tests for _is_changelog_only_commit."""
+
+    def test_changelog_only_files(self, git_repo):
+        """Commit touching only .rlsbl/changes/ files is changelog-only."""
+        changes_dir = git_repo / ".rlsbl" / "changes"
+        unreleased = changes_dir / "unreleased.jsonl"
+        unreleased.write_text('{"commits":["abc"],"user_facing":false}\n')
+        _run_git(git_repo, "add", ".rlsbl/changes/unreleased.jsonl")
+        _run_git(git_repo, "commit", "-q", "-m", "update changelog")
+        sha = _git_head(git_repo)
+        assert _is_changelog_only_commit(sha) is True
+
+    def test_changelog_md_only(self, git_repo):
+        """Commit touching only CHANGELOG.md is changelog-only."""
+        (git_repo / "CHANGELOG.md").write_text("## 1.0.0\n- stuff\n")
+        _run_git(git_repo, "add", "CHANGELOG.md")
+        _run_git(git_repo, "commit", "-q", "-m", "update CHANGELOG.md")
+        sha = _git_head(git_repo)
+        assert _is_changelog_only_commit(sha) is True
+
+    def test_mixed_commit_not_changelog_only(self, git_repo):
+        """Commit touching both code and changelog files is NOT changelog-only."""
+        changes_dir = git_repo / ".rlsbl" / "changes"
+        unreleased = changes_dir / "unreleased.jsonl"
+        unreleased.write_text('{"commits":["abc"],"user_facing":false}\n')
+        (git_repo / "code.py").write_text("x = 1\n")
+        _run_git(git_repo, "add", ".rlsbl/changes/unreleased.jsonl")
+        _run_git(git_repo, "add", "code.py")
+        _run_git(git_repo, "commit", "-q", "-m", "mixed commit")
+        sha = _git_head(git_repo)
+        assert _is_changelog_only_commit(sha) is False
+
+    def test_code_only_commit(self, git_repo):
+        """Commit touching only code files is NOT changelog-only."""
+        sha = _make_commit(git_repo, "src.py", "code change")
+        assert _is_changelog_only_commit(sha) is False
+
+    def test_invalid_sha_returns_false(self, git_repo):
+        """Invalid SHA returns False (don't skip what we can't determine)."""
+        assert _is_changelog_only_commit("0" * 40) is False
+
+    def test_validated_file_is_changelog_only(self, git_repo):
+        """Commit touching .rlsbl/changes/.validated is changelog-only."""
+        validated = git_repo / ".rlsbl" / "changes" / ".validated"
+        validated.write_text("abc123\n")
+        _run_git(git_repo, "add", ".rlsbl/changes/.validated")
+        _run_git(git_repo, "commit", "-q", "-m", "update validated cache")
+        sha = _git_head(git_repo)
+        assert _is_changelog_only_commit(sha) is True
+
+
+class TestChangelogOnlyCoverage:
+    """Integration tests: changelog-only commits are skipped in coverage."""
+
+    def test_changelog_only_commit_skipped_in_coverage(self, git_repo):
+        """A changelog-only commit should not require an entry."""
+        # Make a code commit and cover it
+        sha1 = _make_commit(git_repo, "code.py", "code change")
+        entries = [ChangelogEntry(commits=[sha1], user_facing=False)]
+
+        # Make a changelog-only commit (not covered by any entry)
+        changes_dir = git_repo / ".rlsbl" / "changes"
+        unreleased = changes_dir / "unreleased.jsonl"
+        unreleased.write_text('{"commits":["abc"],"user_facing":false}\n')
+        _run_git(git_repo, "add", ".rlsbl/changes/unreleased.jsonl")
+        _run_git(git_repo, "commit", "-q", "-m", "update unreleased entries")
+
+        passed, details = check_coverage(entries)
+        assert passed is True
+        assert any("skipped 1 changelog-only" in d for d in details)
+
+    def test_mixed_commit_not_skipped_in_coverage(self, git_repo):
+        """A commit touching both code and changelog files must be covered."""
+        sha1 = _make_commit(git_repo, "a.py", "first change")
+
+        # Mixed commit: code + changelog
+        changes_dir = git_repo / ".rlsbl" / "changes"
+        unreleased = changes_dir / "unreleased.jsonl"
+        unreleased.write_text('{"commits":["abc"],"user_facing":false}\n')
+        (git_repo / "b.py").write_text("y = 2\n")
+        _run_git(git_repo, "add", ".rlsbl/changes/unreleased.jsonl")
+        _run_git(git_repo, "add", "b.py")
+        _run_git(git_repo, "commit", "-q", "-m", "mixed commit")
+
+        entries = [ChangelogEntry(commits=[sha1], user_facing=False)]
+        passed, details = check_coverage(entries)
+        assert passed is False
+        assert any("not covered" in d for d in details)
+
+    def test_changelog_md_only_commit_skipped(self, git_repo):
+        """A CHANGELOG.md-only commit should be skipped."""
+        sha1 = _make_commit(git_repo, "code.py", "code change")
+        entries = [ChangelogEntry(commits=[sha1], user_facing=False)]
+
+        # CHANGELOG.md-only commit
+        (git_repo / "CHANGELOG.md").write_text("## 1.0.0\n- stuff\n")
+        _run_git(git_repo, "add", "CHANGELOG.md")
+        _run_git(git_repo, "commit", "-q", "-m", "update CHANGELOG.md")
+
+        passed, details = check_coverage(entries)
+        assert passed is True
+        assert any("skipped 1 changelog-only" in d for d in details)
+
+    def test_validate_unreleased_skips_changelog_commit(self, git_repo):
+        """Full validate_unreleased should pass with a changelog-only commit."""
+        changes = str(git_repo / ".rlsbl" / "changes")
+        sha = _make_commit(git_repo, "code.py", "code change")
+        append_entry(changes, ChangelogEntry(commits=[sha], user_facing=False))
+
+        # Make a changelog-only commit
+        (git_repo / "CHANGELOG.md").write_text("## 1.0.0\n- stuff\n")
+        _run_git(git_repo, "add", "CHANGELOG.md")
+        _run_git(git_repo, "commit", "-q", "-m", "update CHANGELOG.md")
+
+        result = validate_unreleased(changes)
+        assert result["passed"] is True
