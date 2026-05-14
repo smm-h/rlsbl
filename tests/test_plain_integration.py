@@ -58,21 +58,6 @@ jobs:
 """
 
 
-def _git_auto_commit(message, files):
-    """Test replacement for _auto_commit that uses plain git instead of safegit."""
-    try:
-        subprocess.run(
-            ["git", "add", "--"] + files,
-            check=True, capture_output=True, text=True,
-        )
-        subprocess.run(
-            ["git", "commit", "-m", message],
-            check=True, capture_output=True, text=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-
-
 def _make_npm_project(base_path, subdir, version="0.1.0", ci=True, publish=False):
     """Create a minimal npm project with optional CI and publish workflows."""
     proj_dir = os.path.join(str(base_path), subdir)
@@ -152,7 +137,7 @@ class TestSyncSkipsPlain:
         self._setup_mixed_workspace(mock_git_repo)
         capsys.readouterr()
         from unittest.mock import patch
-        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+        with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
         dest = mock_git_repo / ".github" / "workflows" / "shared-config-ci.yml"
         assert not dest.exists(), "Plain project should not have a generated CI workflow"
@@ -162,7 +147,7 @@ class TestSyncSkipsPlain:
         self._setup_mixed_workspace(mock_git_repo)
         capsys.readouterr()
         from unittest.mock import patch
-        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+        with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
         dest = mock_git_repo / ".github" / "workflows" / "shared-config-publish.yml"
         assert not dest.exists(), "Plain project should not have a generated publish workflow"
@@ -172,7 +157,7 @@ class TestSyncSkipsPlain:
         self._setup_mixed_workspace(mock_git_repo)
         capsys.readouterr()
         from unittest.mock import patch
-        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+        with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
         ci_dest = mock_git_repo / ".github" / "workflows" / "web-app-ci.yml"
         pub_dest = mock_git_repo / ".github" / "workflows" / "web-app-publish.yml"
@@ -184,7 +169,7 @@ class TestSyncSkipsPlain:
         self._setup_mixed_workspace(mock_git_repo)
         capsys.readouterr()
         from unittest.mock import patch
-        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+        with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
         router = mock_git_repo / ".github" / "workflows" / "ci-router.yml"
         assert router.exists(), "CI router should be generated"
@@ -200,7 +185,7 @@ class TestSyncSkipsPlain:
         self._setup_mixed_workspace(mock_git_repo)
         capsys.readouterr()
         from unittest.mock import patch
-        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+        with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
         router = mock_git_repo / ".github" / "workflows" / "publish-router.yml"
         assert router.exists(), "Publish router should be generated (npm has publish)"

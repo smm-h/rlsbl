@@ -75,7 +75,7 @@ class TestReleaseWithDeployTargets:
             return ""
 
         monkeypatch.setattr("rlsbl.commands.release.run", mock_run)
-        monkeypatch.setattr("rlsbl.commands.release.find_commit_tool", lambda: "git")
+        monkeypatch.setattr("rlsbl.commands.release.commit_files", lambda msg, files, **kw: True)
         monkeypatch.setattr("rlsbl.commands.release.push_if_needed", lambda b: None)
         monkeypatch.setattr("rlsbl.commands.release.get_push_timeout", lambda: 120)
         monkeypatch.setattr("rlsbl.commands.release.get_current_branch", lambda: "main")
@@ -138,7 +138,7 @@ class TestReleaseDeployFailureContinues:
             return ""
 
         monkeypatch.setattr("rlsbl.commands.release.run", mock_run)
-        monkeypatch.setattr("rlsbl.commands.release.find_commit_tool", lambda: "git")
+        monkeypatch.setattr("rlsbl.commands.release.commit_files", lambda msg, files, **kw: True)
         monkeypatch.setattr("rlsbl.commands.release.push_if_needed", lambda b: None)
         monkeypatch.setattr("rlsbl.commands.release.get_push_timeout", lambda: 120)
         monkeypatch.setattr("rlsbl.commands.release.get_current_branch", lambda: "main")
@@ -230,7 +230,7 @@ class TestReleaseNoDeployConfig:
             return ""
 
         monkeypatch.setattr("rlsbl.commands.release.run", mock_run)
-        monkeypatch.setattr("rlsbl.commands.release.find_commit_tool", lambda: "git")
+        monkeypatch.setattr("rlsbl.commands.release.commit_files", lambda msg, files, **kw: True)
         monkeypatch.setattr("rlsbl.commands.release.push_if_needed", lambda b: None)
         monkeypatch.setattr("rlsbl.commands.release.get_push_timeout", lambda: 120)
         monkeypatch.setattr("rlsbl.commands.release.get_current_branch", lambda: "main")
@@ -296,7 +296,7 @@ class TestReleaseDeployConfigErrors:
             return ""
 
         monkeypatch.setattr("rlsbl.commands.release.run", mock_run)
-        monkeypatch.setattr("rlsbl.commands.release.find_commit_tool", lambda: "git")
+        monkeypatch.setattr("rlsbl.commands.release.commit_files", lambda msg, files, **kw: True)
         monkeypatch.setattr("rlsbl.commands.release.push_if_needed", lambda b: None)
         monkeypatch.setattr("rlsbl.commands.release.get_push_timeout", lambda: 120)
         monkeypatch.setattr("rlsbl.commands.release.get_current_branch", lambda: "main")
@@ -366,7 +366,7 @@ class TestReleaseStopsAtFirstDeployFailure:
             return ""
 
         monkeypatch.setattr("rlsbl.commands.release.run", mock_run)
-        monkeypatch.setattr("rlsbl.commands.release.find_commit_tool", lambda: "git")
+        monkeypatch.setattr("rlsbl.commands.release.commit_files", lambda msg, files, **kw: True)
         monkeypatch.setattr("rlsbl.commands.release.push_if_needed", lambda b: None)
         monkeypatch.setattr("rlsbl.commands.release.get_push_timeout", lambda: 120)
         monkeypatch.setattr("rlsbl.commands.release.get_current_branch", lambda: "main")

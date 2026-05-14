@@ -37,7 +37,7 @@ class TestPreReleaseHookOutput:
 
     @patch("rlsbl.commands.release.push_if_needed")
     @patch("rlsbl.commands.release.run")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
     @patch("rlsbl.commands.release.get_current_branch", return_value="main")
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
@@ -48,7 +48,7 @@ class TestPreReleaseHookOutput:
         _gh_auth,
         _clean,
         _branch,
-        _commit_tool,
+        _commit_files,
         mock_run,
         _push,
         tmp_project,
@@ -78,7 +78,7 @@ class TestPreReleaseHookOutput:
 
     @patch("rlsbl.commands.release.push_if_needed")
     @patch("rlsbl.commands.release.run")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
     @patch("rlsbl.commands.release.get_current_branch", return_value="main")
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
@@ -89,7 +89,7 @@ class TestPreReleaseHookOutput:
         _gh_auth,
         _clean,
         _branch,
-        _commit_tool,
+        _commit_files,
         mock_run,
         _push,
         tmp_project,
@@ -126,7 +126,7 @@ class TestPreReleaseHookOutput:
         with (
             patch("rlsbl.commands.release.push_if_needed"),
             patch("rlsbl.commands.release.run") as mock_run,
-            patch("rlsbl.commands.release.find_commit_tool", return_value="git"),
+            patch("rlsbl.commands.release.commit_files", return_value=True),
             patch("rlsbl.commands.release.get_current_branch", return_value="main"),
             patch("rlsbl.commands.release.is_clean_tree", return_value=True),
             patch("rlsbl.commands.release.check_gh_auth", return_value=True),
@@ -150,7 +150,7 @@ class TestPostReleaseHookOutput:
     @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
     @patch("rlsbl.commands.release.should_tag", return_value=False)
     @patch("rlsbl.commands.release.push_if_needed")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
     @patch("rlsbl.commands.release.get_current_branch", return_value="main")
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
@@ -161,7 +161,7 @@ class TestPostReleaseHookOutput:
         _gh_auth,
         _clean,
         _branch,
-        _commit_tool,
+        _commit_files,
         _push,
         _should_tag,
         _deploy,
@@ -232,7 +232,7 @@ class TestHookTimeout:
 
     @patch("rlsbl.commands.release.push_if_needed")
     @patch("rlsbl.commands.release.run")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
     @patch("rlsbl.commands.release.get_current_branch", return_value="main")
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
@@ -243,7 +243,7 @@ class TestHookTimeout:
         _gh_auth,
         _clean,
         _branch,
-        _commit_tool,
+        _commit_files,
         mock_run,
         _push,
         tmp_project,

@@ -12,7 +12,7 @@ from ..config import read_deploy_config, should_tag, read_project_config, write_
 from ..lock import acquire_lock, release_lock
 from ..targets import TARGETS, detect_targets
 from ..tagging import ensure_tags
-from ..utils import find_commit_tool, is_private_repo
+from ..utils import commit_files, is_private_repo
 
 HASHES_FILE = os.path.join(".rlsbl", "hashes.json")
 BASES_DIR = os.path.join(".rlsbl", "bases")
@@ -486,25 +486,8 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"Warning: could not untrack gitignored files: {e}")
 
-    tool = find_commit_tool()
-    try:
-        if tool == "safegit":
-            subprocess.run(
-                ["safegit", "commit", "-m", "rlsbl scaffold", "--"] + files_to_commit,
-                check=True, capture_output=True, text=True,
-            )
-        else:
-            subprocess.run(
-                ["git", "add"] + files_to_commit,
-                check=True, capture_output=True, text=True,
-            )
-            subprocess.run(
-                ["git", "commit", "-m", "rlsbl scaffold"],
-                check=True, capture_output=True, text=True,
-            )
+    if commit_files("rlsbl scaffold", files_to_commit, allow_failure=True):
         print("Committed scaffold changes.")
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"Warning: could not commit scaffold changes: {e}")
 
 
 def _resolve_private(flags):

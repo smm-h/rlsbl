@@ -41,13 +41,13 @@ class TestReleaseAllowDirty(unittest.TestCase):
 
     @patch("rlsbl.commands.release.push_if_needed")
     @patch("rlsbl.commands.release.run")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
     @patch("rlsbl.commands.release.get_current_branch", return_value="main")
     @patch("rlsbl.commands.release.is_clean_tree", return_value=False)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
     def test_allow_dirty_skips_clean_tree_check(self, _gh_inst, _gh_auth, _clean,
-                                                 _branch, _commit_tool, mock_run, _push):
+                                                 _branch, _commit_files, mock_run, _push):
         """With --allow-dirty, a dirty tree should not block the release (dry-run)."""
         from rlsbl.commands.release import run_cmd
 
@@ -70,7 +70,7 @@ class TestReleaseAllowDirty(unittest.TestCase):
     @patch("rlsbl.commands.release.acquire_lock")
     @patch("rlsbl.commands.release.push_if_needed")
     @patch("rlsbl.commands.release.run")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
     @patch("rlsbl.commands.release.get_current_branch", return_value="main")
     @patch("rlsbl.commands.release.is_clean_tree", return_value=False)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
@@ -79,7 +79,7 @@ class TestReleaseAllowDirty(unittest.TestCase):
     @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
     def test_allow_dirty_non_dry_run_passes_recheck(self, _deploy, _tag, _gh_inst,
                                                      _gh_auth, _clean, _branch,
-                                                     _commit_tool, mock_run, _push,
+                                                     _commit_files, mock_run, _push,
                                                      _lock, _unlock):
         """With --allow-dirty (non-dry-run), pre-existing dirty files pass the re-check guard."""
         from rlsbl.commands.release import run_cmd
@@ -102,8 +102,7 @@ class TestReleaseAllowDirty(unittest.TestCase):
             porcelain_recheck,  # git status --porcelain (re-check guard)
             "package.json",     # git diff --name-only -- package.json
             "M package.json",   # git status --porcelain -- package.json
-            "",                 # git add package.json
-            "",                 # git commit -m v1.0.1
+            # commit_files is mocked separately (no git add/commit calls here)
             "",                 # git tag v1.0.1
             "",                 # git push origin v1.0.1
             "",                 # gh release create ...
@@ -123,7 +122,7 @@ class TestReleaseAllowDirty(unittest.TestCase):
     @patch("rlsbl.commands.release.acquire_lock")
     @patch("rlsbl.commands.release.push_if_needed")
     @patch("rlsbl.commands.release.run")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
     @patch("rlsbl.commands.release.get_current_branch", return_value="main")
     @patch("rlsbl.commands.release.is_clean_tree", return_value=False)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
@@ -133,7 +132,7 @@ class TestReleaseAllowDirty(unittest.TestCase):
     def test_allow_dirty_still_catches_new_unexpected_files(self, _deploy, _tag,
                                                              _gh_inst, _gh_auth,
                                                              _clean, _branch,
-                                                             _commit_tool, mock_run,
+                                                             _commit_files, mock_run,
                                                              _push, _lock, _unlock):
         """With --allow-dirty, genuinely new unexpected files still abort the release."""
         from rlsbl.commands.release import run_cmd

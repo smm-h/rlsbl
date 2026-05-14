@@ -122,13 +122,13 @@ class TestMultiTargetRelease:
 
     @patch("rlsbl.commands.release.push_if_needed")
     @patch("rlsbl.commands.release.run")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
     @patch("rlsbl.commands.release.get_current_branch", return_value="main")
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
     def test_secondary_targets_called_when_detected(
-        self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
+        self, _gh_inst, _gh_auth, _clean, _branch, _commit_files, mock_run, _push
     ):
         """When a secondary target (docs) is detected, its build/publish are called."""
         # Create selfdoc.json so docs target is detected
@@ -141,13 +141,12 @@ class TestMultiTargetRelease:
         # 3. tag -l (current tag exists) -> "v1.0.0"
         # 4. tag -l (new tag doesn't exist) -> ""
         # 5. git status --porcelain -> ""
-        # 6. git add -> ""
-        # 7. git commit -> ""
-        # 8. git tag -> ""
-        # 9. git push origin tag -> ""
-        # 10. gh release create -> ""
-        # 11. git rev-parse HEAD -> "abc123"
-        mock_run.side_effect = ["", "0", "v1.0.0", "", "", "", "", "", "", "", "abc123"]
+        # commit_files is mocked separately (no git add/commit calls here)
+        # 6. git tag -> ""
+        # 7. git push origin tag -> ""
+        # 8. gh release create -> ""
+        # 9. git rev-parse HEAD -> "abc123"
+        mock_run.side_effect = ["", "0", "v1.0.0", "", "", "", "", "", "abc123"]
 
         # Mock the docs target's build and publish to track calls
         from rlsbl.targets import TARGETS
@@ -174,13 +173,13 @@ class TestMultiTargetRelease:
 
     @patch("rlsbl.commands.release.push_if_needed")
     @patch("rlsbl.commands.release.run")
-    @patch("rlsbl.commands.release.find_commit_tool", return_value="git")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
     @patch("rlsbl.commands.release.get_current_branch", return_value="main")
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
     def test_secondary_target_failure_is_non_fatal(
-        self, _gh_inst, _gh_auth, _clean, _branch, _commit_tool, mock_run, _push
+        self, _gh_inst, _gh_auth, _clean, _branch, _commit_files, mock_run, _push
     ):
         """If a secondary target's build/publish raises, release still completes."""
         # Create selfdoc.json so docs target is detected
@@ -188,7 +187,8 @@ class TestMultiTargetRelease:
             f.write("{}")
 
         # fetch + rev-list (remote-ahead check) + original mock sequence
-        mock_run.side_effect = ["", "0", "v1.0.0", "", "", "", "", "", "", "", "abc123"]
+        # commit_files is mocked separately (no git add/commit calls here)
+        mock_run.side_effect = ["", "0", "v1.0.0", "", "", "", "", "", "abc123"]
 
         from rlsbl.targets import TARGETS
         original_build = TARGETS["docs"].build

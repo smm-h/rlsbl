@@ -19,25 +19,6 @@ from rlsbl.commands.monorepo import (
 from rlsbl.workspace import load_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 
 
-def _git_auto_commit(message, files):
-    """Test replacement for _auto_commit that uses plain git instead of safegit.
-
-    safegit may not work in temporary test repos on CI runners, so tests
-    that verify auto-commit behavior use this helper via monkeypatching.
-    """
-    try:
-        subprocess.run(
-            ["git", "add", "--"] + files,
-            check=True, capture_output=True, text=True,
-        )
-        subprocess.run(
-            ["git", "commit", "-m", message],
-            check=True, capture_output=True, text=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
-
-
 CI_WORKFLOW = """\
 name: CI
 
@@ -234,7 +215,7 @@ class TestStaleCleanup:
             ("tooling", {"ci": True}),
             ("core", {"ci": True}),
         ])
-        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+        with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
         capsys.readouterr()
 
@@ -251,7 +232,7 @@ class TestStaleCleanup:
             cwd=str(mock_git_repo), check=True,
         )
 
-        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+        with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
 
         # "core-ci.yml" should be removed
@@ -405,7 +386,7 @@ class TestSwiftSubtreeWarning:
             cwd=str(mock_git_repo), check=True,
         )
         capsys.readouterr()
-        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+        with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
         captured = capsys.readouterr()
         assert "Warning" in captured.err
@@ -419,7 +400,7 @@ class TestAutoCommit:
         _init_workspace_with_projects(mock_git_repo, [
             ("tooling", {"ci": True}),
         ])
-        with patch("rlsbl.commands.monorepo._auto_commit", side_effect=_git_auto_commit):
+        with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
         # Working tree should be clean after sync
         result = subprocess.run(

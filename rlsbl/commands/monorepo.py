@@ -6,19 +6,10 @@ import subprocess
 import sys
 import time
 
+from ..utils import commit_files
 from ..workspace import find_workspace_root, load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 from ..workspace_graph import WorkspaceGraph
 from ..targets import detect_targets, TARGETS, TargetEntry
-
-def _auto_commit(message, files):
-    """Best-effort commit of specific files. Failures are silently ignored."""
-    try:
-        subprocess.run(
-            ["safegit", "commit", "-m", message, "--"] + files,
-            check=True, capture_output=True, text=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        pass
 
 
 def _cmd_init(flags):
@@ -30,7 +21,7 @@ def _cmd_init(flags):
     print("Initialized monorepo workspace in .rlsbl-monorepo/")
 
     # Auto-commit workspace.toml
-    _auto_commit("monorepo: init workspace", [os.path.join(WORKSPACE_DIR, WORKSPACE_FILE)])
+    commit_files("monorepo: init workspace", [os.path.join(WORKSPACE_DIR, WORKSPACE_FILE)], allow_failure=True)
 
 
 def _cmd_add(args, flags):
@@ -116,7 +107,7 @@ def _cmd_add(args, flags):
 
     # Commit workspace.toml
     ws_file = os.path.join(WORKSPACE_DIR, WORKSPACE_FILE)
-    _auto_commit(f"monorepo: add {name}", [ws_file])
+    commit_files(f"monorepo: add {name}", [ws_file], allow_failure=True)
 
     # Auto-scaffold if not already scaffolded
     project_rlsbl = os.path.join(path, ".rlsbl", "config.json")
@@ -414,7 +405,7 @@ def _cmd_sync(flags):
     # Auto-commit
     all_files = written_files + deleted_files
     if all_files:
-        _auto_commit("monorepo: sync CI workflows", all_files)
+        commit_files("monorepo: sync CI workflows", all_files, allow_failure=True)
 
     wf_count = len(written_files) - 1  # subtract router(s)
     if projects_with_publish:

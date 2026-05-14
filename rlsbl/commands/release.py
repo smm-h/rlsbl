@@ -24,8 +24,8 @@ from ..utils import (
     bump_version,
     check_gh_auth,
     check_gh_installed,
+    commit_files,
     extract_changelog_entry,
-    find_commit_tool,
     get_current_branch,
     get_hook_timeout,
     get_push_timeout,
@@ -647,12 +647,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
 
     needs_commit = new_version != current_version or has_staged_or_modified(files_to_commit)
     if files_to_commit and needs_commit:
-        commit_tool = find_commit_tool()
-        if commit_tool == "safegit":
-            run(commit_tool, ["commit", "-m", commit_msg, "--", *files_to_commit])
-        else:
-            run("git", ["add", *files_to_commit])
-            run("git", ["commit", "-m", commit_msg])
+        commit_files(commit_msg, files_to_commit)
         log(f"Committed: {commit_msg}")
     elif not needs_commit:
         log("No changes to commit")
@@ -670,12 +665,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         finalize_files = [jsonl_finalized, jsonl_unreleased]
         if os.path.exists(jsonl_md):
             finalize_files.append(jsonl_md)
-        commit_tool = find_commit_tool()
-        if commit_tool == "safegit":
-            run(commit_tool, ["commit", "-m", f"chore: finalize changelog for {new_version}", "--", *finalize_files])
-        else:
-            run("git", ["add", *finalize_files])
-            run("git", ["commit", "-m", f"chore: finalize changelog for {new_version}"])
+        commit_files(f"chore: finalize changelog for {new_version}", finalize_files)
         log(f"Committed finalized changelog files")
 
     # Create local git tag
