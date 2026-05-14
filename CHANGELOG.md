@@ -2,8 +2,7 @@
 
 ## 0.23.1
 
-- **Fix: CI smoke test uses `--target` instead of removed `--registry` flag.**
-- **Fix: npm wrapper CI test installs Python dependencies before invoking rlsbl.**
+- No user-facing changes.
 
 ## 0.23.0
 
@@ -18,7 +17,6 @@
 - **Two-hook model.** New `pre-checks.sh` hook runs before built-in checks (for setup tasks). The existing `pre-release.sh` runs after (for custom validation).
 - **Standalone library lint.** `rlsbl doctor --check library-lint` now works on any project, not just monorepo libraries.
 - **Fix: lint false positives from vendored code.** The lint file walker no longer descends into `.venv/`, `node_modules/`, `__pycache__/`, and other non-source directories.
-- **Fix: stale venv before pytest.** The pre-release hook template now runs `uv sync --quiet` before `uv run pytest`.
 
 ## 0.22.1
 
