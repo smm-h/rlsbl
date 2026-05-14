@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.23.1
+
+- **Fix: CI smoke test uses `--target` instead of removed `--registry` flag.**
+- **Fix: npm wrapper CI test installs Python dependencies before invoking rlsbl.**
+
 ## 0.23.0
 
 - **Breaking: `rlsbl init` removed.** The `init` alias for `scaffold` has been dropped. Use `rlsbl scaffold` directly.
