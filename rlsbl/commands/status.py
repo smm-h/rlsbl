@@ -2,8 +2,10 @@
 
 import json as _json
 import os
+import subprocess
 import sys
 
+from ..changelog import changes_dir_exists, get_changes_dir, read_unreleased, resolve_hashes
 from ..targets import TARGETS, detect_targets
 from ..utils import (
     extract_changelog_entry,
@@ -55,6 +57,41 @@ def _collect_status(registry, target_path="."):
     else:
         changelog = None
 
+    # JSONL changelog coverage
+    jsonl_coverage = None
+    if changes_dir_exists(target_path):
+        try:
+            changes_dir = get_changes_dir(target_path)
+            entries = read_unreleased(changes_dir)
+            # Count covered commits
+            all_hashes = []
+            for entry in entries:
+                all_hashes.extend(entry.commits)
+            resolved = resolve_hashes(all_hashes)
+            covered_shas = {full for full in resolved.values() if full is not None}
+
+            # Count unreleased commits
+            try:
+                result = subprocess.run(
+                    ["git", "log", "--format=%H", "origin/main..HEAD"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if result.returncode == 0:
+                    unreleased_commits = [
+                        line.strip()
+                        for line in result.stdout.strip().splitlines()
+                        if line.strip()
+                    ]
+                    total = len(unreleased_commits)
+                    covered = sum(1 for c in unreleased_commits if c in covered_shas)
+                    jsonl_coverage = f"{covered}/{total} commits covered"
+                else:
+                    jsonl_coverage = f"{len(entries)} entries"
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                jsonl_coverage = f"{len(entries)} entries"
+        except Exception:
+            pass
+
     # CI workflows
     ci = os.path.exists(".github/workflows/ci.yml")
     publish = os.path.exists(".github/workflows/publish.yml") or os.path.exists(
@@ -69,6 +106,7 @@ def _collect_status(registry, target_path="."):
         "tag": tag,
         "clean": clean,
         "changelog": changelog,
+        "jsonl_coverage": jsonl_coverage,
         "ci": ci,
         "publish": publish,
     }
@@ -128,6 +166,10 @@ def run_cmd(registry, args, flags):
         print(f"Changelog: has entry for {data['version']}")
     else:
         print(f"Changelog: no entry for {data['version']}")
+
+    # JSONL changelog coverage
+    if data.get("jsonl_coverage") is not None:
+        print(f"JSONL:     {data['jsonl_coverage']}")
 
     # CI workflows
     print(f"CI:        {'yes' if data['ci'] else 'missing'}")
