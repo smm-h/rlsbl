@@ -71,11 +71,11 @@ class TestCheckLibraryLint:
         assert status == "PASS"
         assert "clean" in message
 
-    def test_library_lint_no_monorepo(self, tmp_project):
-        """--check library-lint with no monorepo -> PASS with message."""
+    def test_library_lint_no_monorepo_no_files(self, tmp_project):
+        """--check library-lint with no monorepo and no source files -> PASS."""
         status, message = _check_library_lint()
         assert status == "PASS"
-        assert "not in a monorepo" in message
+        assert "clean" in message
 
     def test_library_lint_no_library_projects(self, tmp_project):
         """--check library-lint with no library=true projects -> PASS."""
@@ -141,6 +141,49 @@ class TestCheckLibraryLint:
         lib_dir = tmp_project / "libs" / "mylib"
         lib_dir.mkdir(parents=True, exist_ok=True)
         (lib_dir / "module.py").write_text(
+            "import logging\n"
+            "def hello():\n"
+            "    logging.info('hi')\n"
+        )
+
+        status, message = _check_library_lint()
+        assert status == "WARN"
+        assert "warning" in message
+
+
+class TestStandaloneLibraryLint:
+    """Tests for library-lint on standalone (non-monorepo) projects."""
+
+    def test_standalone_with_violations(self, tmp_project):
+        """Standalone project with a Python violation -> FAIL."""
+        (tmp_project / "pyproject.toml").write_text(
+            '[project]\nname = "example"\n'
+        )
+        (tmp_project / "lib.py").write_text('print("hello")\n')
+
+        status, message = _check_library_lint()
+        assert status == "FAIL"
+        assert "error" in message
+
+    def test_standalone_clean(self, tmp_project):
+        """Standalone project with no violations -> PASS."""
+        (tmp_project / "pyproject.toml").write_text(
+            '[project]\nname = "example"\n'
+        )
+        (tmp_project / "lib.py").write_text(
+            "import os\n\ndef add(a, b):\n    return a + b\n"
+        )
+
+        status, message = _check_library_lint()
+        assert status == "PASS"
+        assert "clean" in message
+
+    def test_standalone_warnings_only(self, tmp_project):
+        """Standalone project with only warnings -> WARN."""
+        (tmp_project / "pyproject.toml").write_text(
+            '[project]\nname = "example"\n'
+        )
+        (tmp_project / "lib.py").write_text(
             "import logging\n"
             "def hello():\n"
             "    logging.info('hi')\n"
