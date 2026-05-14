@@ -1,0 +1,5 @@
+{"commits":["39cceb659fd4347d8019eaf9099d1f071ba723d6"],"user_facing":true,"description":"Confirmation prompt on release (skip with --yes)","type":"feature"}
+{"commits":["cd66855552871e3c2c60cbe5e61739ce65cdc20d"],"user_facing":true,"description":"`config` command: show detected registries, scaffolding state, workflows, hooks","type":"feature"}
+{"commits":["3fd175c41a8f7018d301d07a70c14b68b4d30f42"],"user_facing":true,"description":"`undo` command: revert a botched release (deletes tag, reverts commit, deletes GitHub Release)","type":"feature"}
+{"commits":["93f41766d4f151625e9190d64600b5e609b62eb7"],"user_facing":true,"description":"Merged publish workflow for dual-registry projects (scaffold generates one file with both npm + pypi jobs)","type":"feature"}
+{"commits":["21650abf7e0b2bfe4633ac05b8a2f83079f68c39","0b24ad9704eaa2ee28d909b4f1aa8e2b8259df65"],"user_facing":false}

@@ -1,0 +1,3 @@
+{"commits":["769bd271288036d7340a78e2bd80f0e72d67aeb7"],"user_facing":true,"description":"CLI redesign: `--registry` flag replaces positional registry argument","type":"feature"}
+{"commits":["e5c5a1a4c56bc0edee8c7d28eea7acda10e58570"],"user_facing":true,"description":"Rename `check-name` command to `check`","type":"feature"}
+{"commits":["53a3bf4735a92cea5cead20edcf4cfeb3b88c748"],"user_facing":true,"description":"All commands are top-level: `rlsbl release`, `rlsbl check`, `rlsbl scaffold`, `rlsbl status`","type":"feature"}

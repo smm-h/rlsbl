@@ -1,0 +1,5 @@
+{"commits":["bc31f80f249a46c6293ac4a755424ee732d8f014"],"user_facing":true,"description":"Go project support: scaffold with GoReleaser, CI, and publish workflows","type":"feature"}
+{"commits":["839bb02a797e3c71cc01a705e440d39be70a3e64"],"user_facing":true,"description":"Version-file-less registries: release skips commit step when version is the git tag","type":"feature"}
+{"commits":["57070abe299991b02439f78f612aa6bea8bcb4ea"],"user_facing":true,"description":"Go name availability check via pkg.go.dev","type":"feature"}
+{"commits":["4fc3cc5a449768ac0e2f51e307c72cf73c367bf8"],"user_facing":true,"description":"Cross-compilation template (linux/darwin/windows x amd64/arm64)","type":"feature"}
+{"commits":["e7be4bc6e0e1acbfdbc2ac960257daa516c6268d","551a197583c94b9a1f2583e775f06b9ef639325e"],"user_facing":false}
