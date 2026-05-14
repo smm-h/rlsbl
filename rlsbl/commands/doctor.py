@@ -264,43 +264,65 @@ def _check_changelog(version):
 
 @_register_check("library-lint")
 def _check_library_lint():
-    """Check library projects for boundary violations."""
+    """Check library projects for boundary violations.
+
+    In a monorepo: lint all projects with ``library = true``.
+    In a standalone project: lint the current directory directly.
+    """
+    from ..lint import lint_library
+
+    # Try monorepo path first
+    ws_root = None
     try:
         from ..workspace import find_workspace_root, load_workspace
+
+        ws_root = find_workspace_root(".")
     except Exception:
-        return ("PASS", "not in a monorepo workspace")
+        pass
 
-    ws_root = find_workspace_root(".")
-    if not ws_root:
-        return ("PASS", "not in a monorepo workspace")
+    if ws_root:
+        try:
+            projects = load_workspace(ws_root)
+        except Exception:
+            return ("PASS", "not in a monorepo workspace")
 
-    try:
-        projects = load_workspace(ws_root)
-    except Exception:
-        return ("PASS", "not in a monorepo workspace")
+        library_projects = [p for p in projects if p.get("library")]
+        if not library_projects:
+            return ("PASS", "no library projects configured")
 
-    library_projects = [p for p in projects if p.get("library")]
-    if not library_projects:
-        return ("PASS", "no library projects configured")
+        total_errors = 0
+        total_warnings = 0
+        for proj in library_projects:
+            proj_path = os.path.join(ws_root, proj["path"])
+            results = lint_library(proj_path)
+            for r in results:
+                if r.severity == "error":
+                    total_errors += 1
+                elif r.severity == "warning":
+                    total_warnings += 1
 
-    from ..lint import lint_library
+        if total_errors > 0:
+            return ("FAIL", f"{total_errors} error(s), {total_warnings} warning(s)")
+        if total_warnings > 0:
+            return ("WARN", f"{total_warnings} warning(s)")
+        return ("PASS", "all library projects clean")
+
+    # Standalone project: lint current directory
+    results = lint_library(".")
 
     total_errors = 0
     total_warnings = 0
-    for proj in library_projects:
-        proj_path = os.path.join(ws_root, proj["path"])
-        results = lint_library(proj_path)
-        for r in results:
-            if r.severity == "error":
-                total_errors += 1
-            elif r.severity == "warning":
-                total_warnings += 1
+    for r in results:
+        if r.severity == "error":
+            total_errors += 1
+        elif r.severity == "warning":
+            total_warnings += 1
 
     if total_errors > 0:
         return ("FAIL", f"{total_errors} error(s), {total_warnings} warning(s)")
     if total_warnings > 0:
         return ("WARN", f"{total_warnings} warning(s)")
-    return ("PASS", "all library projects clean")
+    return ("PASS", "project clean")
 
 
 def _apply_fixes(results, tag, version):
