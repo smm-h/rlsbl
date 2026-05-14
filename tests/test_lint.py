@@ -1,4 +1,4 @@
-"""Tests for rlsbl.lint -- AST-based library boundary linting."""
+"""Tests for rlsbl.lint -- library boundary linting."""
 
 from rlsbl.lint import LintResult, lint_library
 
@@ -56,7 +56,7 @@ class TestStdoutDetection:
         src = tmp_path / "lib.py"
         src.write_text('import sys\nsys.stdout.write("x")\n')
         results = lint_library(str(tmp_path))
-        # One forbidden-import? No -- sys is not forbidden. One stdout violation.
+        # One stdout violation (sys is not a forbidden import).
         assert len(results) == 1
         r = results[0]
         assert r.rule == "stdout"
@@ -98,13 +98,29 @@ class TestEntryPoint:
         assert results == []
 
 
-class TestTestFileExclusion:
-    """Test files should be excluded from linting."""
+class TestTestFileInclusion:
+    """Test files are included by default; exclude_patterns in config can exclude them."""
 
-    def test_tests_dir_excluded(self, tmp_path):
+    def test_tests_dir_included_by_default(self, tmp_path):
+        """Without exclude config, test files ARE linted."""
         tests_dir = tmp_path / "tests"
         tests_dir.mkdir()
         (tests_dir / "test_foo.py").write_text('print("in test")\n')
+        results = lint_library(str(tmp_path))
+        assert len(results) == 1
+        assert results[0].rule == "stdout"
+
+    def test_tests_dir_excluded_by_config(self, tmp_path):
+        """With exclude config, test files are skipped."""
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_foo.py").write_text('print("in test")\n')
+        # Configure exclusion
+        lint_dir = tmp_path / ".rlsbl" / "lint"
+        lint_dir.mkdir(parents=True)
+        (lint_dir / "python.toml").write_text(
+            '[files]\nexclude = ["tests/", "test_*"]\n'
+        )
         results = lint_library(str(tmp_path))
         assert results == []
 
@@ -117,24 +133,89 @@ class TestTestFileExclusion:
         assert results[0].rule == "stdout"
 
 
-class TestIgnoreList:
-    """The .rlsbl/lint.toml ignore list suppresses specific violations."""
+class TestLanguageConfig:
+    """Per-language config in .rlsbl/lint/<language>.toml controls linting."""
 
-    def test_ignore_argparse(self, tmp_path):
-        # Set up ignore list
-        rlsbl_dir = tmp_path / ".rlsbl"
-        rlsbl_dir.mkdir()
-        (rlsbl_dir / "lint.toml").write_text('ignore = ["argparse"]\n')
-        # Source with argparse import
+    def test_custom_forbidden_imports(self, tmp_path):
+        """Config can narrow the forbidden list to only specified modules."""
+        lint_dir = tmp_path / ".rlsbl" / "lint"
+        lint_dir.mkdir(parents=True)
+        (lint_dir / "python.toml").write_text(
+            '[forbidden-imports]\nmodules = ["flask"]\n'
+        )
+        # argparse is no longer forbidden with custom config
         (tmp_path / "lib.py").write_text("import argparse\n")
         results = lint_library(str(tmp_path))
         assert results == []
 
-    def test_no_ignore_argparse(self, tmp_path):
+    def test_stdout_disabled(self, tmp_path):
+        """stdout checking can be disabled via config."""
+        lint_dir = tmp_path / ".rlsbl" / "lint"
+        lint_dir.mkdir(parents=True)
+        (lint_dir / "python.toml").write_text("[stdout]\nenabled = false\n")
+        (tmp_path / "lib.py").write_text('print("hello")\n')
+        results = lint_library(str(tmp_path))
+        assert results == []
+
+    def test_stdout_ignore_print(self, tmp_path):
+        """stdout ignore list can suppress print detection."""
+        lint_dir = tmp_path / ".rlsbl" / "lint"
+        lint_dir.mkdir(parents=True)
+        (lint_dir / "python.toml").write_text(
+            '[stdout]\nenabled = true\nignore = ["print"]\n'
+        )
+        (tmp_path / "lib.py").write_text('print("hello")\n')
+        results = lint_library(str(tmp_path))
+        assert results == []
+
+    def test_entry_point_disabled(self, tmp_path):
+        """Entry point checking can be disabled via config."""
+        lint_dir = tmp_path / ".rlsbl" / "lint"
+        lint_dir.mkdir(parents=True)
+        (lint_dir / "python.toml").write_text("[entry-point]\nenabled = false\n")
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[project]\nname = "example"\n\n'
+            '[project.scripts]\nmycli = "example:main"\n'
+        )
+        results = lint_library(str(tmp_path))
+        assert results == []
+
+    def test_entry_point_ignore(self, tmp_path):
+        """Entry point ignore list can suppress specific entry points."""
+        lint_dir = tmp_path / ".rlsbl" / "lint"
+        lint_dir.mkdir(parents=True)
+        (lint_dir / "python.toml").write_text(
+            '[entry-point]\nenabled = true\nignore = ["mycli"]\n'
+        )
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[project]\nname = "example"\n\n'
+            '[project.scripts]\nmycli = "example:main"\n'
+        )
+        results = lint_library(str(tmp_path))
+        assert results == []
+
+
+class TestParserSetting:
+    """The .rlsbl/lint.toml parser setting selects AST or regex linter."""
+
+    def test_default_is_ast(self, tmp_path):
+        """Without lint.toml, the AST linter is used (default)."""
         (tmp_path / "lib.py").write_text("import argparse\n")
         results = lint_library(str(tmp_path))
         assert len(results) == 1
-        assert "argparse" in results[0].message
+        assert results[0].rule == "forbidden-import"
+
+    def test_regex_parser(self, tmp_path):
+        """parser = 'regex' in lint.toml uses the regex linter."""
+        rlsbl_dir = tmp_path / ".rlsbl"
+        rlsbl_dir.mkdir()
+        (rlsbl_dir / "lint.toml").write_text('parser = "regex"\n')
+        (tmp_path / "lib.py").write_text("import argparse\n")
+        results = lint_library(str(tmp_path))
+        assert len(results) == 1
+        assert results[0].rule == "forbidden-import"
 
 
 class TestDirectoryExclusion:
