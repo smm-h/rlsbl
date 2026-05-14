@@ -1,0 +1,67 @@
+"""Multi-language library boundary linter.
+
+Public API:
+    lint_library(project_path) -> list[LintResult]
+    LintResult  (namedtuple: file, line, rule, severity, message)
+"""
+
+import os
+
+from .config import LanguageLintConfig, load_language_config, load_parser_setting
+from .result import LintResult
+
+__all__ = ["lint_library", "LintResult"]
+
+
+def _detect_languages(project_path: str) -> list[str]:
+    """Detect which languages are present in the project."""
+    languages = []
+    if os.path.isfile(os.path.join(project_path, "pyproject.toml")):
+        languages.append("python")
+    if os.path.isfile(os.path.join(project_path, "go.mod")):
+        languages.append("go")
+    if os.path.isfile(os.path.join(project_path, "package.json")):
+        languages.append("npm")
+    return languages
+
+
+def _create_linter(language: str, parser_type: str):
+    """Create the appropriate linter instance for a language and parser type."""
+    if language == "python":
+        if parser_type == "regex":
+            from .python_regex import PythonRegexLinter
+            return PythonRegexLinter()
+        from .python_ast import PythonAstLinter
+        return PythonAstLinter()
+    # Go and npm linters will be added by a later implementor.
+    return None
+
+
+def lint_library(project_path: str) -> list[LintResult]:
+    """Analyze a project for library boundary violations.
+
+    Detects languages present in the project, loads per-language config,
+    and runs the appropriate linter for each.
+
+    Args:
+        project_path: path to the project root directory.
+
+    Returns a list of LintResult namedtuples.
+    """
+    project_path = os.path.abspath(project_path)
+    parser_type = load_parser_setting(project_path)
+    languages = _detect_languages(project_path)
+
+    # If no language markers found, fall back to Python linting
+    # (backward compat: the old linter always scanned for .py files)
+    if not languages:
+        languages = ["python"]
+
+    results: list[LintResult] = []
+    for language in languages:
+        config = load_language_config(project_path, language)
+        linter = _create_linter(language, parser_type)
+        if linter is not None:
+            results.extend(linter.lint(project_path, config))
+
+    return results
