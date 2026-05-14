@@ -247,6 +247,21 @@ def cmd_check(target, delay):
 
 
 # ---------------------------------------------------------------------------
+# edit-release
+# ---------------------------------------------------------------------------
+
+@app.command(name="edit-release", help="Update GitHub Release notes from CHANGELOG.md")
+@strictcli.flag(name="dry-run", type=bool, help="Preview without making changes")
+@strictcli.arg(name="version", help="Version to update (defaults to current)", required=False)
+def cmd_edit_release(dry_run, version=None):
+    _require_project_root()
+    args = [version] if version else []
+    flags = {"dry-run": dry_run}
+    from .commands.edit_release import run_cmd
+    run_cmd(args, flags)
+
+
+# ---------------------------------------------------------------------------
 # undo
 # ---------------------------------------------------------------------------
 
