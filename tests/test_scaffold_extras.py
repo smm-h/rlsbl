@@ -20,8 +20,8 @@ def _write_file(path, content):
         f.write(content)
 
 
-def test_pre_release_template_contains_library_lint():
-    """pre-release.sh.tpl must invoke rlsbl doctor --check library-lint."""
+def test_pre_release_template_is_minimal_stub():
+    """pre-release.sh.tpl should be a minimal stub (built-in checks handle tests/lint)."""
     tpl_path = (
         Path(__file__).resolve().parent.parent
         / "rlsbl"
@@ -31,7 +31,11 @@ def test_pre_release_template_contains_library_lint():
         / "pre-release.sh.tpl"
     )
     content = tpl_path.read_text()
-    assert "rlsbl doctor --check library-lint" in content
+    assert "Built-in checks" in content
+    # Should NOT contain the old test/lint commands
+    assert "go vet" not in content
+    assert "uv run pytest" not in content
+    assert "npm test" not in content
 
 
 def test_force_does_not_overwrite_changelog(tmp_project):
