@@ -1,6 +1,8 @@
 """Release command: bump version, commit, push, create GitHub Release."""
 
+import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -97,6 +99,96 @@ def resolve_release_targets(primary, flags, version_dir="."):
     baseline.pop(primary, None)
 
     return baseline
+
+
+def _run_builtin_tests(registry, flags):
+    """Run built-in tests for the detected project type.
+
+    Detects the project type from registry and runs the appropriate test command.
+    Returns True if tests pass, calls sys.exit(1) on failure.
+    """
+    if flags.get("skip-tests") or flags.get("dry-run"):
+        return True
+
+    print("Running tests...")
+
+    if registry == "pypi":
+        config = read_project_config()
+        uv_verbose = config.get("uv_sync_verbose", False)
+        if shutil.which("uv"):
+            sync_cmd = ["uv", "sync"]
+            if not uv_verbose:
+                sync_cmd.append("--quiet")
+            result = subprocess.run(sync_cmd)
+            if result.returncode != 0:
+                print("Error: uv sync failed.", file=sys.stderr)
+                sys.exit(1)
+            result = subprocess.run(["uv", "run", "pytest"])
+        elif shutil.which("pytest"):
+            result = subprocess.run(["pytest"])
+        else:
+            print("Warning: neither uv nor pytest found, skipping tests.", file=sys.stderr)
+            return True
+    elif registry == "go":
+        result = subprocess.run(["go", "test", "./...", "-race", "-short", "-count=1"])
+    elif registry == "npm":
+        pkg_path = "package.json"
+        if os.path.exists(pkg_path):
+            try:
+                with open(pkg_path, "r", encoding="utf-8") as f:
+                    pkg = json.load(f)
+                if pkg.get("scripts", {}).get("test"):
+                    result = subprocess.run(["npm", "test"])
+                else:
+                    print("No test script in package.json, skipping tests.")
+                    return True
+            except (json.JSONDecodeError, OSError):
+                print("Warning: could not read package.json, skipping tests.", file=sys.stderr)
+                return True
+        else:
+            return True
+    else:
+        # Unknown registry, skip tests
+        return True
+
+    if result.returncode != 0:
+        print("Error: tests failed.", file=sys.stderr)
+        sys.exit(1)
+
+    return True
+
+
+def _run_builtin_lint(flags):
+    """Run built-in library lint.
+
+    Counts errors and warnings from lint results. Exits on errors.
+    """
+    if flags.get("skip-lint") or flags.get("dry-run"):
+        return True
+
+    print("Running lint...")
+
+    from ..lint import lint_library
+
+    results = lint_library(".")
+
+    errors = [r for r in results if r.severity == "error"]
+    warnings = [r for r in results if r.severity == "warning"]
+
+    if errors:
+        for r in errors:
+            print(f"  {r.file}:{r.line}: {r.rule}: {r.message}", file=sys.stderr)
+        print(f"Error: library lint found {len(errors)} error(s).", file=sys.stderr)
+        sys.exit(1)
+
+    if warnings:
+        for r in warnings:
+            print(f"  {r.file}:{r.line}: {r.rule}: {r.message}", file=sys.stderr)
+        print(f"Library lint: {len(warnings)} warning(s).")
+    else:
+        print("Library lint: clean.")
+
+    return True
 
 
 def run_cmd(registry, args, flags):
@@ -259,6 +351,28 @@ def run_cmd(registry, args, flags):
             f"Warning: changelog entry for {new_version} is very short. Consider adding more detail.",
             file=sys.stderr,
         )
+
+    # Run pre-checks hook if present
+    pre_checks_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-checks.sh")
+    if os.path.exists(pre_checks_script):
+        log("Running pre-checks hook...")
+        hook_timeout = get_hook_timeout()
+        try:
+            env = os.environ.copy()
+            env["RLSBL_VERSION"] = new_version
+            subprocess.run(["bash", pre_checks_script], env=env, check=True, timeout=hook_timeout)
+        except subprocess.CalledProcessError as e:
+            print(f"Error: pre-checks hook exited with code {e.returncode}.", file=sys.stderr)
+            sys.exit(1)
+        except subprocess.TimeoutExpired:
+            print(f"Error: pre-checks hook timed out after {hook_timeout}s.", file=sys.stderr)
+            sys.exit(1)
+
+    # Built-in test runner
+    _run_builtin_tests(registry, flags)
+
+    # Built-in lint runner
+    _run_builtin_lint(flags)
 
     # Run pre-release hook if present
     pre_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-release.sh")
