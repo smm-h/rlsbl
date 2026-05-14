@@ -405,6 +405,46 @@ def cmd_deploy(target, dry_run, force, target_name=None):
 
 
 # ---------------------------------------------------------------------------
+# changelog group
+# ---------------------------------------------------------------------------
+
+chlog = app.group("changelog", help="Structured changelog management")
+
+
+@chlog.command(name="add", help="Add an entry to unreleased.jsonl")
+@strictcli.flag(name="commits", type=str, help="Comma-separated commit hashes", default="")
+@strictcli.flag(name="description", type=str, help="Entry description", default="")
+@strictcli.flag(name="type", type=str, help="Entry type (feature, fix, breaking)", default="")
+@strictcli.flag(name="no-user-facing", type=bool, help="Mark as non-user-facing")
+def cmd_chlog_add(commits, description, type, no_user_facing):
+    _require_project_root()
+    flags = {
+        "commits": commits,
+        "description": description,
+        "type": type,
+        "no-user-facing": no_user_facing,
+    }
+    from .commands.changelog_cmd import cmd_add
+    cmd_add(flags)
+
+
+@chlog.command(name="validate", help="Validate unreleased changelog entries")
+def cmd_chlog_validate():
+    _require_project_root()
+    from .commands.changelog_cmd import cmd_validate
+    cmd_validate({})
+
+
+@chlog.command(name="generate", help="Generate CHANGELOG.md from JSONL files")
+@strictcli.flag(name="dry-run", type=bool, help="Preview without writing files")
+def cmd_chlog_generate(dry_run):
+    _require_project_root()
+    flags = {"dry-run": dry_run}
+    from .commands.changelog_cmd import cmd_generate
+    cmd_generate(flags)
+
+
+# ---------------------------------------------------------------------------
 # monorepo group
 # ---------------------------------------------------------------------------
 

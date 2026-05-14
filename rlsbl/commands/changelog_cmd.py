@@ -1,0 +1,139 @@
+"""Changelog subcommands: add, validate, generate."""
+
+import os
+import sys
+
+from ..changelog.files import append_entry, changes_dir_exists, get_changes_dir
+from ..changelog.generate import generate_changelog
+from ..changelog.resolve import resolve_hash
+from ..changelog.schema import ChangelogEntry, validate_schema
+from ..changelog.validate import validate_unreleased
+
+
+def cmd_add(flags):
+    """Add a changelog entry to unreleased.jsonl.
+
+    Required flags:
+    - --commits: comma-separated commit hashes
+    - --description and --type: required unless --no-user-facing is set
+    """
+    commits_raw = flags.get("commits", "")
+    if not commits_raw:
+        print("Error: --commits is required.", file=sys.stderr)
+        sys.exit(1)
+
+    commits = [h.strip() for h in commits_raw.split(",") if h.strip()]
+    if not commits:
+        print("Error: --commits must contain at least one hash.", file=sys.stderr)
+        sys.exit(1)
+
+    # Resolve each hash
+    resolved_commits = []
+    for h in commits:
+        full = resolve_hash(h)
+        if full is None:
+            print(f"Error: commit hash does not resolve: {h}", file=sys.stderr)
+            sys.exit(1)
+        resolved_commits.append(full)
+
+    no_user_facing = flags.get("no-user-facing", False)
+    user_facing = not no_user_facing
+    description = flags.get("description") or None
+    entry_type = flags.get("type") or None
+
+    if user_facing:
+        if not description:
+            print(
+                "Error: --description is required for user-facing entries. "
+                "Use --no-user-facing to skip.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not entry_type:
+            print(
+                "Error: --type is required for user-facing entries. "
+                "Use --no-user-facing to skip.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    entry = ChangelogEntry(
+        commits=resolved_commits,
+        user_facing=user_facing,
+        description=description,
+        type=entry_type,
+    )
+
+    errors = validate_schema(entry)
+    if errors:
+        for err in errors:
+            print(f"Error: schema validation: {err}", file=sys.stderr)
+        sys.exit(1)
+
+    changes_dir = get_changes_dir(".")
+    append_entry(changes_dir, entry)
+    print(f"Added entry with {len(resolved_commits)} commit(s)")
+
+
+def cmd_validate(flags):
+    """Run the changelog validation engine on unreleased entries."""
+    if not changes_dir_exists("."):
+        print("Error: .rlsbl/changes/ does not exist.", file=sys.stderr)
+        sys.exit(1)
+
+    changes_dir = get_changes_dir(".")
+    results = validate_unreleased(changes_dir)
+
+    overall = results.pop("passed")
+    for name, (passed, details) in results.items():
+        status = "PASS" if passed else "FAIL"
+        print(f"  {status}  {name}")
+        for detail in details:
+            print(f"         {detail}")
+
+    if overall:
+        print("\nAll checks passed.")
+    else:
+        print("\nValidation failed.", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_generate(flags):
+    """Generate CHANGELOG.md from JSONL changelog files."""
+    if not changes_dir_exists("."):
+        print("Error: .rlsbl/changes/ does not exist.", file=sys.stderr)
+        sys.exit(1)
+
+    dry_run = flags.get("dry-run", False)
+
+    if dry_run:
+        # Generate content without writing by temporarily redirecting
+        # We need to generate the content but not write CHANGELOG.md.
+        # generate_changelog() both generates and writes, so we replicate
+        # the generation logic without the write step.
+        from ..changelog.files import list_versioned_files, read_unreleased
+        from ..changelog.generate import (
+            _HEADER_COMMENT,
+            generate_version_section,
+        )
+
+        changes_dir = get_changes_dir(".")
+        sections = []
+
+        unreleased = read_unreleased(changes_dir)
+        if unreleased:
+            sections.append(generate_version_section("Unreleased", unreleased))
+
+        for version, jsonl_path in list_versioned_files(changes_dir):
+            from ..changelog.schema import parse_jsonl
+
+            entries = parse_jsonl(jsonl_path)
+            sections.append(generate_version_section(version, entries))
+
+        body = "\n".join(sections)
+        content = f"{_HEADER_COMMENT}\n\n# Changelog\n\n{body}"
+        print(content)
+        print("\n(dry-run: no files written)")
+    else:
+        content = generate_changelog(".")
+        print("Generated CHANGELOG.md")
