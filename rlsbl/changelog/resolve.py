@@ -1,0 +1,40 @@
+"""Git hash resolution for changelog entries."""
+
+from __future__ import annotations
+
+import subprocess
+
+
+def resolve_hash(hash_str: str) -> str | None:
+    """Resolve a (possibly abbreviated) commit hash to a full 40-char SHA.
+
+    Returns None if the hash doesn't resolve in the current repo.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{hash_str}^{{commit}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        full_sha = result.stdout.strip()
+        if len(full_sha) == 40:
+            return full_sha
+        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+
+
+def resolve_hashes(hashes: list[str]) -> dict[str, str | None]:
+    """Batch-resolve a list of commit hashes.
+
+    Returns a mapping from each input hash to its full 40-char SHA,
+    or None if it doesn't resolve.
+    """
+    results: dict[str, str | None] = {}
+    for h in hashes:
+        if h not in results:
+            results[h] = resolve_hash(h)
+    return results

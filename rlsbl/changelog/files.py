@@ -1,0 +1,107 @@
+"""File management layer for JSONL changelog files."""
+
+from __future__ import annotations
+
+import os
+import re
+import stat
+import tempfile
+
+from .schema import ChangelogEntry, parse_jsonl, serialize_entry
+
+_VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)\.jsonl$")
+
+
+def _parse_semver(filename: str) -> tuple[int, int, int] | None:
+    """Extract (major, minor, patch) from a versioned filename, or None."""
+    m = _VERSION_RE.match(filename)
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+
+def get_changes_dir(project_path: str) -> str:
+    """Return the path to .rlsbl/changes/ inside the project."""
+    return os.path.join(project_path, ".rlsbl", "changes")
+
+
+def changes_dir_exists(project_path: str) -> bool:
+    """Check if .rlsbl/changes/ exists in the project."""
+    return os.path.isdir(get_changes_dir(project_path))
+
+
+def list_versioned_files(changes_dir: str) -> list[tuple[str, str]]:
+    """List all x.y.z.jsonl files, sorted by semver (newest first).
+
+    Returns (version_string, filepath) pairs.
+    """
+    results: list[tuple[tuple[int, int, int], str, str]] = []
+    if not os.path.isdir(changes_dir):
+        return []
+    for name in os.listdir(changes_dir):
+        semver = _parse_semver(name)
+        if semver is not None:
+            version_str = f"{semver[0]}.{semver[1]}.{semver[2]}"
+            results.append((semver, version_str, os.path.join(changes_dir, name)))
+    # Sort by semver tuple descending (newest first)
+    results.sort(key=lambda x: x[0], reverse=True)
+    return [(ver, path) for _, ver, path in results]
+
+
+def read_unreleased(changes_dir: str) -> list[ChangelogEntry]:
+    """Read unreleased.jsonl and return entries. Empty list if file missing."""
+    path = os.path.join(changes_dir, "unreleased.jsonl")
+    if not os.path.isfile(path):
+        return []
+    return parse_jsonl(path)
+
+
+def append_entry(changes_dir: str, entry: ChangelogEntry) -> None:
+    """Append one entry to unreleased.jsonl atomically.
+
+    Writes the serialized line to a temp file, then appends it to the target.
+    Creates the changes directory and unreleased.jsonl if they don't exist.
+    """
+    os.makedirs(changes_dir, exist_ok=True)
+    target = os.path.join(changes_dir, "unreleased.jsonl")
+    line = serialize_entry(entry) + "\n"
+
+    # Write to a temp file in the same directory (same filesystem for rename)
+    fd, tmp_path = tempfile.mkstemp(dir=changes_dir, suffix=".tmp")
+    try:
+        os.write(fd, line.encode("utf-8"))
+        os.close(fd)
+        # Append the temp file content to the target
+        with open(target, "a", encoding="utf-8") as f:
+            with open(tmp_path, "r", encoding="utf-8") as tmp_f:
+                f.write(tmp_f.read())
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+def finalize_version(changes_dir: str, version: str) -> None:
+    """Rename unreleased.jsonl to x.y.z.jsonl and create a fresh unreleased.jsonl.
+
+    Sets the versioned file read-only (chmod 0o444).
+    Raises FileNotFoundError if unreleased.jsonl doesn't exist.
+    """
+    src = os.path.join(changes_dir, "unreleased.jsonl")
+    if not os.path.isfile(src):
+        raise FileNotFoundError(f"unreleased.jsonl not found in {changes_dir}")
+
+    dst = os.path.join(changes_dir, f"{version}.jsonl")
+    os.rename(src, dst)
+    os.chmod(dst, 0o444)
+
+    # Create a new empty unreleased.jsonl
+    with open(src, "w", encoding="utf-8") as f:
+        pass  # empty file
+
+
+def is_read_only(path: str) -> bool:
+    """Check if a file has no write permissions (for any user class)."""
+    if not os.path.exists(path):
+        return False
+    mode = os.stat(path).st_mode
+    return not (mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
