@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.0
+
+- **`rlsbl edit-release [version]`.** New command that updates GitHub Release notes from CHANGELOG.md. Auto-detects the current version if none is given. Supports `--dry-run` to preview without changes.
+
 ## 0.23.1
 
 - No user-facing changes.
