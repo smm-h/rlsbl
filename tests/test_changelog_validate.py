@@ -239,7 +239,7 @@ class TestValidateUnreleased:
         result = validate_unreleased(changes)
         assert result["passed"] is True
         for key in ("hashes_resolve", "in_range", "coverage", "no_orphans", "schema"):
-            passed, _ = result[key]
+            passed, _ = result["checks"][key]
             assert passed is True
 
     def test_fails_on_missing_coverage(self, git_repo):
@@ -248,7 +248,7 @@ class TestValidateUnreleased:
 
         result = validate_unreleased(changes)
         assert result["passed"] is False
-        passed, details = result["coverage"]
+        passed, details = result["checks"]["coverage"]
         assert passed is False
         assert len(details) == 1
 
@@ -314,3 +314,29 @@ class TestValidationCache:
         result = validate_unreleased(changes)
         assert result["passed"] is False
         assert _read_cache(changes) is None
+
+
+class TestValidateUnreleasedReturnStructure:
+    """Tests for the validate_unreleased return dict structure."""
+
+    def test_has_passed_and_checks_keys(self, git_repo):
+        changes = str(git_repo / ".rlsbl" / "changes")
+        result = validate_unreleased(changes)
+        assert "passed" in result
+        assert "checks" in result
+        assert isinstance(result["passed"], bool)
+        assert isinstance(result["checks"], dict)
+
+    def test_checks_values_are_tuples(self, git_repo):
+        changes = str(git_repo / ".rlsbl" / "changes")
+        _make_commit(git_repo)  # create an unreleased commit
+        append_entry(changes, ChangelogEntry(
+            commits=[_git_head(git_repo)], user_facing=False,
+        ))
+        result = validate_unreleased(changes)
+        for name, value in result["checks"].items():
+            assert isinstance(value, tuple), f"check {name} is not a tuple"
+            assert len(value) == 2, f"check {name} tuple length is not 2"
+            passed, details = value
+            assert isinstance(passed, bool), f"check {name} passed is not bool"
+            assert isinstance(details, list), f"check {name} details is not list"

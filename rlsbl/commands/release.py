@@ -345,9 +345,7 @@ def run_cmd(registry, args, flags):
         validation = validate_unreleased(changes_dir)
         if not validation["passed"]:
             print("Error: JSONL changelog validation failed:", file=sys.stderr)
-            for check_name, (passed, details) in validation.items():
-                if check_name == "passed":
-                    continue
+            for check_name, (passed, details) in validation["checks"].items():
                 if not passed:
                     for detail in details:
                         print(f"  {check_name}: {detail}", file=sys.stderr)

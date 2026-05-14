@@ -84,8 +84,8 @@ def cmd_validate(flags):
     changes_dir = get_changes_dir(".")
     results = validate_unreleased(changes_dir)
 
-    overall = results.pop("passed")
-    for name, (passed, details) in results.items():
+    overall = results["passed"]
+    for name, (passed, details) in results["checks"].items():
         status = "PASS" if passed else "FAIL"
         print(f"  {status}  {name}")
         for detail in details:

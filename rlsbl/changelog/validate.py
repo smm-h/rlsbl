@@ -249,19 +249,21 @@ def validate_unreleased(changes_dir: str) -> dict:
         if cached_sha == head:
             # Nothing changed since last validation
             return {
-                "hashes_resolve": (True, []),
-                "in_range": (True, []),
-                "coverage": (True, []),
-                "no_orphans": (True, []),
-                "schema": (True, []),
                 "passed": True,
+                "checks": {
+                    "hashes_resolve": (True, []),
+                    "in_range": (True, []),
+                    "coverage": (True, []),
+                    "no_orphans": (True, []),
+                    "schema": (True, []),
+                },
             }
         # Cache is valid but HEAD moved: only validate new entries
         # (entries added since the cached state). Since we can't easily
         # determine which entries are new without more metadata, run full
         # validation but update cache on success.
 
-    results = {
+    checks = {
         "hashes_resolve": check_hashes_resolve(entries),
         "in_range": check_in_range(entries),
         "coverage": check_coverage(entries),
@@ -269,10 +271,12 @@ def validate_unreleased(changes_dir: str) -> dict:
         "schema": check_schema(entries),
     }
 
-    overall = all(passed for passed, _ in results.values())
-    results["passed"] = overall
+    overall = all(passed for passed, _ in checks.values())
 
     if overall:
         _write_cache(changes_dir)
 
-    return results
+    return {
+        "passed": overall,
+        "checks": checks,
+    }

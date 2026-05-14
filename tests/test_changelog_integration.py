@@ -163,7 +163,7 @@ class TestReleaseJsonlValidationFails:
 
         result = validate_unreleased(changes_dir)
         # Coverage check should fail since no entries cover the commit
-        passed, details = result["coverage"]
+        passed, details = result["checks"]["coverage"]
         assert not passed
         assert len(details) > 0
 
