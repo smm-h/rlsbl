@@ -1,6 +1,7 @@
 """Lint configuration loading from .rlsbl/lint/ TOML files."""
 
 import os
+import sys
 import tomllib
 from dataclasses import dataclass, field
 
@@ -23,6 +24,9 @@ _DEFAULT_FORBIDDEN = {
         "commander", "yargs",
     ],
 }
+
+# Old-format ignore entries that map to stdout_ignore
+_STDOUT_IGNORE_ENTRIES = frozenset({"print", "sys", "logging"})
 
 
 @dataclass
@@ -87,3 +91,48 @@ def load_parser_setting(project_path: str) -> str:
         return parser
     except Exception:
         return "ast"
+
+
+def _load_old_lint_toml(project_path: str) -> list[str] | None:
+    """Read old-format .rlsbl/lint.toml and return the ignore list, or None.
+
+    The old format had a flat ``ignore`` key:
+        ignore = ["argparse", "print", "logging"]
+
+    Returns the list if the key is present, None otherwise.
+    """
+    lint_toml = os.path.join(project_path, ".rlsbl", "lint.toml")
+    if not os.path.isfile(lint_toml):
+        return None
+    try:
+        with open(lint_toml, "rb") as f:
+            data = tomllib.load(f)
+    except Exception:
+        return None
+    ignore = data.get("ignore")
+    if ignore is None:
+        return None
+    if not isinstance(ignore, list):
+        return None
+    return ignore
+
+
+def apply_old_ignore_shim(config: "LanguageLintConfig", ignore_entries: list[str]) -> None:
+    """Apply backward-compatible shim from old lint.toml ignore list.
+
+    Mutates *config* in place:
+    - Module names found in forbidden_imports are removed from that list.
+    - "print", "sys", "logging" entries are added to stdout_ignore.
+    - Anything else is added to entry_point_ignore.
+    """
+    forbidden_set = set(config.forbidden_imports)
+    for entry in ignore_entries:
+        if entry in _STDOUT_IGNORE_ENTRIES:
+            if entry not in config.stdout_ignore:
+                config.stdout_ignore.append(entry)
+        elif entry in forbidden_set:
+            config.forbidden_imports.remove(entry)
+        else:
+            # Assume it is an entry point name
+            if entry not in config.entry_point_ignore:
+                config.entry_point_ignore.append(entry)
