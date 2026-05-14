@@ -11,7 +11,7 @@ Key commands:
 - `rlsbl status` -- show version, branch, last tag, changelog coverage
 - `rlsbl watch <sha>` -- poll CI status for a commit
 - `rlsbl undo` -- revert the last release (delete tag, GH release, revert commit)
-- `rlsbl check <name> --registry <r>` -- check name availability on npm/PyPI
+- `rlsbl check <name> --target <r>` -- check name availability on npm/PyPI
 - `rlsbl config` -- show/migrate project configuration
 - `rlsbl discover` -- list rlsbl ecosystem projects via GitHub topics
 

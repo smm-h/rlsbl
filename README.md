@@ -31,7 +31,7 @@ rlsbl watch <sha>       # monitor CI for that release
 
 ## Commands
 
-All commands auto-detect registries from project files (`package.json`, `pyproject.toml`, `go.mod`). Use `--registry <npm|pypi|go>` to target a specific one.
+All commands auto-detect registries from project files (`package.json`, `pyproject.toml`, `go.mod`). Use `--target <npm|pypi|go>` to target a specific one.
 
 | Command | Description |
 |---------|-------------|
@@ -49,7 +49,7 @@ All commands auto-detect registries from project files (`package.json`, `pyproje
 | `record-gif` | Record a demo GIF with vhs |
 | `pre-push-check` | Verify CHANGELOG entry exists for the current version |
 
-Global flags: `--help`, `--version`, `--target <npm|pypi|go>`, `--registry <npm|pypi|go>` (deprecated alias for `--target`), `--no-tag`.
+Global flags: `--help`, `--version`, `--target <npm|pypi|go>`, `--no-tag`.
 
 ## Release flow
 
