@@ -49,6 +49,7 @@ class BaseTarget:
             {"template": "lint/python.toml.tpl", "target": ".rlsbl/lint/python.toml"},
             {"template": "lint/go.toml.tpl", "target": ".rlsbl/lint/go.toml"},
             {"template": "lint/npm.toml.tpl", "target": ".rlsbl/lint/npm.toml"},
+            {"template": "changes/unreleased.jsonl.tpl", "target": ".rlsbl/changes/unreleased.jsonl"},
         ]
 
     def check_project_exists(self, dir_path):
