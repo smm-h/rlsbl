@@ -116,10 +116,12 @@ app = strictcli.App(
 @strictcli.flag(name="yes", type=bool, help="Non-interactive mode (skip confirmations)")
 @strictcli.flag(name="quiet", type=bool, help="Suppress non-essential output")
 @strictcli.flag(name="skip-remote-check", type=bool, help="Skip the remote-ahead check")
+@strictcli.flag(name="skip-tests", type=bool, help="Skip built-in test execution")
+@strictcli.flag(name="skip-lint", type=bool, help="Skip built-in library lint")
 @strictcli.flag(name="allow-dirty", type=bool, help="Allow releasing with a dirty working tree")
 @strictcli.flag(name="no-tag", type=bool, help="Disable ecosystem tagging for this invocation")
 @strictcli.arg(name="bump", help="Bump type: patch, minor, or major", required=False)
-def cmd_release(target, dry_run, yes, quiet, skip_remote_check, allow_dirty, no_tag, bump=None):
+def cmd_release(target, dry_run, yes, quiet, skip_remote_check, skip_tests, skip_lint, allow_dirty, no_tag, bump=None):
     _require_project_root()
     registry = _resolve_target(target or None)
     args = [bump] if bump else []
@@ -128,6 +130,8 @@ def cmd_release(target, dry_run, yes, quiet, skip_remote_check, allow_dirty, no_
         "yes": yes,
         "quiet": quiet,
         "skip-remote-check": skip_remote_check,
+        "skip-tests": skip_tests,
+        "skip-lint": skip_lint,
         "allow-dirty": allow_dirty,
         "no-tag": no_tag,
     }
