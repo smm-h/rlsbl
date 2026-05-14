@@ -33,7 +33,18 @@ def _create_linter(language: str, parser_type: str):
             return PythonRegexLinter()
         from .python_ast import PythonAstLinter
         return PythonAstLinter()
-    # Go and npm linters will be added by a later implementor.
+    if language == "go":
+        if parser_type == "regex":
+            from .go_regex import GoRegexLinter
+            return GoRegexLinter()
+        from .go_ast import GoAstLinter
+        return GoAstLinter()
+    if language == "npm":
+        if parser_type == "regex":
+            from .npm_regex import NpmRegexLinter
+            return NpmRegexLinter()
+        from .npm_ast import NpmAstLinter
+        return NpmAstLinter()
     return None
 
 
