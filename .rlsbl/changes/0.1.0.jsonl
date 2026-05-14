@@ -1,3 +1,10 @@
 {"commits":["291b066e9d13e3bd2fa1c77bd501d971d03c07ab"],"user_facing":true,"description":"Initial release as `rlsbl` (renamed from share-it-on)","type":"feature"}
 {"commits":["f675037ec8e2f13f19b939fd2a3e3dd3a0d5ef6b"],"user_facing":true,"description":"Pure Python (stdlib only, Python 3.11+, tomllib for TOML parsing)","type":"feature"}
 {"commits":["13ec9c655407151e487e15eeee976dc27b9eb17c"],"user_facing":true,"description":"4 top-level commands: `release`, `status`, `scaffold`, `check-name`","type":"feature"}
+{"commits":[],"user_facing":true,"description":"Auto-detects registries from project files (package.json, pyproject.toml)","type":"feature"}
+{"commits":[],"user_facing":true,"description":"Release syncs version across all detected version files","type":"feature"}
+{"commits":[],"user_facing":true,"description":"Context-aware scaffold: appends CLAUDE.md, merges .gitignore, preserves custom CI","type":"feature"}
+{"commits":[],"user_facing":true,"description":"Hash-based `--update` mode detects customized files","type":"feature"}
+{"commits":[],"user_facing":true,"description":"Pre-release hook, pre-push changelog enforcement","type":"feature"}
+{"commits":[],"user_facing":true,"description":"Dual-publish CI: npm (token) + PyPI (OIDC Trusted Publishing)","type":"feature"}
+{"commits":[],"user_facing":true,"description":"Also installable via npm (thin Node wrapper)","type":"feature"}
