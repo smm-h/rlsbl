@@ -148,6 +148,27 @@ def find_commit_tool():
     return "git"
 
 
+def commit_files(message: str, files: list[str], allow_failure: bool = False) -> bool:
+    """Commit specific files using safegit (preferred) or git.
+
+    Returns True on success. When allow_failure is True, catches errors and
+    returns False with a warning to stderr. When False, exceptions propagate.
+    """
+    try:
+        tool = find_commit_tool()
+        if tool == "safegit":
+            run(tool, ["commit", "-m", message, "--", *files])
+        else:
+            run("git", ["add", *files])
+            run("git", ["commit", "-m", message])
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        if allow_failure:
+            print(f"Warning: commit failed: {e}", file=sys.stderr)
+            return False
+        raise
+
+
 def bump_version(version, bump_type):
     """Bump a semver version string by the given type (patch, minor, major).
 

@@ -1,0 +1,70 @@
+"""Tests for rlsbl.utils.commit_files."""
+
+import subprocess
+from unittest.mock import patch, call
+
+import pytest
+
+from rlsbl.utils import commit_files
+
+
+class TestCommitFilesSafegit:
+    """Tests for the safegit path."""
+
+    @patch("rlsbl.utils.run")
+    @patch("shutil.which", return_value="/usr/bin/safegit")
+    def test_calls_safegit_with_correct_args(self, mock_which, mock_run):
+        result = commit_files("test message", ["file1.py", "file2.py"])
+        assert result is True
+        mock_run.assert_called_once_with(
+            "safegit", ["commit", "-m", "test message", "--", "file1.py", "file2.py"]
+        )
+
+
+class TestCommitFilesGitFallback:
+    """Tests for the git fallback path."""
+
+    @patch("rlsbl.utils.run")
+    @patch("shutil.which", return_value=None)
+    def test_calls_git_add_then_commit(self, mock_which, mock_run):
+        result = commit_files("test message", ["a.txt", "b.txt"])
+        assert result is True
+        assert mock_run.call_count == 2
+        mock_run.assert_any_call("git", ["add", "a.txt", "b.txt"])
+        mock_run.assert_any_call("git", ["commit", "-m", "test message"])
+
+
+class TestCommitFilesAllowFailure:
+    """Tests for error handling with allow_failure."""
+
+    @patch("rlsbl.utils.run", side_effect=subprocess.CalledProcessError(1, "git"))
+    @patch("shutil.which", return_value=None)
+    def test_returns_false_on_error(self, mock_which, mock_run, capsys):
+        result = commit_files("msg", ["f.txt"], allow_failure=True)
+        assert result is False
+        captured = capsys.readouterr()
+        assert "Warning: commit failed" in captured.err
+
+    @patch("rlsbl.utils.run", side_effect=FileNotFoundError("git not found"))
+    @patch("shutil.which", return_value=None)
+    def test_returns_false_on_file_not_found(self, mock_which, mock_run, capsys):
+        result = commit_files("msg", ["f.txt"], allow_failure=True)
+        assert result is False
+        captured = capsys.readouterr()
+        assert "Warning: commit failed" in captured.err
+
+
+class TestCommitFilesExceptionPropagation:
+    """Tests for error propagation when allow_failure is False."""
+
+    @patch("rlsbl.utils.run", side_effect=subprocess.CalledProcessError(1, "git"))
+    @patch("shutil.which", return_value=None)
+    def test_raises_on_error(self, mock_which, mock_run):
+        with pytest.raises(subprocess.CalledProcessError):
+            commit_files("msg", ["f.txt"], allow_failure=False)
+
+    @patch("rlsbl.utils.run", side_effect=FileNotFoundError("git not found"))
+    @patch("shutil.which", return_value=None)
+    def test_raises_file_not_found(self, mock_which, mock_run):
+        with pytest.raises(FileNotFoundError):
+            commit_files("msg", ["f.txt"], allow_failure=False)
