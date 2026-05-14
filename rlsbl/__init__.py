@@ -416,13 +416,15 @@ chlog = app.group("changelog", help="Structured changelog management")
 @strictcli.flag(name="description", type=str, help="Entry description", default="")
 @strictcli.flag(name="type", type=str, help="Entry type (feature, fix, breaking)", default="")
 @strictcli.flag(name="no-user-facing", type=bool, help="Mark as non-user-facing")
-def cmd_chlog_add(commits, description, type, no_user_facing):
+@strictcli.flag(name="no-commit", type=bool, help="Skip auto-commit of unreleased.jsonl")
+def cmd_chlog_add(commits, description, type, no_user_facing, no_commit):
     _require_project_root()
     flags = {
         "commits": commits,
         "description": description,
         "type": type,
         "no-user-facing": no_user_facing,
+        "no-commit": no_commit,
     }
     from .commands.changelog_cmd import cmd_add
     cmd_add(flags)

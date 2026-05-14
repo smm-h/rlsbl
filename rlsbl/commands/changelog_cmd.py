@@ -8,6 +8,7 @@ from ..changelog.generate import generate_changelog
 from ..changelog.resolve import resolve_hash
 from ..changelog.schema import ChangelogEntry, validate_schema
 from ..changelog.validate import validate_unreleased
+from ..utils import commit_files
 
 
 def cmd_add(flags):
@@ -73,6 +74,14 @@ def cmd_add(flags):
     changes_dir = get_changes_dir(".")
     append_entry(changes_dir, entry)
     print(f"Added entry with {len(resolved_commits)} commit(s)")
+
+    if not flags.get("no-commit"):
+        unreleased_path = os.path.join(changes_dir, "unreleased.jsonl")
+        if user_facing:
+            commit_msg = f"changelog: {description}"[:72]
+        else:
+            commit_msg = "changelog: non-user-facing entry"
+        commit_files(commit_msg, [unreleased_path], allow_failure=True)
 
 
 def cmd_validate(flags):

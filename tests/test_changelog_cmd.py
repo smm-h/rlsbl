@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import time
+from unittest import mock
 
 import pytest
 
@@ -167,6 +168,52 @@ class TestCmdAdd:
         entries = read_unreleased(get_changes_dir("."))
         assert len(entries) == 1
         assert len(entries[0].commits) == 2
+
+    def test_add_auto_commits(self, rlsbl_repo):
+        """After adding an entry, commit_files is called with correct args."""
+        sha = _make_commit(rlsbl_repo)
+        flags = {
+            "commits": sha[:12],
+            "description": "New feature",
+            "type": "feature",
+            "no-user-facing": False,
+        }
+        with mock.patch("rlsbl.commands.changelog_cmd.commit_files") as mock_commit:
+            cmd_add(flags)
+            mock_commit.assert_called_once()
+            call_args = mock_commit.call_args
+            assert call_args[0][0] == "changelog: New feature"
+            unreleased_path = os.path.join(get_changes_dir("."), "unreleased.jsonl")
+            assert call_args[0][1] == [unreleased_path]
+            assert call_args[1]["allow_failure"] is True
+
+    def test_add_no_commit_flag(self, rlsbl_repo):
+        """With --no-commit, commit_files is NOT called."""
+        sha = _make_commit(rlsbl_repo)
+        flags = {
+            "commits": sha[:12],
+            "description": "New feature",
+            "type": "feature",
+            "no-user-facing": False,
+            "no-commit": True,
+        }
+        with mock.patch("rlsbl.commands.changelog_cmd.commit_files") as mock_commit:
+            cmd_add(flags)
+            mock_commit.assert_not_called()
+
+    def test_add_non_user_facing_commit_message(self, rlsbl_repo):
+        """Non-user-facing entries use a generic commit message."""
+        sha = _make_commit(rlsbl_repo)
+        flags = {
+            "commits": sha,
+            "description": "",
+            "type": "",
+            "no-user-facing": True,
+        }
+        with mock.patch("rlsbl.commands.changelog_cmd.commit_files") as mock_commit:
+            cmd_add(flags)
+            mock_commit.assert_called_once()
+            assert mock_commit.call_args[0][0] == "changelog: non-user-facing entry"
 
 
 # ---------------------------------------------------------------------------
