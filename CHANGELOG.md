@@ -6,7 +6,7 @@
 
 ### Features
 
-- **Structured JSONL changelog.** Changelog entries are now backed by structured JSONL files in `.rlsbl/changes/`. Each entry maps a description to commit hashes with `user_facing` and `type` fields. `rlsbl changelog add/validate/generate` commands manage entries. `rlsbl release` auto-validates coverage and generates CHANGELOG.md. Pre-push blocks on missing coverage. `rlsbl unreleased` uses exact hash matching. `rlsbl status` shows coverage info. Scaffold creates the directory for new projects.
+- **Structured JSONL changelog.** Changelog entries are now backed by structured JSONL files in `.rlsbl/changes/`. Each entry maps a description to commit hashes with `user_facing` and `type` fields. `rlsbl changelog add/validate/generate` commands manage entries. `rlsbl release` auto-validates coverage and generates CHANGELOG.md. Pre-push blocks on missing coverage. `rlsbl unreleased` uses exact hash matching. `rlsbl status` shows coverage info. Scaffold creates the directory for new projects. `changelog add` auto-commits entries (with `--no-commit` opt-out). Coverage validation skips changelog-only commits. Internal commit logic centralized via `commit_files` helper.
 - **Changelog backfill script.** `scripts/backfill_changelog.py` migrates an existing CHANGELOG.md into JSONL files by parsing entries, mapping them to commits via keyword matching, and writing per-version JSONL files.
 
 ### Fixes
