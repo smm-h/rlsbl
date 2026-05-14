@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 
+from ..changelog import changes_dir_exists, get_changes_dir, read_unreleased, resolve_hashes
 from ..targets import TARGETS
 from ..workspace import find_workspace_root, load_workspace
 
@@ -39,6 +40,77 @@ def _check_changelog(dir_path, version):
         return None
 
     return f"CHANGELOG.md has no entry for version {version}"
+
+
+def _check_jsonl_changelog(dir_path, refs):
+    """Check JSONL changelog coverage for commits being pushed.
+
+    Verifies that every commit in the push range exists in at least one
+    unreleased.jsonl entry's commits list.
+
+    Returns None on success, or an error message string on failure.
+    """
+    changes_dir = get_changes_dir(dir_path)
+    entries = read_unreleased(changes_dir)
+    if not entries:
+        return "unreleased.jsonl has no entries"
+
+    # Collect all hashes from entries and resolve them
+    all_hashes = []
+    for entry in entries:
+        all_hashes.extend(entry.commits)
+    resolved = resolve_hashes(all_hashes)
+    covered_shas = {full for full in resolved.values() if full is not None}
+
+    # Get pushed commits from the refs
+    pushed_commits = _get_pushed_commits(refs)
+    if pushed_commits is None:
+        return None  # Could not determine pushed commits -- skip
+
+    missing = []
+    for sha in pushed_commits:
+        if sha not in covered_shas:
+            missing.append(sha[:12])
+
+    if missing:
+        return f"JSONL changelog missing coverage for {len(missing)} commit(s): {', '.join(missing[:5])}"
+
+    return None
+
+
+def _get_pushed_commits(refs):
+    """Get the set of commit SHAs being pushed.
+
+    Returns a set of full 40-char SHAs, or None on error.
+    """
+    zero_sha = "0" * 40
+    commits = set()
+
+    for local_sha, remote_sha in refs:
+        if local_sha == zero_sha:
+            continue  # Branch deletion
+
+        try:
+            if remote_sha == zero_sha:
+                # New branch: commits not on any remote
+                result = subprocess.run(
+                    ["git", "log", "--format=%H", local_sha, "--not", "--remotes"],
+                    capture_output=True, text=True, timeout=30,
+                )
+            else:
+                result = subprocess.run(
+                    ["git", "log", "--format=%H", f"{remote_sha}..{local_sha}"],
+                    capture_output=True, text=True, timeout=30,
+                )
+            if result.returncode == 0:
+                for line in result.stdout.strip().splitlines():
+                    line = line.strip()
+                    if line:
+                        commits.add(line)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return None
+
+    return commits
 
 
 def _parse_stdin_refs():
@@ -140,7 +212,7 @@ def _affected_projects(changed_files, projects):
     return affected
 
 
-def _run_monorepo_check(workspace_root, projects, changed_files):
+def _run_monorepo_check(workspace_root, projects, changed_files, refs=None):
     """Check changelogs for all affected monorepo projects.
 
     Returns exit code 0 on success, 1 if any project fails.
@@ -152,21 +224,37 @@ def _run_monorepo_check(workspace_root, projects, changed_files):
     failures = []
     for proj in affected:
         proj_dir = os.path.join(workspace_root, proj["path"])
-        version, _ = _detect_version(proj_dir)
-        if not version:
-            continue  # cannot detect version -- skip
 
-        error = _check_changelog(proj_dir, version)
+        if changes_dir_exists(proj_dir) and refs is not None:
+            # JSONL mode: check commit coverage
+            error = _check_jsonl_changelog(proj_dir, refs)
+        else:
+            # Manual mode: check heading
+            version, _ = _detect_version(proj_dir)
+            if not version:
+                continue  # cannot detect version -- skip
+            error = _check_changelog(proj_dir, version)
+
         if error:
-            failures.append((proj["name"], version, error))
+            version, _ = _detect_version(proj_dir)
+            failures.append((proj["name"], version or "?", error))
 
     if not failures:
         sys.exit(0)
 
     for name, version, error in failures:
         print(f"Error: {name}: {error}.", file=sys.stderr)
-        print(f"Add a '## {version}' section to {name}'s CHANGELOG.md before pushing.",
-              file=sys.stderr)
+        proj_dir = None
+        for proj in projects:
+            if proj["name"] == name:
+                proj_dir = os.path.join(workspace_root, proj["path"])
+                break
+        if proj_dir and changes_dir_exists(proj_dir):
+            print(f"Add JSONL changelog entries covering all pushed commits for {name}.",
+                  file=sys.stderr)
+        else:
+            print(f"Add a '## {version}' section to {name}'s CHANGELOG.md before pushing.",
+                  file=sys.stderr)
     sys.exit(1)
 
 
@@ -189,10 +277,24 @@ def run_cmd(registry, args, flags):
             changed_files = _get_changed_files(refs)
             if changed_files is not None:
                 projects = load_workspace(workspace_root)
-                _run_monorepo_check(workspace_root, projects, changed_files)
+                _run_monorepo_check(workspace_root, projects, changed_files, refs=refs)
                 # _run_monorepo_check always calls sys.exit, so this is unreachable
 
     # Single-project fallback
+    if changes_dir_exists("."):
+        # JSONL mode: check commit coverage
+        refs = _parse_stdin_refs()
+        if refs is not None:
+            error = _check_jsonl_changelog(".", refs)
+            if error is None:
+                sys.exit(0)
+            print(f"Error: {error}.", file=sys.stderr)
+            print("Add JSONL changelog entries covering all pushed commits.", file=sys.stderr)
+            sys.exit(1)
+        # No refs available (not called from pre-push hook) -- skip
+        sys.exit(0)
+
+    # Manual changelog mode
     version, _project_type = _detect_version()
     if not version:
         sys.exit(0)
