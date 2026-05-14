@@ -948,7 +948,7 @@ class TestStatusJson(unittest.TestCase):
         output = mock_out.getvalue()
         data = json.loads(output)
         expected_keys = {"name", "version", "target", "branch", "tag",
-                         "clean", "changelog", "ci", "publish"}
+                         "clean", "changelog", "jsonl_coverage", "ci", "publish"}
         self.assertEqual(set(data.keys()), expected_keys)
         self.assertEqual(data["name"], "test-pkg")
         self.assertEqual(data["version"], "0.1.0")
