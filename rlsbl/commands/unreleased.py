@@ -6,6 +6,8 @@ import re
 import subprocess
 import sys
 
+from ..changelog import changes_dir_exists, get_changes_dir, read_unreleased, resolve_hashes
+
 
 def _get_last_tag():
     """Get the most recent tag. Returns None if no tags exist."""
@@ -148,13 +150,24 @@ def run_cmd(registry, args, flags):
             print("No unreleased commits.")
         sys.exit(0)
 
-    # Read changelog for coverage checking
-    changelog_path = "CHANGELOG.md"
-    changelog_text = _get_unreleased_changelog_text(changelog_path)
-
-    # Cross-reference each commit
-    for commit in commits:
-        commit["covered"] = _is_covered(commit["subject"], changelog_text)
+    # Cross-reference each commit against changelog
+    if changes_dir_exists("."):
+        # JSONL mode: exact hash-based matching
+        changes_dir = get_changes_dir(".")
+        entries = read_unreleased(changes_dir)
+        all_hashes = []
+        for entry in entries:
+            all_hashes.extend(entry.commits)
+        resolved = resolve_hashes(all_hashes)
+        covered_shas = {full for full in resolved.values() if full is not None}
+        for commit in commits:
+            commit["covered"] = commit["hash"] in covered_shas
+    else:
+        # Manual mode: keyword-based matching
+        changelog_path = "CHANGELOG.md"
+        changelog_text = _get_unreleased_changelog_text(changelog_path)
+        for commit in commits:
+            commit["covered"] = _is_covered(commit["subject"], changelog_text)
 
     covered_count = sum(1 for c in commits if c["covered"])
     total = len(commits)
