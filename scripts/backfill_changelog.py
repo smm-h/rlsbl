@@ -365,10 +365,15 @@ def main() -> None:
         "--version",
         help="Process a single version only (e.g., 0.24.0)",
     )
+    parser.add_argument(
+        "--project-root",
+        default=None,
+        help="Project root directory (defaults to current working directory)",
+    )
     args = parser.parse_args()
 
-    # Find project root
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Find project root: --project-root flag, then CWD
+    project_root = args.project_root if args.project_root else os.getcwd()
     changelog_path = os.path.join(project_root, "CHANGELOG.md")
 
     if not os.path.isfile(changelog_path):
