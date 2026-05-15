@@ -373,7 +373,7 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
     hook_target = os.path.join(".git", "hooks", "pre-push")
     if os.path.isdir(".git"):
         if not os.path.exists(hook_target):
-            hook_content = "#!/usr/bin/env bash\nexec rlsbl pre-push-check \"$@\"\n"
+            hook_content = "#!/usr/bin/env bash\nexec rlsbl pre-push-check\n"
             os.makedirs(os.path.join(".git", "hooks"), exist_ok=True)
             with open(hook_target, "w", encoding="utf-8") as f:
                 f.write(hook_content)

@@ -264,3 +264,26 @@ def test_scaffold_no_commit_flag_skips_commit(mock_git_repo, capsys):
         capture_output=True, text=True, cwd=str(mock_git_repo),
     )
     assert result.stdout.strip() != "", "Tree should be dirty with --no-commit"
+
+
+def test_pre_push_hook_does_not_pass_args(mock_git_repo, capsys):
+    """The installed pre-push hook must not pass $@ to avoid strictcli arg rejection."""
+    # Run _finalize_scaffold to install the hook
+    _finalize_scaffold(
+        existing_hashes={},
+        all_hash_dicts=[{}],
+        created=[],
+        skipped=[],
+        warnings=[],
+        registry=None,
+        flags={"no-commit": True, "no-tag": True},
+        registries=[],
+    )
+
+    hook_path = mock_git_repo / ".git" / "hooks" / "pre-push"
+    assert hook_path.exists(), "pre-push hook should be installed"
+
+    content = hook_path.read_text()
+    assert '"$@"' not in content, "Hook must not pass $@ (strictcli rejects extra args)"
+    assert "'$@'" not in content, "Hook must not pass $@ (strictcli rejects extra args)"
+    assert "pre-push-check" in content, "Hook should delegate to pre-push-check"
