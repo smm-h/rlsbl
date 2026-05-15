@@ -149,7 +149,7 @@ class TestReleaseJsonlValidationFails:
         bare_remote = tmp_path / "remote.git"
         subprocess.run(["git", "clone", "--bare", str(repo), str(bare_remote)], check=True)
         subprocess.run(["git", "remote", "add", "origin", str(bare_remote)], cwd=str(repo), check=True)
-        subprocess.run(["git", "push", "origin", "main"], cwd=str(repo), check=True)
+        subprocess.run(["git", "push", "origin", "HEAD"], cwd=str(repo), check=True)
 
         # Now make a new commit that's ahead of origin/main
         _make_commit(repo, "feat.txt", "feat: something")
