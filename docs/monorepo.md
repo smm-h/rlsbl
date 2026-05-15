@@ -28,7 +28,7 @@ rlsbl release patch
 
 ## workspace.toml format
 
-The workspace file lives at `.rlsbl-monorepo/workspace.toml`. Each project is a TOML table in the `[[projects]]` array:
+The workspace file lives at `.rlsbl-monorepo/workspace.toml` and declares every sub-project in the repository. Each project is a TOML table in the `[[projects]]` array with a required `path` field and an optional `name` field that defaults to the directory basename. rlsbl validates this structure on load and raises clear errors for missing or malformed entries.
 
 ```toml
 [[projects]]
@@ -49,12 +49,14 @@ Fields per project:
 
 ## Workspace module
 
+The workspace module handles discovery, loading, saving, and resolution of monorepo workspaces. It walks the directory tree upward to locate the nearest `workspace.toml`, parses the TOML structure into validated project entries, and writes changes back atomically using tomlkit to preserve formatting and comments.
+
 :-: ref path="rlsbl.workspace"
 
 ## Watch paths
 
-Each project in a monorepo tracks changes independently. When releasing from within a project directory, rlsbl auto-detects which project you are in using the workspace configuration.
+Each project in a monorepo tracks changes independently based on its declared path in the workspace configuration. When you run a release command from within a project directory, rlsbl walks up the directory tree to find the workspace root, then matches your current directory against the registered project paths to determine which project you are releasing.
 
 ## Subtree publishing
 
-Monorepo projects can be published to separate repositories using git subtree. The `rlsbl monorepo sync` command handles pushing subtrees to their configured remotes.
+Monorepo projects can be published to separate repositories using git subtree, which allows each sub-project to maintain its own standalone repository for consumers who do not want the full monorepo. The `rlsbl monorepo sync` command handles pushing subtrees to their configured remotes, keeping the split repositories in sync with the monorepo source of truth after each release.

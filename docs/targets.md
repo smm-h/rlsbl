@@ -23,10 +23,12 @@ rlsbl supports 12 release targets, each handling version management and scaffold
 
 ## ReleaseTarget protocol
 
-All targets implement the `ReleaseTarget` protocol, which defines the interface for version management, scaffolding, and optional build/publish steps.
+All targets implement the `ReleaseTarget` protocol, a runtime-checkable Python Protocol that defines the required interface for detection, version reading and writing, tag formatting, and scaffolding template resolution. Targets may also provide optional build and publish steps for ecosystems that support automated publishing, such as npm and PyPI.
 
 :-: ref path="rlsbl.targets.protocol"
 
 ## Target implementations
+
+Every concrete target extends `BaseTarget`, which provides sensible defaults for optional protocol methods including tag formatting (`v{version}`), monorepo tag formatting (`{name}@v{version}`), shared template mappings for changelogs, licenses, hooks, and lint configs, and no-op stubs for build and publish. Individual targets override only the methods specific to their ecosystem.
 
 :-: ref path="rlsbl.targets.base"
