@@ -110,23 +110,18 @@ class TestValidateSchema:
         )
         assert validate_schema(entry) == []
 
-    def test_invalid_type_rejected(self):
-        """User-facing entry with unrecognized type fails validation."""
+    def test_freeform_type_accepted(self):
+        """User-facing entry with any non-empty type string passes validation."""
         entry = ChangelogEntry(
             commits=["abc123"],
             user_facing=True,
             description="Faster startup",
             type="performance",
         )
-        errors = validate_schema(entry)
-        assert len(errors) == 1
-        assert "unrecognized type 'performance'" in errors[0]
-        assert "feature" in errors[0]
-        assert "fix" in errors[0]
-        assert "breaking" in errors[0]
+        assert validate_schema(entry) == []
 
     def test_user_facing_none_type_still_fails(self):
-        """User-facing entry with type=None fails with 'missing type', not 'unrecognized'."""
+        """User-facing entry with type=None fails with 'missing type'."""
         entry = ChangelogEntry(
             commits=["abc123"],
             user_facing=True,
@@ -135,7 +130,6 @@ class TestValidateSchema:
         )
         errors = validate_schema(entry)
         assert any("missing type" in e for e in errors)
-        assert not any("unrecognized" in e for e in errors)
 
 
 class TestParseEntry:

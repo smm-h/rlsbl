@@ -5,9 +5,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-# Canonical set of allowed types for user-facing changelog entries.
-VALID_TYPES: frozenset[str] = frozenset({"feature", "fix", "breaking"})
-
 
 @dataclass
 class ChangelogEntry:
@@ -29,11 +26,6 @@ def validate_schema(entry: ChangelogEntry) -> list[str]:
             errors.append("user_facing entry missing description")
         if not entry.type:
             errors.append("user_facing entry missing type")
-        elif entry.type not in VALID_TYPES:
-            sorted_types = ", ".join(sorted(VALID_TYPES))
-            errors.append(
-                f"unrecognized type '{entry.type}' (valid: {sorted_types})"
-            )
     return errors
 
 
