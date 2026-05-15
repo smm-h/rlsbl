@@ -213,6 +213,81 @@ class TestPostReleaseHookOutput:
         assert "exited with code 3" in captured.err
 
 
+class TestWatchSHABeforePostHook:
+    """Test that the watch SHA is captured before post-release hooks run."""
+
+    @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
+    @patch("rlsbl.commands.release.should_tag", return_value=False)
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_watch_sha_is_pre_hook_commit(
+        self,
+        _gh_inst,
+        _gh_auth,
+        _clean,
+        _branch,
+        _commit_files,
+        _push,
+        _should_tag,
+        _deploy,
+        tmp_project,
+        capsys,
+    ):
+        """Watch SHA should be the pushed commit, not HEAD after post-release hook."""
+        _setup_project(tmp_project, "post-release.sh", "#!/bin/bash\necho ok\n")
+
+        pre_hook_sha = "aaa111"
+        post_hook_sha = "bbb222"
+        rev_parse_call_count = 0
+
+        def fake_run(cmd, args=None, timeout=120, env=None):
+            nonlocal rev_parse_call_count
+            full = [cmd] + (args or [])
+            joined = " ".join(full)
+            if "rev-list" in joined:
+                return "0"
+            if "tag" in joined and "-l" in joined:
+                if "v1.0.0" in joined:
+                    return "v1.0.0"
+                return ""
+            if "rev-parse" in joined:
+                # First call (after push, before post-release hook): return pre-hook SHA
+                # Any subsequent call would return post-hook SHA
+                rev_parse_call_count += 1
+                if rev_parse_call_count == 1:
+                    return pre_hook_sha
+                return post_hook_sha
+            if "status --porcelain" in joined:
+                return ""
+            if "diff --name-only" in joined:
+                return ""
+            return ""
+
+        def fake_subprocess_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+        with (
+            patch("rlsbl.commands.release.run", side_effect=fake_run),
+            patch("rlsbl.commands.release.subprocess") as mock_sp,
+        ):
+            mock_sp.run.side_effect = fake_subprocess_run
+            mock_sp.CalledProcessError = subprocess.CalledProcessError
+            mock_sp.TimeoutExpired = subprocess.TimeoutExpired
+
+            from rlsbl.commands.release import run_cmd
+
+            run_cmd("npm", ["patch"], {"yes": True})
+
+        captured = capsys.readouterr()
+        # The watch message must use the SHA captured before the post-release hook
+        assert f"rlsbl watch {pre_hook_sha}" in captured.out
+        assert post_hook_sha not in captured.out
+
+
 class TestHookTimeout:
     """Tests for RLSBL_HOOK_TIMEOUT integration with hooks."""
 

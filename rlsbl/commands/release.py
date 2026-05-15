@@ -694,6 +694,10 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     run("git", ["push", "origin", tag], timeout=push_timeout)
     log(f"Pushed to origin/{branch}")
 
+    # Capture the pushed commit SHA now, before any post-release hooks that
+    # might create new commits and move HEAD past the release commit.
+    pushed_sha = run("git", ["rev-parse", "HEAD"])
+
     # Create GitHub Release using a temp notes file
     # Notes file cleanup is deferred until after subtree publishing (which reuses it)
     notes_file = f".rlsbl-notes-{int(time.time() * 1000)}.tmp"
@@ -809,11 +813,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         except subprocess.TimeoutExpired:
             print(f"Warning: post-release hook timed out after {hook_timeout}s.", file=sys.stderr)
 
-    # Hint: how to watch CI for this release
-    try:
-        commit_sha = run("git", ["rev-parse", "HEAD"])
-        log(f"Watch CI: rlsbl watch {commit_sha}")
-    except Exception:
-        pass
+    # Hint: how to watch CI for this release (uses SHA captured before post-release hooks)
+    log(f"Watch CI: rlsbl watch {pushed_sha}")
 
     log(f"\nRelease {new_version} complete!")
