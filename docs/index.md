@@ -1,3 +1,7 @@
+---
+description: "rlsbl is a release orchestration CLI for npm, PyPI, Go, Cargo, Deno, and more — handling versions, changelogs, tags, and CI scaffolding."
+---
+
 # rlsbl
 
 Release orchestration and project scaffolding CLI for npm, PyPI, Go, Cargo, Hex, Deno, Maven, Swift, Docker, and more.

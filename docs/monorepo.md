@@ -1,3 +1,7 @@
+---
+description: "Guide to rlsbl monorepo workspaces — initializing workspaces, adding projects, workspace.toml format, and subtree publishing."
+---
+
 # Monorepo guide
 
 rlsbl supports monorepo workflows via the `rlsbl monorepo` command family. A monorepo workspace is defined by a `.rlsbl-monorepo/workspace.toml` file at the repository root.

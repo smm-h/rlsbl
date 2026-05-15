@@ -1,3 +1,7 @@
+---
+description: "All 12 rlsbl release targets — npm, PyPI, Go, Cargo, Deno, Hex, Maven, Swift, Docker, docs, and more — with detection files and the ReleaseTarget protocol."
+---
+
 # Release targets
 
 rlsbl supports 12 release targets, each handling version management and scaffolding for a specific ecosystem.
