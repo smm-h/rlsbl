@@ -29,19 +29,19 @@ class TestMonorepoNoArgs:
 class TestSubcommandHelp:
     def test_status_help(self):
         result = app.test(["monorepo", "status", "--help"])
-        assert "Show status of all projects" in result.stdout
+        assert "Show the current version, last release tag, and number of unreleased commits" in result.stdout
         assert "rlsbl monorepo status" in result.stdout
 
     def test_add_help(self):
         result = app.test(["monorepo", "add", "--help"])
-        assert "Add a project to the workspace" in result.stdout
+        assert "Register a project directory in the monorepo workspace.toml configuration" in result.stdout
         assert "--name" in result.stdout
         assert "--watch" in result.stdout
         assert "--subtree-remote" in result.stdout
 
     def test_init_help(self):
         result = app.test(["monorepo", "init", "--help"])
-        assert "Initialize a monorepo workspace" in result.stdout
+        assert "Create a new monorepo workspace by generating the .rlsbl-monorepo directory" in result.stdout
         assert "rlsbl monorepo init" in result.stdout
 
 
