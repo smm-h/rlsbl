@@ -2,6 +2,12 @@
 
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Fix: Watch CI hint points to the correct commit.** The release command now captures the pushed SHA before running post-release hooks, so `rlsbl watch` targets the release commit instead of a post-hook auto-commit.
+
 ## 0.26.0
 
 ### Features
