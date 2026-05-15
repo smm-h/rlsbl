@@ -120,7 +120,7 @@
     "description": "2a1edfdad61674938e9d5609e364c437f0680967ba3bffccde770637561f7db8"
   },
   "rlsbl-commands-changelog_cmd.md": {
-    "content": "cfc567533d9b2c40833adf9dbb56ea68584135cdc187eacea36b4b84b8f103d1",
+    "content": "4a86812d89f87a41698ed57cac010e411f3852091cb68827b841c452c22cf393",
     "description": "edd1daa3d529cadfc198a8591bf9e7e22eecbfef5e75c18a3bf9381593f47abe"
   },
   "rlsbl-commands-check.md": {
@@ -152,7 +152,7 @@
     "description": "36a8a7ab4fbb66028d91fee058eba7458c15d4ffa4c4da5600181e469864aba0"
   },
   "rlsbl-commands-monorepo.md": {
-    "content": "722bd99ea0110c9bd25203846243b75c34c62578986d9c6ff80c013f6833d933",
+    "content": "11e7e8aa11de9b2c45bdcd37c659547bfb281a8cfb70d09b784ff4c69560fb27",
     "description": "e36b18f176377559016e518511dcf012c26c565b678b9f4278b69b6b06c28bfd"
   },
   "rlsbl-commands-pre_push_check.md": {
@@ -352,7 +352,7 @@
     "description": "cbc6efd4505a9d5f40720a9c4b6607789053bc8eb9137163a99e5e3ca41e240e"
   },
   "rlsbl.md": {
-    "content": "89d91b5ec2664683b69388fbceecdbc3c01d83065d15bcb7dd48dab51b5f7140",
+    "content": "cc203ef7d6fbb238632106d75a3035dbf0ce9a2ba10c3bc1570826f6d146a595",
     "description": "c862beba815ff2f00df9cdb6a6e9e23af048886ef9258b0ed0a4f78875d18552"
   },
   "targets.md": {
