@@ -122,17 +122,59 @@ class TestMainRootDiscovery:
         assert os.getcwd() == original_cwd
 
     def test_scaffold_finds_root_for_update(self, tmp_path, monkeypatch):
-        """Scaffold with .rlsbl/ in parent chdirs there (existing project update)."""
+        """Scaffold with .rlsbl/ in parent chdirs there from a plain subdirectory."""
         (tmp_path / ".rlsbl").mkdir()
         (tmp_path / "package.json").write_text('{"name": "test", "version": "1.0.0"}')
         subdir = tmp_path / "src"
         subdir.mkdir()
         monkeypatch.chdir(subdir)
 
+        # First call: cwd check (src/ has no project files -> []).
+        # Second call: after chdir to root (has package.json -> ["npm"]).
         with patch("rlsbl.commands.init_cmd.run_cmd") as mock_run:
-            with patch("rlsbl.detect_registries", return_value=["npm"]):
+            with patch("rlsbl.detect_registries", side_effect=[[], ["npm"]]):
                 with patch("rlsbl.config.read_project_config", return_value={}):
                     from rlsbl import app
                     app.test(["scaffold"])
 
         assert os.getcwd() == str(tmp_path)
+
+    def test_scaffold_stays_in_subproject_with_project_files(self, tmp_path, monkeypatch):
+        """Scaffold from a monorepo sub-project (with go.mod) stays in the sub-project."""
+        # Monorepo root has .rlsbl-monorepo/
+        (tmp_path / ".rlsbl-monorepo").mkdir()
+        # Sub-project has go.mod (a project marker)
+        subproject = tmp_path / "go"
+        subproject.mkdir()
+        (subproject / "go.mod").write_text("module example.com/test\n\ngo 1.21\n")
+        (subproject / "VERSION").write_text("0.1.0\n")
+        monkeypatch.chdir(subproject)
+        original_cwd = os.getcwd()
+
+        with patch("rlsbl.commands.init_cmd.run_cmd") as mock_run:
+            with patch("rlsbl.config.read_project_config", return_value={}):
+                from rlsbl import app
+                app.test(["scaffold"])
+
+        # Should NOT have walked up to monorepo root
+        assert os.getcwd() == original_cwd
+
+    def test_scaffold_update_stays_in_subproject_with_rlsbl(self, tmp_path, monkeypatch):
+        """Scaffold --update from a sub-project with .rlsbl/ stays in the sub-project."""
+        # Monorepo root has .rlsbl-monorepo/
+        (tmp_path / ".rlsbl-monorepo").mkdir()
+        # Sub-project has .rlsbl/ and package.json
+        subproject = tmp_path / "web"
+        subproject.mkdir()
+        (subproject / ".rlsbl").mkdir()
+        (subproject / "package.json").write_text('{"name": "test", "version": "1.0.0"}')
+        monkeypatch.chdir(subproject)
+        original_cwd = os.getcwd()
+
+        with patch("rlsbl.commands.init_cmd.run_cmd") as mock_run:
+            with patch("rlsbl.config.read_project_config", return_value={}):
+                from rlsbl import app
+                app.test(["scaffold", "--update"])
+
+        # Should stay in sub-project, not walk to monorepo root
+        assert os.getcwd() == original_cwd

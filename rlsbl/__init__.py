@@ -169,10 +169,16 @@ def cmd_status(target, json):
 def cmd_scaffold(target, force, update, private, no_commit, skip_shared, no_tag):
     # Scaffold is special: if a project root exists, chdir to it;
     # if not, stay in cwd (for new projects).
+    # However, if the current directory has project markers (pyproject.toml,
+    # package.json, go.mod, etc.), stay here -- the user is in a sub-project
+    # and wants to scaffold in place. This prevents walking up to a monorepo
+    # root when inside a sub-project.
     from .utils import find_project_root
-    root = find_project_root()
-    if root is not None:
-        os.chdir(root)
+    cwd_has_project = bool(detect_registries())
+    if not cwd_has_project:
+        root = find_project_root()
+        if root is not None:
+            os.chdir(root)
 
     flags = {
         "force": force,
