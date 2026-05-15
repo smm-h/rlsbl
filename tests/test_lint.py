@@ -2,11 +2,15 @@
 
 from rlsbl.lint import LintResult, lint_library
 
+# Helper to create a minimal Python project marker
+_PYPROJECT = '[project]\nname = "example"\n'
+
 
 class TestForbiddenImport:
     """Detect forbidden module imports."""
 
     def test_import_argparse(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         src = tmp_path / "lib.py"
         src.write_text("import argparse\n")
         results = lint_library(str(tmp_path))
@@ -17,6 +21,7 @@ class TestForbiddenImport:
         assert "argparse" in r.message
 
     def test_from_flask_import(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         src = tmp_path / "app.py"
         src.write_text("from flask import Flask\n")
         results = lint_library(str(tmp_path))
@@ -27,14 +32,23 @@ class TestForbiddenImport:
         assert "flask" in r.message
 
     def test_import_os_allowed(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         src = tmp_path / "lib.py"
         src.write_text("import os\n")
         results = lint_library(str(tmp_path))
         assert results == []
 
     def test_import_json_allowed(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         src = tmp_path / "lib.py"
         src.write_text("import json\n")
+        results = lint_library(str(tmp_path))
+        assert results == []
+
+    def test_no_language_markers_returns_empty(self, tmp_path):
+        """When no language markers exist, lint returns empty results."""
+        src = tmp_path / "lib.py"
+        src.write_text("import argparse\n")
         results = lint_library(str(tmp_path))
         assert results == []
 
@@ -43,6 +57,7 @@ class TestStdoutDetection:
     """Detect print(), sys.stdout/stderr.write(), and logging calls."""
 
     def test_print_call(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         src = tmp_path / "lib.py"
         src.write_text('print("hello")\n')
         results = lint_library(str(tmp_path))
@@ -53,6 +68,7 @@ class TestStdoutDetection:
         assert "print()" in r.message
 
     def test_sys_stdout_write(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         src = tmp_path / "lib.py"
         src.write_text('import sys\nsys.stdout.write("x")\n')
         results = lint_library(str(tmp_path))
@@ -64,6 +80,7 @@ class TestStdoutDetection:
         assert "sys.stdout" in r.message
 
     def test_logging_info(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         src = tmp_path / "lib.py"
         src.write_text('import logging\nlogging.info("x")\n')
         results = lint_library(str(tmp_path))
@@ -103,6 +120,7 @@ class TestTestFileInclusion:
 
     def test_tests_dir_included_by_default(self, tmp_path):
         """Without exclude config, test files ARE linted."""
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         tests_dir = tmp_path / "tests"
         tests_dir.mkdir()
         (tests_dir / "test_foo.py").write_text('print("in test")\n')
@@ -112,6 +130,7 @@ class TestTestFileInclusion:
 
     def test_tests_dir_excluded_by_config(self, tmp_path):
         """With exclude config, test files are skipped."""
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         tests_dir = tmp_path / "tests"
         tests_dir.mkdir()
         (tests_dir / "test_foo.py").write_text('print("in test")\n')
@@ -125,6 +144,7 @@ class TestTestFileInclusion:
         assert results == []
 
     def test_src_file_not_excluded(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         src_dir = tmp_path / "src"
         src_dir.mkdir()
         (src_dir / "main.py").write_text('print("in src")\n')
@@ -138,6 +158,7 @@ class TestLanguageConfig:
 
     def test_custom_forbidden_imports(self, tmp_path):
         """Config can narrow the forbidden list to only specified modules."""
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         lint_dir = tmp_path / ".rlsbl" / "lint"
         lint_dir.mkdir(parents=True)
         (lint_dir / "python.toml").write_text(
@@ -150,6 +171,7 @@ class TestLanguageConfig:
 
     def test_stdout_disabled(self, tmp_path):
         """stdout checking can be disabled via config."""
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         lint_dir = tmp_path / ".rlsbl" / "lint"
         lint_dir.mkdir(parents=True)
         (lint_dir / "python.toml").write_text("[stdout]\nenabled = false\n")
@@ -159,6 +181,7 @@ class TestLanguageConfig:
 
     def test_stdout_ignore_print(self, tmp_path):
         """stdout ignore list can suppress print detection."""
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         lint_dir = tmp_path / ".rlsbl" / "lint"
         lint_dir.mkdir(parents=True)
         (lint_dir / "python.toml").write_text(
@@ -202,6 +225,7 @@ class TestParserSetting:
 
     def test_default_is_ast(self, tmp_path):
         """Without lint.toml, the AST linter is used (default)."""
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         (tmp_path / "lib.py").write_text("import argparse\n")
         results = lint_library(str(tmp_path))
         assert len(results) == 1
@@ -209,6 +233,7 @@ class TestParserSetting:
 
     def test_regex_parser(self, tmp_path):
         """parser = 'regex' in lint.toml uses the regex linter."""
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         rlsbl_dir = tmp_path / ".rlsbl"
         rlsbl_dir.mkdir()
         (rlsbl_dir / "lint.toml").write_text('parser = "regex"\n')
@@ -222,6 +247,7 @@ class TestDirectoryExclusion:
     """Files in excluded directories (e.g., .venv) should not be linted."""
 
     def test_venv_excluded(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         venv_dir = tmp_path / ".venv" / "somepkg"
         venv_dir.mkdir(parents=True)
         (venv_dir / "bad.py").write_text("import flask\n")
@@ -229,6 +255,7 @@ class TestDirectoryExclusion:
         assert results == [], f"Expected no findings from .venv, got: {results}"
 
     def test_node_modules_excluded(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         nm_dir = tmp_path / "node_modules" / "somepkg"
         nm_dir.mkdir(parents=True)
         (nm_dir / "bad.py").write_text("import flask\n")
@@ -236,6 +263,7 @@ class TestDirectoryExclusion:
         assert results == []
 
     def test_egg_info_excluded(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         egg_dir = tmp_path / "mypkg.egg-info"
         egg_dir.mkdir()
         (egg_dir / "bad.py").write_text("import flask\n")
@@ -244,6 +272,7 @@ class TestDirectoryExclusion:
 
     def test_source_still_linted(self, tmp_path):
         """Non-excluded directories are still linted normally."""
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         src_dir = tmp_path / "src"
         src_dir.mkdir()
         (src_dir / "lib.py").write_text("import flask\n")
@@ -256,6 +285,7 @@ class TestCleanLibrary:
     """A project with no violations returns an empty list."""
 
     def test_clean(self, tmp_path):
+        (tmp_path / "pyproject.toml").write_text(_PYPROJECT)
         (tmp_path / "lib.py").write_text("import os\nimport json\n\ndef add(a, b):\n    return a + b\n")
         results = lint_library(str(tmp_path))
         assert results == []

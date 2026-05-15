@@ -49,6 +49,7 @@ class TestCheckLibraryLint:
         # Create a Python file with a violation (print call)
         lib_dir = tmp_project / "libs" / "mylib"
         lib_dir.mkdir(parents=True, exist_ok=True)
+        (lib_dir / "pyproject.toml").write_text('[project]\nname = "mylib"\n')
         (lib_dir / "module.py").write_text("def hello():\n    print('hi')\n")
 
         status, message = _check_library_lint()
@@ -65,6 +66,7 @@ class TestCheckLibraryLint:
         # Create a clean Python file (no violations)
         lib_dir = tmp_project / "libs" / "mylib"
         lib_dir.mkdir(parents=True, exist_ok=True)
+        (lib_dir / "pyproject.toml").write_text('[project]\nname = "mylib"\n')
         (lib_dir / "module.py").write_text("def add(a, b):\n    return a + b\n")
 
         status, message = _check_library_lint()
@@ -140,6 +142,7 @@ class TestCheckLibraryLint:
 
         lib_dir = tmp_project / "libs" / "mylib"
         lib_dir.mkdir(parents=True, exist_ok=True)
+        (lib_dir / "pyproject.toml").write_text('[project]\nname = "mylib"\n')
         (lib_dir / "module.py").write_text(
             "import logging\n"
             "def hello():\n"
