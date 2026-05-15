@@ -2,6 +2,14 @@
 
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Fix: status applies changelog-only exemptions.** `rlsbl status` now excludes changelog-only commits from the JSONL coverage count, consistent with `changelog validate`. Shows exemption count when applicable.
+- **Fix: gitignore uses set-union merge on scaffold update.** `scaffold --update` now appends new entries to `.gitignore` without three-way merge, eliminating predictable conflicts. No lines are removed or reordered.
+- **Fix: backfill script uses CWD as default project root.** `scripts/backfill_changelog.py` now operates on the current directory instead of hardcoding rlsbl's own root. Accepts `--project-root` for explicit override.
+
 ## 0.28.0
 
 ### Breaking
