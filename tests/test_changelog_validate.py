@@ -226,6 +226,20 @@ class TestCheckSchema:
         assert passed is False
         assert "commits is empty" in details[0]
 
+    def test_fails_on_invalid_type(self, git_repo):
+        """check_schema catches entries with unrecognized types."""
+        entries = [
+            ChangelogEntry(
+                commits=["abc"],
+                user_facing=True,
+                description="Faster startup",
+                type="performance",
+            ),
+        ]
+        passed, details = check_schema(entries)
+        assert passed is False
+        assert any("unrecognized type 'performance'" in d for d in details)
+
 
 class TestValidateUnreleased:
     """Tests for the combined validate_unreleased function."""
