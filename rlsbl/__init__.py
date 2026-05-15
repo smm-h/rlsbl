@@ -281,6 +281,28 @@ def cmd_undo(target, yes):
 
 
 # ---------------------------------------------------------------------------
+# yank
+# ---------------------------------------------------------------------------
+
+@app.command(name="yank", help="Mark a past release as deprecated (soft yank) or delete it (hard yank). Soft yank marks the GitHub Release as pre-release and prepends a deprecation notice. Hard yank deletes the release entirely while preserving the git tag.")
+@strictcli.flag(name="reason", type=str, help="Why the version is being yanked", default="")
+@strictcli.flag(name="use", type=str, help="Replacement version to recommend", default="")
+@strictcli.flag(name="hard", type=bool, help="Delete the release instead of marking as pre-release")
+@strictcli.flag(name="dry-run", type=bool, help="Preview without making changes")
+@strictcli.arg(name="version", help="Version to yank (e.g. 0.9.1 or v0.9.1)")
+def cmd_yank(reason, use, hard, dry_run, version):
+    args = [version]
+    flags = {
+        "reason": reason or None,
+        "use": use or None,
+        "hard": hard,
+        "dry-run": dry_run,
+    }
+    from .commands.yank import run_cmd
+    run_cmd(args, flags)
+
+
+# ---------------------------------------------------------------------------
 # discover
 # ---------------------------------------------------------------------------
 
