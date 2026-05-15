@@ -1,6 +1,6 @@
 {
   "cli-changelog.md": {
-    "content": "859abcf480afe773a1a862953ffb15ecece11c992bb0b6a66b93a26a279c4087",
+    "content": "3c1657cb01ed3b5598e4379f95136f2318af863bf76a7747e3ba815e9cd33113",
     "description": "e93698148ef3283e2fdda7cf78e4052b659e785c47e9b85a9e931671d4ef6968"
   },
   "cli-check.md": {
@@ -32,7 +32,7 @@
     "description": "9c2d172f034a7a6155823581d80ae884e7d3371d1d1cc37f1a8def59ae1e720d"
   },
   "cli-monorepo.md": {
-    "content": "f362936f88f5a841f4c15267de3f55b71058d487766cb3a4c31d264b0dbc2c8a",
+    "content": "aa1b53e1074aac228f01be6ae8832e11a2e50b036f344cafbcd0b52726c784af",
     "description": "236dd4f8e96287e0f3e798010e8906867c3fdef2dc7e1c4fa6e06caf50cce09b"
   },
   "cli-pre-push-check.md": {
