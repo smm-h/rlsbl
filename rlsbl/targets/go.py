@@ -1,12 +1,4 @@
-"""Go release target for rlsbl.
-
-Go projects use a VERSION file as the source of truth for rlsbl. GoReleaser
-handles the build/publish step triggered by the GitHub Release that rlsbl creates.
-
-Libraries (no `package main`) skip GoReleaser scaffolding and rely on tagged
-releases being available via `go get`. After each release, the Go module proxy
-is notified so the new version is immediately discoverable.
-"""
+"""Go release target using a VERSION file as source of truth, with GoReleaser integration for binaries and module proxy notification for libs."""
 
 import glob
 import os

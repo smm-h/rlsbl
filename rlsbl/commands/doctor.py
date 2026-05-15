@@ -1,4 +1,4 @@
-"""Doctor command: diagnose and repair release state."""
+"""Doctor command that diagnoses common release state problems and offers interactive repairs for tags, versions, and config drift."""
 
 import os
 import subprocess

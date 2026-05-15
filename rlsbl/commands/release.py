@@ -1,4 +1,4 @@
-"""Release command: bump version, commit, push, create GitHub Release."""
+"""Release command that bumps the project version, commits the change, tags the commit, pushes to remote, and creates a GitHub Release."""
 
 import json
 import os

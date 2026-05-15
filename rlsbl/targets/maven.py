@@ -1,14 +1,4 @@
-"""Maven/Gradle (Kotlin/Java) release target for rlsbl.
-
-Supports version detection and writing across:
-- gradle.properties (VERSION_NAME or version key)
-- build.gradle.kts (Kotlin DSL)
-- build.gradle (Groovy DSL)
-- pom.xml (Maven POM)
-
-Hybrid publish: if GITHUB_TOKEN is set, runs ./gradlew publish (Gradle) or
-mvn deploy (Maven). Otherwise defers to CI.
-"""
+"""Maven and Gradle release target supporting version management across pom.xml, build.gradle, build.gradle.kts, and gradle.properties files."""
 
 import os
 import re

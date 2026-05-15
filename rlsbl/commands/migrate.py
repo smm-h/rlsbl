@@ -1,4 +1,4 @@
-"""Migrate command: run config migrations via the external migrable tool."""
+"""Migrate command that runs configuration schema migrations via the external migrable tool to upgrade project config to newer formats."""
 
 import subprocess
 import sys

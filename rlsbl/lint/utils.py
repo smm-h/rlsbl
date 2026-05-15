@@ -1,4 +1,4 @@
-"""Shared file walking utilities for linters."""
+"""Shared file-walking utilities for linters providing recursive directory traversal with gitignore-aware filtering and extension matching."""
 
 import fnmatch
 import os

@@ -1,9 +1,4 @@
-"""Path dependency detection and rewriting for PyPI packages.
-
-Detects path dependencies in pyproject.toml (entries like ``foo @ file:///...``
-or ``foo @ {root:uri}/...``) and rewrites them to versioned constraints for
-publishing.
-"""
+"""Path dependency detection and rewriting for PyPI packages, converting local file references in pyproject.toml to versioned constraints."""
 
 import os
 import sys

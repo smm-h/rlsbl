@@ -1,4 +1,4 @@
-"""Check command: check package name availability on npm, PyPI, Go (pkg.go.dev), and GitHub."""
+"""Check command to query package name availability across npm, PyPI, Go module proxy (pkg.go.dev), and GitHub repository namespaces."""
 
 import json
 import re

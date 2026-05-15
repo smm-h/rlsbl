@@ -1,4 +1,4 @@
-"""Watch command: monitor CI runs for a commit and report results."""
+"""Watch command that polls GitHub Actions CI workflow runs for a given commit SHA and reports pass, fail, or in-progress status."""
 
 import json
 import os

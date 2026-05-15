@@ -1,4 +1,4 @@
-"""npm release target for rlsbl."""
+"""npm release target that manages version tracking in package.json and scaffolds CI workflows for automated publishing to the npm registry."""
 
 import json
 import os

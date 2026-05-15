@@ -1,8 +1,4 @@
-"""npm (JavaScript/TypeScript) linter using regex pattern matching.
-
-Fallback linter for environments where tree-sitter is unavailable.
-Same checks as the AST linter but using line-oriented regex patterns.
-"""
+"""JavaScript and TypeScript linter using regex pattern matching as a fallback when tree-sitter is unavailable for npm package analysis."""
 
 import json
 import os

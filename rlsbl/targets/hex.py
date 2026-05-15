@@ -1,4 +1,4 @@
-"""Hex (Elixir/Erlang) release target for rlsbl."""
+"""Hex (Elixir/Erlang) release target that manages version tracking in mix.exs and scaffolds CI workflows for publishing to hex.pm."""
 
 import os
 import re

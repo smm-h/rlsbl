@@ -1,4 +1,4 @@
-"""Abstract protocol for per-language linters."""
+"""Abstract protocol defining the interface that all per-language linters must implement for boundary violation detection and reporting."""
 
 from typing import Protocol, runtime_checkable
 

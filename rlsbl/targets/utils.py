@@ -1,4 +1,4 @@
-"""Shared name-normalization utilities for release targets."""
+"""Shared name-normalization utilities for release targets, handling package name canonicalization across different registry naming conventions."""
 
 import re
 

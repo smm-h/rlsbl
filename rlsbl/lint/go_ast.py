@@ -1,8 +1,4 @@
-"""Go linter using tree-sitter AST parsing.
-
-Analyzes Go source files for library boundary violations:
-forbidden imports, stdout/logging usage, and entry-point declarations.
-"""
+"""Go linter using tree-sitter AST parsing to detect library boundary violations including forbidden imports and stdout/logging usage."""
 
 import tree_sitter_go
 from tree_sitter import Language, Parser

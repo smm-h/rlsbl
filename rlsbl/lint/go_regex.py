@@ -1,8 +1,4 @@
-"""Go linter using regex pattern matching.
-
-Fallback linter for environments where tree-sitter is unavailable.
-Same checks as the AST linter but using line-oriented regex patterns.
-"""
+"""Go linter using regex pattern matching as a fallback when tree-sitter is unavailable, providing the same checks via line-oriented patterns."""
 
 import re
 

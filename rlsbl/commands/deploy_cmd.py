@@ -1,4 +1,4 @@
-"""Deploy command: deploy to configured targets via SSH."""
+"""Deploy command that orchestrates deployment to configured remote targets via SSH using the deploy primitives and config layer."""
 
 import sys
 

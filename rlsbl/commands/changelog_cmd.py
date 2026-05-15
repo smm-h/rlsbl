@@ -1,4 +1,4 @@
-"""Changelog subcommands: add, validate, generate."""
+"""Changelog subcommands for adding new entries, validating existing ones, and generating Markdown changelogs from JSONL sources."""
 
 import os
 import sys

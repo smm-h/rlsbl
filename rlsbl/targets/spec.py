@@ -1,8 +1,4 @@
-"""Spec release target for rlsbl.
-
-Spec projects use a version.json file as the source of truth. Publishing is
-tag-based -- the tagged release is the publication.
-"""
+"""Spec release target using version.json as the source of truth for specification projects where the tagged GitHub Release is the publication."""
 
 import json
 import os

@@ -1,4 +1,4 @@
-"""PyPI release target for rlsbl."""
+"""PyPI release target that manages version tracking in pyproject.toml and scaffolds CI workflows for OIDC-based publishing to the PyPI index."""
 
 import os
 import re

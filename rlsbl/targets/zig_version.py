@@ -1,8 +1,4 @@
-"""Version management helpers for Zig projects.
-
-Primary version source is a VERSION file (plain text). On write, the
-.version field in build.zig.zon is synced when the file exists.
-"""
+"""Version management helpers for Zig projects, reading from a VERSION file and synchronizing the .version field in build.zig.zon on writes."""
 
 import os
 import re

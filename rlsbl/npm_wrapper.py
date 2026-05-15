@@ -1,11 +1,4 @@
-"""Shared platform models for npm binary wrapper packages.
-
-Provides the data structures and helpers needed by scaffold generators
-that produce npm wrapper packages around native binaries (Go, Rust, etc.).
-
-Also provides job generation for npm wrapper publish workflows and
-template mappings for shared npm-wrapper scaffold templates.
-"""
+"""Platform models and helpers for npm binary wrapper packages, providing job generation for publish workflows and scaffold template mappings."""
 
 from __future__ import annotations
 

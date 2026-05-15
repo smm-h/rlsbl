@@ -1,12 +1,4 @@
-"""Advisory file lock to prevent concurrent rlsbl operations.
-
-Uses fcntl.flock on <lock_dir>/lock to ensure only one rlsbl process
-(release, scaffold, etc.) mutates project state at a time.
-
-The default lock directory is .rlsbl/. In monorepo mode the caller
-passes lock_dir=".rlsbl-monorepo" so the lock lives alongside the
-workspace config instead of creating a spurious .rlsbl/ at the repo root.
-"""
+"""Advisory file lock using fcntl.flock to prevent concurrent rlsbl operations from mutating project state in both regular and monorepo modes."""
 
 import atexit
 import fcntl

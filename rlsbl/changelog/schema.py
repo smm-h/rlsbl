@@ -1,4 +1,4 @@
-"""JSONL changelog entry schema: dataclass, parsing, serialization, validation."""
+"""JSONL changelog entry schema providing the dataclass definition, JSON parsing, serialization, field validation, and type coercion."""
 
 from __future__ import annotations
 

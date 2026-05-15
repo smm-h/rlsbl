@@ -1,4 +1,4 @@
-"""File management layer for JSONL changelog files."""
+"""File management layer for JSONL changelog files including reading, writing, appending entries, and path resolution for .rlsbl directories."""
 
 from __future__ import annotations
 

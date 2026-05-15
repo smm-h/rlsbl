@@ -1,9 +1,4 @@
-"""Swift (Apple platforms) release target for rlsbl.
-
-Like the standard Swift target, uses a VERSION file as the source of truth.
-Publishing is tag-based. Unlike SwiftTarget, this target does NOT auto-detect
--- it must be explicitly declared in .rlsbl/config.json. CI runs on macOS only.
-"""
+"""Swift Apple-platform release target requiring explicit config declaration, using a VERSION file for versioning and macOS-only CI runners."""
 
 import os
 import re

@@ -1,4 +1,4 @@
-"""Generate CHANGELOG.md from JSONL changelog entries."""
+"""Generate a Markdown CHANGELOG.md from structured JSONL changelog entries, grouping them by version with configurable formatting."""
 
 from __future__ import annotations
 

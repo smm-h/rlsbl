@@ -1,8 +1,4 @@
-"""Plain release target for projects with no build system.
-
-Uses a VERSION file as the sole version source. No CI workflows, no build,
-no publish -- just version tracking, tagging, and GitHub Releases.
-"""
+"""Plain release target for projects with no build system, using a VERSION file for version tracking with tagging and GitHub Releases only."""
 
 import os
 

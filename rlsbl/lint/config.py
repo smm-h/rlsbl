@@ -1,4 +1,4 @@
-"""Lint configuration loading from .rlsbl/lint/ TOML files."""
+"""Lint configuration loading that reads per-project rule overrides and severity settings from .rlsbl/lint/ TOML configuration files."""
 
 import os
 import sys

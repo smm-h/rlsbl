@@ -1,4 +1,4 @@
-"""Lint result type shared across all linter implementations."""
+"""Lint result dataclass shared across all linter implementations, carrying severity, file location, rule identifier, and message text."""
 
 from collections import namedtuple
 

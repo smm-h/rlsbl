@@ -1,12 +1,4 @@
-"""Cargo (Rust) release target for rlsbl.
-
-Uses tomlkit for round-trip Cargo.toml editing that preserves comments and
-formatting. Supports hybrid publish: if CARGO_REGISTRY_TOKEN is set, runs
-`cargo publish` locally; otherwise defers to CI.
-
-Libraries (crates with [lib] or no src/main.rs and no [[bin]]) skip the
-publish.yml template since they typically publish via CI only after review.
-"""
+"""Cargo (Rust) release target that uses tomlkit for round-trip Cargo.toml editing with hybrid publish support via CARGO_REGISTRY_TOKEN."""
 
 import os
 import re

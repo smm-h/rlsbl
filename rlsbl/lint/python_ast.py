@@ -1,8 +1,4 @@
-"""Python linter using tree-sitter AST parsing.
-
-Analyzes Python source files for library boundary violations:
-forbidden imports, stdout/logging usage, and entry-point declarations.
-"""
+"""Python linter using tree-sitter AST parsing to detect library boundary violations including forbidden imports and stdout/logging usage."""
 
 import os
 import sys

@@ -1,11 +1,4 @@
-"""Config reading for the tag feature (ecosystem discoverability).
-
-Precedence (highest to lowest):
-  1. CLI flag (--no-tag)
-  2. Project-level: .rlsbl/config.json
-  3. User-level: ~/.rlsbl/config.json
-  4. Default: True (tagging enabled)
-"""
+"""Project configuration loading with layered precedence: CLI flags override project-level .rlsbl/config.json which overrides user-level defaults."""
 
 import json
 import os

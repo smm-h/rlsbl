@@ -1,4 +1,4 @@
-"""Status command: show project status summary."""
+"""Status command that displays a project summary including current version, branch, last tag, and changelog coverage for unreleased work."""
 
 import json as _json
 import os

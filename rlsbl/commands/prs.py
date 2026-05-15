@@ -1,4 +1,4 @@
-"""PRs command: list open GitHub pull requests for awareness."""
+"""PRs command that lists open GitHub pull requests for the current repository to provide awareness of in-flight changes before releasing."""
 
 import subprocess
 import sys

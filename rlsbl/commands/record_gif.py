@@ -1,4 +1,4 @@
-"""Record-gif command: record a demo GIF using vhs."""
+"""Record-gif command that captures a terminal demo GIF using vhs, suitable for embedding in README files and documentation pages."""
 
 import os
 import shutil

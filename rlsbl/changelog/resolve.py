@@ -1,4 +1,4 @@
-"""Git hash resolution for changelog entries."""
+"""Resolve abbreviated git commit hashes in changelog entries to full SHA-1 hashes and validate they exist in the repository."""
 
 from __future__ import annotations
 

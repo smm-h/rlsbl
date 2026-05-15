@@ -1,9 +1,4 @@
-"""Zig release target for rlsbl.
-
-Zig projects use a VERSION file as the source of truth for rlsbl. The
-.version field in build.zig.zon is synced on write. CI handles
-cross-compilation; GitHub Release handles distribution.
-"""
+"""Zig release target using a VERSION file as the source of truth with automatic build.zig.zon synchronization and cross-compilation CI setup."""
 
 import os
 import re

@@ -1,4 +1,4 @@
-"""Undo command: revert the last release."""
+"""Undo command that reverts the last release by deleting the GitHub Release, removing the git tag, and reverting the version bump commit."""
 
 import sys
 

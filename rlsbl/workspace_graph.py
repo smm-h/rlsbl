@@ -1,8 +1,4 @@
-"""Dependency graph for monorepo workspaces.
-
-Builds a directed graph of intra-workspace dependencies by parsing each
-project's manifest (pyproject.toml for PyPI, package.json for npm).
-"""
+"""Dependency graph builder for monorepo workspaces that parses project manifests and provides topological sorting for ordered operations."""
 
 import json
 import os

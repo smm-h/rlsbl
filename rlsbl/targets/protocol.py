@@ -1,4 +1,4 @@
-"""Release target protocol -- the formal interface all targets must implement."""
+"""Release target protocol defining the formal interface that all target implementations must satisfy for detection, versioning, and scaffolding."""
 
 from typing import Protocol, runtime_checkable
 

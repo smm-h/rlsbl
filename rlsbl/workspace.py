@@ -1,8 +1,4 @@
-"""Workspace data layer for monorepo support.
-
-Handles discovery, loading, saving, and resolution of monorepo workspaces
-defined by `.rlsbl-monorepo/workspace.toml`.
-"""
+"""Workspace data layer for monorepo support handling discovery, loading, saving, and resolution of workspaces from workspace.toml config."""
 
 import os
 import tomllib

@@ -1,4 +1,4 @@
-"""Validation engine for JSONL changelog entries with caching."""
+"""Validation engine for JSONL changelog entries with result caching, checking field constraints, hash integrity, and entry ordering."""
 
 from __future__ import annotations
 

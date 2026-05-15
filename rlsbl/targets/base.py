@@ -1,4 +1,4 @@
-"""Base class for release targets with shared defaults."""
+"""Base class for release targets providing shared defaults for version reading, writing, detection, scaffolding, and publish configuration."""
 
 import os
 

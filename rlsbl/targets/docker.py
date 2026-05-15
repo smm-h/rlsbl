@@ -1,9 +1,4 @@
-"""Docker release target for rlsbl.
-
-Docker projects use a VERSION file as the source of truth. Activation is opt-in
-only via .rlsbl/config.json targets array -- detect() merely validates that a
-Dockerfile exists. Publishing builds and pushes images to the configured registry.
-"""
+"""Docker release target using a VERSION file as source of truth, with opt-in activation via config and image publishing to a registry."""
 
 import os
 import shutil

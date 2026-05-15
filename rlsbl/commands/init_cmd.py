@@ -1,4 +1,4 @@
-"""Init command: scaffold release infrastructure from templates."""
+"""Init command that scaffolds release infrastructure from templates, creating CI workflows, hooks, changelog, and config files."""
 
 import hashlib
 import json

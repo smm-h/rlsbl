@@ -1,4 +1,4 @@
-"""Deploy primitives: config validation, SSH execution, health checks, and rollback."""
+"""SSH deployment primitives providing config validation, remote command execution, health checks, and automatic rollback on failure."""
 
 import os
 import re

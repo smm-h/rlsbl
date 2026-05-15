@@ -1,4 +1,4 @@
-"""Deno release target for rlsbl."""
+"""Deno release target that manages version tracking in deno.json and scaffolds CI workflows for tag-based publishing to deno.land/x."""
 
 import json
 import os

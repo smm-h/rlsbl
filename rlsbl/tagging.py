@@ -1,4 +1,4 @@
-"""Tagging module: inject "rlsbl" keywords into manifests and GitHub topics."""
+"""Ecosystem keyword injection that adds the rlsbl tag to package manifests (package.json, pyproject.toml, etc.) and GitHub repository topics."""
 
 import json
 import os

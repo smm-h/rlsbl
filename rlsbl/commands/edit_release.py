@@ -1,4 +1,4 @@
-"""Edit-release command: update GitHub Release notes from CHANGELOG.md."""
+"""Edit-release command that updates existing GitHub Release notes by extracting the matching version section from CHANGELOG.md."""
 
 import os
 import sys

@@ -1,4 +1,4 @@
-"""Discover command: list projects in the rlsbl ecosystem."""
+"""Discover command that lists projects in the rlsbl ecosystem by querying GitHub for repositories tagged with the rlsbl topic."""
 
 import json
 import os

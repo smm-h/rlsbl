@@ -1,4 +1,4 @@
-"""Pre-push-check command: verify CHANGELOG.md has an entry for the current version."""
+"""Pre-push-check command that verifies CHANGELOG.md contains an entry for the current version before allowing a git push to proceed."""
 
 import fnmatch
 import os

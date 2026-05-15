@@ -1,8 +1,4 @@
-"""npm (JavaScript/TypeScript) linter using tree-sitter AST parsing.
-
-Analyzes JS/TS source files for library boundary violations:
-forbidden imports, stdout/logging usage, and entry-point declarations.
-"""
+"""JavaScript and TypeScript linter using tree-sitter AST parsing to detect library boundary violations such as forbidden imports and logging."""
 
 import json
 import os

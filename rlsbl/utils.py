@@ -1,4 +1,4 @@
-"""Git helpers, version bump, changelog extraction, and other shared utilities."""
+"""Git helpers, version bump logic, changelog section extraction, and other shared utilities used across all rlsbl commands and targets."""
 
 import json
 import os

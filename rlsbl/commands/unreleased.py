@@ -1,4 +1,4 @@
-"""Unreleased command: list commits since last tag and check changelog coverage."""
+"""Unreleased command that lists commits since the last tag and checks whether each one is covered by a corresponding changelog entry."""
 
 import json
 import os

@@ -1,8 +1,4 @@
-"""Swift release target for rlsbl.
-
-Swift packages use a VERSION file as the source of truth. Publishing is
-tag-based -- SPM resolves packages by git tag, so the tag IS the publication.
-"""
+"""Swift release target using a VERSION file as the source of truth, with tag-based publishing since SPM resolves packages by git tag directly."""
 
 import os
 import re
