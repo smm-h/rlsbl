@@ -102,7 +102,7 @@ def _resolve_target(target):
 app = strictcli.App(
     name="rlsbl",
     version=__version__,
-    help="Release orchestration and project scaffolding for npm, PyPI, and Go",
+    help="Release orchestration and project scaffolding CLI. Automates version bumping, changelog validation, tagging, GitHub Releases, and CI/CD scaffolding for npm, PyPI, Go, Cargo, Deno, and more.",
 )
 
 
@@ -110,7 +110,7 @@ app = strictcli.App(
 # release
 # ---------------------------------------------------------------------------
 
-@app.command(name="release", help="Orchestrate a release")
+@app.command(name="release", help="Bump the project version, validate the changelog, commit, tag, push, and create a GitHub Release. Supports patch, minor, and major bumps with dry-run preview and non-interactive mode for CI.")
 @strictcli.flag(name="target", type=str, help="Target a specific registry (auto-detected if omitted)", default="")
 @strictcli.flag(name="dry-run", type=bool, help="Preview release without making changes")
 @strictcli.flag(name="yes", type=bool, help="Non-interactive mode (skip confirmations)")
@@ -143,7 +143,7 @@ def cmd_release(target, dry_run, yes, quiet, skip_remote_check, skip_tests, skip
 # status
 # ---------------------------------------------------------------------------
 
-@app.command(name="status", help="Show project status")
+@app.command(name="status", help="Display the current project version, branch, last release tag, unreleased commit count, and changelog coverage. Outputs plain text by default or structured JSON with the --json flag.")
 @strictcli.flag(name="target", type=str, help="Target a specific registry (auto-detected if omitted)", default="")
 @strictcli.flag(name="json", type=bool, help="Output status as JSON")
 def cmd_status(target, json):
@@ -158,7 +158,7 @@ def cmd_status(target, json):
 # scaffold
 # ---------------------------------------------------------------------------
 
-@app.command(name="scaffold", help="Scaffold release infrastructure")
+@app.command(name="scaffold", help="Generate or update CI/CD workflows, git hooks, changelog, and license files for the detected release target. Use --update for three-way merge preserving customizations, or --force to overwrite all files.")
 @strictcli.flag(name="target", type=str, help="Target a specific registry (auto-detected if omitted)", default="")
 @strictcli.flag(name="force", type=bool, help="Overwrite all files (ignore user customizations)")
 @strictcli.flag(name="update", type=bool, help="Update scaffolding via three-way merge")
@@ -220,7 +220,7 @@ def cmd_scaffold(target, force, update, private, no_commit, skip_shared, no_tag)
 # check
 # ---------------------------------------------------------------------------
 
-@app.command(name="check", help="Check name availability on a registry")
+@app.command(name="check", help="Query npm, PyPI, or other registries to check whether one or more package names are available. Accepts multiple names as positional arguments and respects a configurable delay between checks.")
 @strictcli.flag(name="target", type=str, help="Target registry (npm, pypi, or go)")
 @strictcli.flag(name="delay", type=str, help="Delay between checks in ms", default="200")
 def cmd_check(target, delay):
@@ -250,7 +250,7 @@ def cmd_check(target, delay):
 # edit-release
 # ---------------------------------------------------------------------------
 
-@app.command(name="edit-release", help="Update GitHub Release notes from CHANGELOG.md")
+@app.command(name="edit-release", help="Sync the GitHub Release notes for a given version with the corresponding CHANGELOG.md entry. Defaults to the current version if none is specified. Use --dry-run to preview changes without updating GitHub.")
 @strictcli.flag(name="dry-run", type=bool, help="Preview without making changes")
 @strictcli.arg(name="version", help="Version to update (defaults to current)", required=False)
 def cmd_edit_release(dry_run, version=None):
@@ -265,7 +265,7 @@ def cmd_edit_release(dry_run, version=None):
 # undo
 # ---------------------------------------------------------------------------
 
-@app.command(name="undo", help="Revert the last release")
+@app.command(name="undo", help="Revert the most recent release by deleting the GitHub Release, removing the git tag from local and remote, and reverting the version bump commit. Requires a manual git push afterward to finalize.")
 @strictcli.flag(name="target", type=str, help="Target a specific registry", default="")
 @strictcli.flag(name="yes", type=bool, help="Non-interactive mode (skip confirmations)")
 def cmd_undo(target, yes):
@@ -278,7 +278,7 @@ def cmd_undo(target, yes):
 # discover
 # ---------------------------------------------------------------------------
 
-@app.command(name="discover", help="List rlsbl ecosystem projects")
+@app.command(name="discover", help="Search GitHub for repositories tagged with the rlsbl topic and list them. Use --mine to filter results to only your own repositories. Requires the gh CLI to be authenticated.")
 @strictcli.flag(name="mine", type=bool, help="Show only your own repositories")
 def cmd_discover(mine):
     flags = {"mine": mine}
@@ -290,7 +290,7 @@ def cmd_discover(mine):
 # watch
 # ---------------------------------------------------------------------------
 
-@app.command(name="watch", help="Watch CI runs for a commit")
+@app.command(name="watch", help="Poll GitHub Actions CI workflow runs for a specific commit SHA and report pass or fail status. Defaults to HEAD if no SHA is provided. Useful after rlsbl release to monitor the publish pipeline.")
 @strictcli.flag(name="target", type=str, help="Target a specific registry", default="")
 @strictcli.arg(name="sha", help="Commit SHA to watch (defaults to HEAD)", required=False)
 def cmd_watch(target, sha=None):
@@ -303,7 +303,7 @@ def cmd_watch(target, sha=None):
 # pre-push-check
 # ---------------------------------------------------------------------------
 
-@app.command(name="pre-push-check", help="Verify CHANGELOG entry for current version")
+@app.command(name="pre-push-check", help="Verify that CHANGELOG.md contains an entry matching the current project version. Designed to run as a git pre-push hook to prevent pushing releases without documented changes.")
 def cmd_pre_push_check():
     _require_project_root()
     from .commands.pre_push_check import run_cmd
@@ -314,7 +314,7 @@ def cmd_pre_push_check():
 # prs
 # ---------------------------------------------------------------------------
 
-@app.command(name="prs", help="List open pull requests")
+@app.command(name="prs", help="List all open pull requests for the current repository using the GitHub CLI. Shows PR number, title, author, and branch for a quick overview of pending work.")
 def cmd_prs():
     from .commands.prs import run_cmd
     run_cmd(None, [], {})
@@ -324,7 +324,7 @@ def cmd_prs():
 # unreleased
 # ---------------------------------------------------------------------------
 
-@app.command(name="unreleased", help="Audit changelog coverage for unreleased commits")
+@app.command(name="unreleased", help="List commits between the latest release tag and HEAD, and check whether each has a corresponding changelog entry. Outputs a coverage report in plain text or JSON to help prepare the next release.")
 @strictcli.flag(name="json", type=bool, help="Output as JSON")
 def cmd_unreleased(json):
     _require_project_root()
@@ -337,7 +337,7 @@ def cmd_unreleased(json):
 # targets
 # ---------------------------------------------------------------------------
 
-@app.command(name="targets", help="List available release targets")
+@app.command(name="targets", help="List all release targets detected in the current project directory, showing which ecosystems (npm, PyPI, Go, Cargo, etc.) are active based on manifest files found.")
 def cmd_targets():
     _require_project_root()
     from .commands.targets_cmd import run_cmd
@@ -348,7 +348,7 @@ def cmd_targets():
 # record-gif
 # ---------------------------------------------------------------------------
 
-@app.command(name="record-gif", help="Record a demo GIF with vhs")
+@app.command(name="record-gif", help="Record an animated GIF demo of rlsbl commands using the vhs terminal recorder. Configurable width, height, font size, and duration for consistent, reproducible demo recordings.")
 @strictcli.flag(name="width", type=str, help="GIF width in pixels", default="1200")
 @strictcli.flag(name="height", type=str, help="GIF height in pixels", default="600")
 @strictcli.flag(name="font-size", type=str, help="Font size in pixels", default="24")
@@ -364,7 +364,7 @@ def cmd_record_gif(width, height, font_size, duration):
 # migrate
 # ---------------------------------------------------------------------------
 
-@app.command(name="migrate", help="Run config migrations (via migrable)")
+@app.command(name="migrate", help="Run pending configuration migrations to update .rlsbl config files to the latest schema. Use --dry-run to preview changes without applying, or --status to see which migrations are pending.")
 @strictcli.flag(name="dry-run", type=bool, help="Preview migrations without applying")
 @strictcli.flag(name="status", type=bool, help="Show migration status")
 def cmd_migrate(dry_run, status):
@@ -377,7 +377,7 @@ def cmd_migrate(dry_run, status):
 # doctor
 # ---------------------------------------------------------------------------
 
-@app.command(name="doctor", help="Diagnose and repair release state")
+@app.command(name="doctor", help="Run diagnostic checks on the project release state, including version consistency, tag alignment, changelog coverage, and config validity. Use --fix to auto-repair issues where possible.")
 @strictcli.flag(name="fix", type=bool, help="Auto-fix issues where possible")
 @strictcli.flag(name="check", type=str, help="Run a specific check by name", default="")
 def cmd_doctor(fix, check):
@@ -391,7 +391,7 @@ def cmd_doctor(fix, check):
 # deploy
 # ---------------------------------------------------------------------------
 
-@app.command(name="deploy", help="Deploy to configured targets")
+@app.command(name="deploy", help="Run the configured deployment pipeline for the project. Supports named deploy targets, dry-run preview of what would be deployed, and a --force flag to override branch restrictions.")
 @strictcli.flag(name="target", type=str, help="Target a specific registry", default="")
 @strictcli.flag(name="dry-run", type=bool, help="Show what would be deployed")
 @strictcli.flag(name="force", type=bool, help="Override branch restrictions")
@@ -408,10 +408,10 @@ def cmd_deploy(target, dry_run, force, target_name=None):
 # changelog group
 # ---------------------------------------------------------------------------
 
-chlog = app.group("changelog", help="Structured changelog management")
+chlog = app.group("changelog", help="Structured changelog management using JSONL entries. Add, validate, and generate CHANGELOG.md from per-commit changelog entries stored in unreleased.jsonl for precise, auditable release notes.")
 
 
-@chlog.command(name="add", help="Add an entry to unreleased.jsonl")
+@chlog.command(name="add", help="Append a structured changelog entry to the project's unreleased.jsonl file. Each entry includes a human-readable description, an entry type (feature, fix, or breaking), and optional commit hashes linking it to specific changes. The file is auto-committed unless --no-commit is passed. Use --no-user-facing to mark internal changes that should not appear in the published changelog.")
 @strictcli.flag(name="commits", type=str, help="Comma-separated commit hashes", default="")
 @strictcli.flag(name="description", type=str, help="Entry description", default="")
 @strictcli.flag(name="type", type=str, help="Entry type (feature, fix, breaking)", default="")
@@ -430,14 +430,14 @@ def cmd_chlog_add(commits, description, type, no_user_facing, no_commit):
     cmd_add(flags)
 
 
-@chlog.command(name="validate", help="Validate unreleased changelog entries")
+@chlog.command(name="validate", help="Parse and validate all entries in the project's unreleased.jsonl file. Checks each entry for schema conformance, verifies that required fields like description and type are present and well-formed, ensures entry types are one of the allowed values (feature, fix, breaking), and validates referential integrity of any attached commit hashes against the git history.")
 def cmd_chlog_validate():
     _require_project_root()
     from .commands.changelog_cmd import cmd_validate
     cmd_validate({})
 
 
-@chlog.command(name="generate", help="Generate CHANGELOG.md from JSONL files")
+@chlog.command(name="generate", help="Compile all validated JSONL changelog entries into a formatted CHANGELOG.md file. Groups entries by type (features, fixes, breaking changes) under the appropriate version heading, preserving existing changelog content for previous releases. Use --dry-run to preview the generated Markdown output without writing to disk, which is useful for reviewing before committing.")
 @strictcli.flag(name="dry-run", type=bool, help="Preview without writing files")
 def cmd_chlog_generate(dry_run):
     _require_project_root()
@@ -450,16 +450,16 @@ def cmd_chlog_generate(dry_run):
 # monorepo group
 # ---------------------------------------------------------------------------
 
-mono = app.group("monorepo", help="Monorepo workspace management")
+mono = app.group("monorepo", help="Manage monorepo workspaces with multiple independently-versioned projects. Initialize workspaces, add or remove projects, sync CI workflows, check name availability, and analyze dependency graphs.")
 
 
-@mono.command(name="init", help="Initialize a monorepo workspace")
+@mono.command(name="init", help="Create a new monorepo workspace by generating the .rlsbl-monorepo directory and an empty workspace.toml configuration file at the current directory. This must be run at the repository root before adding individual projects with the add subcommand. Each workspace tracks multiple independently-versioned projects that share a single git repository.")
 def cmd_mono_init():
     from .commands.monorepo import _cmd_init
     _cmd_init({})
 
 
-@mono.command(name="add", help="Add a project to the workspace")
+@mono.command(name="add", help="Register a project directory in the monorepo workspace.toml configuration. The path argument specifies the project's location relative to the repo root. Optionally set a display name, target registry for publishing, glob patterns for change detection, a subtree remote URL for split publishing, inter-project dependencies, and a library flag to mark shared code packages.")
 @strictcli.flag(name="name", type=str, help="Project name (defaults to directory name)", default="")
 @strictcli.flag(name="target", type=str, help="Target registry", default="")
 @strictcli.flag(name="watch", type=str, help="Comma-separated glob patterns to watch", default="")
@@ -485,32 +485,32 @@ def cmd_mono_add(name, target, watch, subtree_remote, depends_on, library, path)
     _cmd_add([path], flags)
 
 
-@mono.command(name="remove", help="Remove a project from the workspace")
+@mono.command(name="remove", help="Unregister a project from the monorepo workspace.toml by its path. This removes the project entry from the workspace configuration file but does not delete any files, directories, or git history on disk. The project's code remains intact and can be re-added later with the add subcommand if needed.")
 @strictcli.arg(name="path", help="Path to the project to remove")
 def cmd_mono_remove(path):
     from .commands.monorepo import _cmd_remove
     _cmd_remove([path], {})
 
 
-@mono.command(name="list", help="List all projects in the workspace")
+@mono.command(name="list", help="Display all projects registered in the monorepo workspace.toml file. For each project, shows the project name, relative path from the repo root, target registry for publishing, and any configured options such as watch patterns, subtree remotes, inter-project dependencies, and whether the project is marked as a library.")
 def cmd_mono_list():
     from .commands.monorepo import _cmd_list
     _cmd_list({})
 
 
-@mono.command(name="sync", help="Sync CI workflows from projects to repo root")
+@mono.command(name="sync", help="Copy and merge CI workflow files from each project's individual scaffold into the shared .github/workflows directory at the repository root. This ensures that every project in the workspace has its publish and test pipelines properly configured as GitHub Actions workflows, even when projects use different target registries or have custom workflow steps.")
 def cmd_mono_sync():
     from .commands.monorepo import _cmd_sync
     _cmd_sync({})
 
 
-@mono.command(name="status", help="Show status of all projects")
+@mono.command(name="status", help="Show the current version, last release tag, and number of unreleased commits for every project in the monorepo workspace. Provides a quick overview of which projects have pending changes and are ready for their next release. Projects with zero unreleased commits are shown as up-to-date.")
 def cmd_mono_status():
     from .commands.monorepo import _cmd_status
     _cmd_status({})
 
 
-@mono.command(name="check-names", help="Check name availability for all projects")
+@mono.command(name="check-names", help="Check package name availability on a target registry for all projects in the monorepo workspace. Queries the registry API for each project name and reports whether it is available or already taken. Supports optional prefix and suffix arguments to test naming conventions like scoped packages, with a configurable delay between registry queries to avoid rate limiting.")
 @strictcli.flag(name="target", type=str, help="Target registry (npm, pypi, or go)")
 @strictcli.flag(name="prefix", type=str, help="Prefix to prepend to project names", default="")
 @strictcli.flag(name="suffix", type=str, help="Suffix to append to project names", default="")
@@ -521,13 +521,13 @@ def cmd_mono_check_names(target, prefix, suffix, delay):
     _cmd_check_names(_variadic_args, flags)
 
 
-@mono.command(name="release-order", help="Show topological release order for projects")
+@mono.command(name="release-order", help="Compute and display the topological release order for all projects in the monorepo workspace based on their declared depends-on relationships. Projects with no dependencies are listed first, followed by projects that depend on them, ensuring each project is released only after its dependencies. Detects and reports circular dependency errors.")
 def cmd_mono_release_order():
     from .commands.monorepo import _cmd_release_order
     _cmd_release_order({})
 
 
-@mono.command(name="outdated", help="Show outdated intra-workspace dependencies")
+@mono.command(name="outdated", help="Scan all projects in the monorepo workspace for intra-workspace dependencies that reference older versions than what is currently available in the workspace. Lists each outdated dependency with the referenced version and the latest available version, helping identify which downstream projects need a version bump after upstream releases.")
 def cmd_mono_outdated():
     from .commands.monorepo import _cmd_outdated
     _cmd_outdated({})
