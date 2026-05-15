@@ -2,7 +2,7 @@
 
 # Changelog
 
-## Unreleased
+## 0.25.4
 
 - No user-facing changes.
 
