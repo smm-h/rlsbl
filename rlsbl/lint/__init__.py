@@ -6,12 +6,9 @@ Public API:
 """
 
 import os
-import sys
 
 from .config import (
     LanguageLintConfig,
-    _load_old_lint_toml,
-    apply_old_ignore_shim,
     load_language_config,
     load_parser_setting,
 )
@@ -70,25 +67,12 @@ def lint_library(project_path: str) -> list[LintResult]:
     parser_type = load_parser_setting(project_path)
     languages = _detect_languages(project_path)
 
-    # If no language markers found, fall back to Python linting
-    # (backward compat: the old linter always scanned for .py files)
     if not languages:
-        languages = ["python"]
-
-    # Check for old-format .rlsbl/lint.toml with 'ignore' key
-    old_ignore = _load_old_lint_toml(project_path)
-    if old_ignore is not None:
-        print(
-            "Warning: .rlsbl/lint.toml 'ignore' key is deprecated. "
-            "Use per-language config in .rlsbl/lint/<language>.toml instead.",
-            file=sys.stderr,
-        )
+        return []
 
     results: list[LintResult] = []
     for language in languages:
         config = load_language_config(project_path, language)
-        if old_ignore is not None:
-            apply_old_ignore_shim(config, old_ignore)
         linter = _create_linter(language, parser_type)
         if linter is not None:
             results.extend(linter.lint(project_path, config))
