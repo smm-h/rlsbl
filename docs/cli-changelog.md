@@ -11,7 +11,7 @@ Structured changelog management using JSONL entries. Add, validate, and generate
 
 ## changelog add
 
-Append a structured changelog entry to unreleased.jsonl with a description, entry type (feature, fix, breaking), and optional commit hashes. Auto-commits the file unless --no-commit is passed.
+Append a structured changelog entry to the project's unreleased.jsonl file. Each entry includes a human-readable description, an entry type (feature, fix, or breaking), and optional commit hashes linking it to specific changes. The file is auto-committed unless --no-commit is passed. Use --no-user-facing to mark internal changes that should not appear in the published changelog.
 
 ### Flags
 
@@ -25,11 +25,11 @@ Append a structured changelog entry to unreleased.jsonl with a description, entr
 
 ## changelog validate
 
-Parse and validate all entries in unreleased.jsonl, checking for schema conformance, required fields, valid entry types, and referential integrity of commit hashes.
+Parse and validate all entries in the project's unreleased.jsonl file. Checks each entry for schema conformance, verifies that required fields like description and type are present and well-formed, ensures entry types are one of the allowed values (feature, fix, breaking), and validates referential integrity of any attached commit hashes against the git history.
 
 ## changelog generate
 
-Compile all validated JSONL changelog entries into a formatted CHANGELOG.md file, grouping entries by type and version. Use --dry-run to preview the generated output without writing to disk.
+Compile all validated JSONL changelog entries into a formatted CHANGELOG.md file. Groups entries by type (features, fixes, breaking changes) under the appropriate version heading, preserving existing changelog content for previous releases. Use --dry-run to preview the generated Markdown output without writing to disk, which is useful for reviewing before committing.
 
 ### Flags
 

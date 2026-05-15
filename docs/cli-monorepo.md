@@ -11,11 +11,11 @@ Manage monorepo workspaces with multiple independently-versioned projects. Initi
 
 ## monorepo init
 
-Create a new monorepo workspace by generating the .rlsbl-monorepo directory and an empty workspace.toml file. Run this at the repository root before adding individual projects.
+Create a new monorepo workspace by generating the .rlsbl-monorepo directory and an empty workspace.toml configuration file at the current directory. This must be run at the repository root before adding individual projects with the add subcommand. Each workspace tracks multiple independently-versioned projects that share a single git repository.
 
 ## monorepo add
 
-Register a project directory in the monorepo workspace.toml. Specify the path and optionally set a name, target registry, watch patterns, subtree remote, dependencies, and library flag.
+Register a project directory in the monorepo workspace.toml configuration. The path argument specifies the project's location relative to the repo root. Optionally set a display name, target registry for publishing, glob patterns for change detection, a subtree remote URL for split publishing, inter-project dependencies, and a library flag to mark shared code packages.
 
 ### Flags
 
@@ -36,7 +36,7 @@ Register a project directory in the monorepo workspace.toml. Specify the path an
 
 ## monorepo remove
 
-Unregister a project from the monorepo workspace.toml by its path. Removes the project entry from the workspace configuration without deleting any files on disk.
+Unregister a project from the monorepo workspace.toml by its path. This removes the project entry from the workspace configuration file but does not delete any files, directories, or git history on disk. The project's code remains intact and can be re-added later with the add subcommand if needed.
 
 ### Arguments
 
@@ -46,19 +46,19 @@ Unregister a project from the monorepo workspace.toml by its path. Removes the p
 
 ## monorepo list
 
-Display all projects registered in the monorepo workspace.toml, showing each project's name, path, target registry, and configured options like watch patterns and dependencies.
+Display all projects registered in the monorepo workspace.toml file. For each project, shows the project name, relative path from the repo root, target registry for publishing, and any configured options such as watch patterns, subtree remotes, inter-project dependencies, and whether the project is marked as a library.
 
 ## monorepo sync
 
-Copy and merge CI workflow files from individual project scaffolds into the repository root .github/workflows directory, ensuring all projects have their publish and test pipelines active.
+Copy and merge CI workflow files from each project's individual scaffold into the shared .github/workflows directory at the repository root. This ensures that every project in the workspace has its publish and test pipelines properly configured as GitHub Actions workflows, even when projects use different target registries or have custom workflow steps.
 
 ## monorepo status
 
-Show the version, last release tag, and unreleased commit count for every project in the monorepo workspace. Provides a quick overview of which projects are ready for release.
+Show the current version, last release tag, and number of unreleased commits for every project in the monorepo workspace. Provides a quick overview of which projects have pending changes and are ready for their next release. Projects with zero unreleased commits are shown as up-to-date.
 
 ## monorepo check-names
 
-Check package name availability on a registry for all projects in the workspace. Supports optional prefix and suffix to test naming conventions, with configurable delay between registry queries.
+Check package name availability on a target registry for all projects in the monorepo workspace. Queries the registry API for each project name and reports whether it is available or already taken. Supports optional prefix and suffix arguments to test naming conventions like scoped packages, with a configurable delay between registry queries to avoid rate limiting.
 
 ### Flags
 
@@ -71,8 +71,8 @@ Check package name availability on a registry for all projects in the workspace.
 
 ## monorepo release-order
 
-Compute and display the topological release order for all workspace projects based on their declared depends-on relationships. Projects with no dependencies appear first.
+Compute and display the topological release order for all projects in the monorepo workspace based on their declared depends-on relationships. Projects with no dependencies are listed first, followed by projects that depend on them, ensuring each project is released only after its dependencies. Detects and reports circular dependency errors.
 
 ## monorepo outdated
 
-Scan all workspace projects for intra-workspace dependencies that reference older versions than what is currently published. Helps identify which projects need a version bump after upstream releases.
+Scan all projects in the monorepo workspace for intra-workspace dependencies that reference older versions than what is currently available in the workspace. Lists each outdated dependency with the referenced version and the latest available version, helping identify which downstream projects need a version bump after upstream releases.
