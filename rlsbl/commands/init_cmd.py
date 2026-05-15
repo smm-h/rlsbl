@@ -274,6 +274,34 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                 skipped.append((target, "user-owned"))
             continue
 
+        # --- .gitignore: additive set-union merge (append new lines, never remove) ---
+        if target == ".gitignore" and os.path.exists(target) and not force:
+            with open(target, "r", encoding="utf-8") as f:
+                existing_content = f.read()
+            existing_lines = set()
+            for line in existing_content.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    existing_lines.add(stripped)
+            new_lines = []
+            for line in theirs.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and stripped not in existing_lines:
+                    new_lines.append(line)
+            if new_lines:
+                # Append new entries with a blank separator
+                parts = [existing_content.rstrip("\n"), ""] + new_lines + [""]
+                merged_content = "\n".join(parts)
+                with open(target, "w", encoding="utf-8") as f:
+                    f.write(merged_content)
+                _save_base(target, theirs)
+                new_hashes[target] = file_hash(target)
+                created.append((target, "updated (additive merge)"))
+            else:
+                _save_base(target, theirs)
+                skipped.append((target, "unchanged"))
+            continue
+
         # --- New file or force overwrite (non-user-owned): write and save base ---
         if not os.path.exists(target) or force:
             is_overwrite = os.path.exists(target) and force
