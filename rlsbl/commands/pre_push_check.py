@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 from ..changelog import changes_dir_exists, get_changes_dir, read_unreleased, resolve_hashes
+from ..changelog.validate import _is_release_commit
 from ..targets import TARGETS
 from ..workspace import find_workspace_root, load_workspace
 
@@ -52,6 +53,20 @@ def _check_jsonl_changelog(dir_path, refs):
     """
     changes_dir = get_changes_dir(dir_path)
     entries = read_unreleased(changes_dir)
+
+    # Get pushed commits from the refs
+    pushed_commits = _get_pushed_commits(refs)
+    if pushed_commits is None:
+        return None  # Could not determine pushed commits -- skip
+
+    # Filter out release infrastructure commits (version bumps, changelog
+    # finalization) -- these are structural and don't need JSONL coverage.
+    non_release_commits = {sha for sha in pushed_commits if not _is_release_commit(sha)}
+
+    # If all pushed commits are release infrastructure, nothing to check
+    if not non_release_commits:
+        return None
+
     if not entries:
         return "unreleased.jsonl has no entries"
 
@@ -62,13 +77,8 @@ def _check_jsonl_changelog(dir_path, refs):
     resolved = resolve_hashes(all_hashes)
     covered_shas = {full for full in resolved.values() if full is not None}
 
-    # Get pushed commits from the refs
-    pushed_commits = _get_pushed_commits(refs)
-    if pushed_commits is None:
-        return None  # Could not determine pushed commits -- skip
-
     missing = []
-    for sha in pushed_commits:
+    for sha in non_release_commits:
         if sha not in covered_shas:
             missing.append(sha[:12])
 

@@ -12,6 +12,7 @@ from rlsbl.changelog.files import append_entry, read_unreleased
 from rlsbl.changelog.validate import (
     _is_cache_valid,
     _is_changelog_only_commit,
+    _is_release_commit,
     _read_cache,
     _write_cache,
     check_coverage,
@@ -460,3 +461,50 @@ class TestChangelogOnlyCoverage:
 
         result = validate_unreleased(changes)
         assert result["passed"] is True
+
+
+class TestIsReleaseCommit:
+    """Unit tests for _is_release_commit."""
+
+    def test_changelog_only_commit_is_release(self, git_repo):
+        """A changelog-only commit is a release commit."""
+        (git_repo / "CHANGELOG.md").write_text("## 1.0.0\n- stuff\n")
+        _run_git(git_repo, "add", "CHANGELOG.md")
+        _run_git(git_repo, "commit", "-q", "-m", "update CHANGELOG.md")
+        sha = _git_head(git_repo)
+        assert _is_release_commit(sha) is True
+
+    def test_version_tag_message_is_release(self, git_repo):
+        """A commit with message matching vX.Y.Z is a release commit."""
+        sha = _make_commit(git_repo, "pyproject.toml", "v1.2.3")
+        assert _is_release_commit(sha) is True
+
+    def test_finalize_message_is_release(self, git_repo):
+        """A commit with 'chore: finalize changelog for ...' is a release commit."""
+        sha = _make_commit(git_repo, "changes.jsonl", "chore: finalize changelog for 1.2.3")
+        assert _is_release_commit(sha) is True
+
+    def test_regular_commit_is_not_release(self, git_repo):
+        """A regular code commit is not a release commit."""
+        sha = _make_commit(git_repo, "src.py", "fix: some bug")
+        assert _is_release_commit(sha) is False
+
+    def test_version_like_but_wrong_format(self, git_repo):
+        """A commit with a version-like but incorrect message is not release."""
+        sha = _make_commit(git_repo, "file.txt", "v1.2")
+        assert _is_release_commit(sha) is False
+
+    def test_invalid_sha_returns_false(self, git_repo):
+        """Invalid SHA returns False."""
+        assert _is_release_commit("0" * 40) is False
+
+    def test_rlsbl_version_file_is_changelog_only(self, git_repo):
+        """A commit touching only .rlsbl/version is changelog-only (release infra)."""
+        version_dir = git_repo / ".rlsbl"
+        version_dir.mkdir(exist_ok=True)
+        (version_dir / "version").write_text("0.25.0\n")
+        _run_git(git_repo, "add", ".rlsbl/version")
+        _run_git(git_repo, "commit", "-q", "-m", "update rlsbl version")
+        sha = _git_head(git_repo)
+        assert _is_changelog_only_commit(sha) is True
+        assert _is_release_commit(sha) is True

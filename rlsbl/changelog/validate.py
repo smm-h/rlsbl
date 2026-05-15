@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 
 from .files import read_unreleased
@@ -48,6 +49,7 @@ def _git_head() -> str | None:
 
 _CHANGELOG_PATTERNS = (
     ".rlsbl/changes/",
+    ".rlsbl/version",
     "CHANGELOG.md",
 )
 
@@ -86,6 +88,51 @@ def _is_changelog_only_commit(sha: str) -> bool:
             return False
 
     return True
+
+
+_RELEASE_MSG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
+_FINALIZE_MSG_PREFIX = "chore: finalize changelog for "
+
+
+def _get_commit_message(sha: str) -> str | None:
+    """Get the subject line of a commit. Returns None on error."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%s", sha],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+
+
+def _is_release_commit(sha: str) -> bool:
+    """Check if a commit is a release infrastructure commit.
+
+    A commit is a release commit if:
+    - It only touches changelog-maintenance files (changelog-only), OR
+    - Its commit message matches the version tag pattern (e.g. "v1.2.3"), OR
+    - Its commit message starts with "chore: finalize changelog for "
+
+    Returns False on errors (don't skip if we can't determine).
+    """
+    if _is_changelog_only_commit(sha):
+        return True
+
+    msg = _get_commit_message(sha)
+    if msg is None:
+        return False
+
+    if _RELEASE_MSG_RE.match(msg):
+        return True
+    if msg.startswith(_FINALIZE_MSG_PREFIX):
+        return True
+
+    return False
 
 
 def _is_ancestor(ancestor: str, descendant: str) -> bool:
