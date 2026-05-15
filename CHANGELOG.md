@@ -2,6 +2,13 @@
 
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Fix: built-in lint only runs on library projects.** The pre-release lint check no longer runs on CLI applications, avoiding false positives for `print()` calls and entry points. Lint runs only for monorepo projects with `library = true`.
+- **Fix: CHANGELOG.md regenerated after JSONL finalization.** The release command now regenerates CHANGELOG.md after renaming `unreleased.jsonl` to the versioned file, so the changelog heading shows the version number instead of "Unreleased".
+
 ## 0.25.0
 
 ### Features
