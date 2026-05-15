@@ -2,6 +2,13 @@
 
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Fix: monorepo publish workflow renamed to `publish.yml`.** The monorepo publish router was named `publish-router.yml`, which broke PyPI Trusted Publishing OIDC claims when projects moved between standalone and monorepo layouts. Now always `publish.yml` in both contexts.
+- **Fix: monorepo sync handles trailing slashes, version-file paths, and packages-dir.** Sync no longer produces double-slash globs from workspace.toml paths with trailing slashes. Action inputs like `go-version-file` are rewritten to include the sub-project path. `pypa/gh-action-pypi-publish` gets `packages-dir` injected when `working-directory` is set.
+
 ## 0.27.0
 
 ### Breaking
@@ -473,6 +480,10 @@
 - Go name availability check via pkg.go.dev
 - Cross-compilation template (linux/darwin/windows x amd64/arm64)
 
+## 0.3.1
+
+- No user-facing changes.
+
 ## 0.3.0
 
 ### Features
@@ -504,9 +515,9 @@
 
 ### Features
 
+- 4 top-level commands: `release`, `status`, `scaffold`, `check-name`
 - Initial release as `rlsbl` (renamed from share-it-on)
 - Pure Python (stdlib only, Python 3.11+, tomllib for TOML parsing)
-- 4 top-level commands: `release`, `status`, `scaffold`, `check-name`
 - Auto-detects registries from project files (package.json, pyproject.toml)
 - Release syncs version across all detected version files
 - Context-aware scaffold: appends CLAUDE.md, merges .gitignore, preserves custom CI
