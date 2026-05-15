@@ -2,6 +2,10 @@
 
 # Changelog
 
+## Unreleased
+
+- No user-facing changes.
+
 ## 0.25.3
 
 ### Fixes
