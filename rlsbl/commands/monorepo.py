@@ -222,19 +222,118 @@ def _rewrite_trigger(content):
 
 def _inject_working_directory(content, path):
     """Insert a defaults.run.working-directory block before the jobs: line."""
+    clean_path = path.rstrip("/")
     lines = content.splitlines()
     for i, line in enumerate(lines):
         if line.rstrip() == "jobs:":
             block = [
                 "defaults:",
                 "  run:",
-                f"    working-directory: {path}",
+                f"    working-directory: {clean_path}",
                 "",
             ]
             new_lines = lines[:i] + block + lines[i:]
             return "\n".join(new_lines) + "\n"
     # No jobs: line found; return content unchanged
     return content
+
+
+def _rewrite_version_file_inputs(content, project_path):
+    """Prepend project_path to known *-version-file action inputs.
+
+    Actions like actions/setup-go resolve ``go-version-file`` relative to
+    the repo root, not ``working-directory``.  When a workflow is copied
+    into a monorepo sub-project we must adjust these inputs so the runner
+    can still find the file.
+
+    Known inputs: go-version-file, python-version-file, node-version-file.
+    """
+    known_inputs = ("go-version-file", "python-version-file", "node-version-file")
+    lines = content.splitlines()
+    new_lines = []
+    for line in lines:
+        replaced = False
+        for inp in known_inputs:
+            # Match lines like "          go-version-file: go.mod"
+            pattern = re.compile(
+                r'^(\s+)' + re.escape(inp) + r':\s+(.+)$'
+            )
+            m = pattern.match(line)
+            if m:
+                indent = m.group(1)
+                value = m.group(2).strip()
+                # Only rewrite relative paths not already prefixed
+                if not value.startswith(project_path + "/") and not value.startswith("/"):
+                    new_lines.append(f"{indent}{inp}: {project_path}/{value}")
+                    replaced = True
+                break
+        if not replaced:
+            new_lines.append(line)
+    return "\n".join(new_lines) + "\n" if content.endswith("\n") else "\n".join(new_lines)
+
+
+def _inject_packages_dir(content, project_path):
+    """Add packages-dir to pypa/gh-action-pypi-publish steps.
+
+    When ``working-directory`` is set, ``uv build`` creates artifacts in
+    ``{project_path}/dist/`` but the publish action looks for ``dist/``
+    at the repo root.  We inject ``packages-dir`` so it finds the right
+    directory.
+
+    Step lines in YAML workflows look like ``      - uses: action@v1``
+    (list item syntax).  The ``with:`` block is indented relative to the
+    ``- uses:`` marker -- specifically at the same column as ``uses:``.
+    """
+    lines = content.splitlines()
+    new_lines = []
+    i = 0
+    while i < len(lines):
+        new_lines.append(lines[i])
+        # Detect "- uses: pypa/gh-action-pypi-publish@..." or "uses: ..."
+        stripped = lines[i].strip()
+        is_pypi_publish = "pypa/gh-action-pypi-publish" in stripped and "uses:" in stripped
+        if is_pypi_publish:
+            # Determine the indentation for with:/packages-dir.
+            # For "      - uses: ...", the with: block sits at the level of
+            # "uses:" (i.e. after the "- ").  Find where "uses:" starts.
+            uses_col = lines[i].index("uses:")
+            with_indent = " " * uses_col
+            value_indent = with_indent + "  "
+            packages_dir_line = f"{value_indent}packages-dir: {project_path}/dist/"
+
+            # Check if next line is "with:" block
+            if i + 1 < len(lines) and lines[i + 1].strip().startswith("with:"):
+                # Check if packages-dir is already present in the with block
+                has_packages_dir = False
+                j = i + 2
+                while j < len(lines):
+                    l = lines[j]
+                    ls = l.strip()
+                    if ls == "":
+                        j += 1
+                        continue
+                    # If dedented to or past the with: level, we left the block
+                    if len(l) - len(l.lstrip()) <= uses_col:
+                        break
+                    if ls.startswith("packages-dir:"):
+                        has_packages_dir = True
+                        break
+                    j += 1
+                if not has_packages_dir:
+                    # Add packages-dir after "with:" line
+                    new_lines.append(lines[i + 1])  # the "with:" line
+                    new_lines.append(packages_dir_line)
+                    i += 2
+                    continue
+            else:
+                # No with: block -- create one
+                new_lines.append(f"{with_indent}with:")
+                new_lines.append(packages_dir_line)
+        i += 1
+    result = "\n".join(new_lines)
+    if content.endswith("\n") and not result.endswith("\n"):
+        result += "\n"
+    return result
 
 
 def _generate_router(projects):
@@ -263,14 +362,15 @@ def _generate_router(projects):
     lines.append("        with:")
     lines.append("          filters: |")
     for p in projects:
+        clean_path = p['path'].rstrip('/')
         watch = p.get("watch", [])
         if watch:
             lines.append(f"            {p['name']}:")
-            lines.append(f"              - '{p['path']}/**'")
+            lines.append(f"              - '{clean_path}/**'")
             for w in watch:
                 lines.append(f"              - '{w}'")
         else:
-            lines.append(f"            {p['name']}: '{p['path']}/**'")
+            lines.append(f"            {p['name']}: '{clean_path}/**'")
 
     # per-project jobs
     for p in projects:
@@ -328,6 +428,7 @@ def _cmd_sync(flags):
     for proj in projects:
         name = proj["name"]
         path = proj["path"]
+        clean_path = path.rstrip("/")
         current_project_names.add(name)
 
         for wf_type in ("ci", "publish"):
@@ -344,12 +445,18 @@ def _cmd_sync(flags):
 
             # Rewrite trigger and inject working directory
             rewritten = _rewrite_trigger(content)
-            rewritten = _inject_working_directory(rewritten, path)
+            rewritten = _inject_working_directory(rewritten, clean_path)
+
+            # Rewrite action with: inputs that reference file paths
+            rewritten = _rewrite_version_file_inputs(rewritten, clean_path)
+
+            # Inject packages-dir for pypa/gh-action-pypi-publish
+            rewritten = _inject_packages_dir(rewritten, clean_path)
 
             # Prepend header
             header = (
                 f"# DO NOT EDIT -- generated by rlsbl monorepo sync\n"
-                f"# Source: {path}/.github/workflows/{wf_type}.yml\n"
+                f"# Source: {clean_path}/.github/workflows/{wf_type}.yml\n"
             )
             final = header + rewritten
 

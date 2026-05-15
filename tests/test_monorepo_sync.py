@@ -14,7 +14,9 @@ from rlsbl.commands.monorepo import (
     _cmd_sync,
     _generate_router,
     _generate_publish_router,
+    _inject_packages_dir,
     _rewrite_trigger,
+    _rewrite_version_file_inputs,
 )
 from rlsbl.workspace import load_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 
@@ -409,3 +411,246 @@ class TestAutoCommit:
             capture_output=True, text=True,
         )
         assert result.stdout.strip() == ""
+
+
+GO_CI_WORKFLOW = """\
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+"""
+
+PYPI_PUBLISH_WORKFLOW = """\
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+"""
+
+PYPI_PUBLISH_WITH_EXISTING_WITH = """\
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          verbose: true
+"""
+
+
+class TestTrailingSlashStripped:
+    """Bug fix: paths like 'python/' should not produce '//' in output."""
+
+    def test_router_no_double_slash(self):
+        """Trailing slash in path does not produce // in router glob."""
+        projects = [
+            {"name": "mypkg", "path": "python/"},
+        ]
+        content = _generate_router(projects)
+        assert "//" not in content
+        assert "'python/**'" in content
+
+    def test_router_watch_no_double_slash(self):
+        """Trailing slash with watch paths does not produce //."""
+        projects = [
+            {"name": "mypkg", "path": "python/", "watch": ["shared/**"]},
+        ]
+        content = _generate_router(projects)
+        assert "//" not in content
+        assert "'python/**'" in content
+
+    def test_source_comment_no_double_slash(self, mock_git_repo, capsys):
+        """Source comment does not contain // from trailing slash."""
+        # Create project with trailing-slash path
+        proj_dir = os.path.join(str(mock_git_repo), "python")
+        os.makedirs(proj_dir, exist_ok=True)
+        with open(os.path.join(proj_dir, "package.json"), "w") as f:
+            json.dump({"name": "mypkg", "version": "0.1.0"}, f)
+        wf_dir = os.path.join(proj_dir, ".github", "workflows")
+        os.makedirs(wf_dir, exist_ok=True)
+        with open(os.path.join(wf_dir, "ci.yml"), "w") as f:
+            f.write(CI_WORKFLOW)
+
+        _cmd_init({})
+        # Manually add with trailing-slash path in workspace
+        from rlsbl.workspace import save_workspace
+        save_workspace(".", [{"path": "python/", "name": "mypkg"}])
+        subprocess.run(["git", "add", "."], cwd=str(mock_git_repo), check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "setup"],
+            cwd=str(mock_git_repo), check=True,
+        )
+
+        _cmd_sync({})
+        dest = mock_git_repo / ".github" / "workflows" / "mypkg-ci.yml"
+        content = dest.read_text()
+        assert "# Source: python/.github/workflows/ci.yml" in content
+        assert "python//" not in content
+        assert "working-directory: python\n" in content
+
+    def test_working_directory_no_trailing_slash(self, mock_git_repo, capsys):
+        """working-directory value should not have a trailing slash."""
+        proj_dir = os.path.join(str(mock_git_repo), "lib")
+        os.makedirs(proj_dir, exist_ok=True)
+        with open(os.path.join(proj_dir, "package.json"), "w") as f:
+            json.dump({"name": "mylib", "version": "0.1.0"}, f)
+        wf_dir = os.path.join(proj_dir, ".github", "workflows")
+        os.makedirs(wf_dir, exist_ok=True)
+        with open(os.path.join(wf_dir, "ci.yml"), "w") as f:
+            f.write(CI_WORKFLOW)
+
+        _cmd_init({})
+        from rlsbl.workspace import save_workspace
+        save_workspace(".", [{"path": "lib/", "name": "mylib"}])
+        subprocess.run(["git", "add", "."], cwd=str(mock_git_repo), check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "setup"],
+            cwd=str(mock_git_repo), check=True,
+        )
+
+        _cmd_sync({})
+        dest = mock_git_repo / ".github" / "workflows" / "mylib-ci.yml"
+        content = dest.read_text()
+        assert "working-directory: lib\n" in content
+        assert "working-directory: lib/\n" not in content
+
+
+class TestVersionFileRewrite:
+    """Bug fix: action with: inputs for version files must be rewritten."""
+
+    def test_go_version_file_rewritten(self):
+        """go-version-file: go.mod becomes go-version-file: myproj/go.mod."""
+        content = GO_CI_WORKFLOW
+        result = _rewrite_version_file_inputs(content, "myproj")
+        assert "go-version-file: myproj/go.mod" in result
+        assert "go-version-file: go.mod" not in result
+
+    def test_already_prefixed_not_doubled(self):
+        """If go-version-file already has the project path, don't double it."""
+        content = GO_CI_WORKFLOW.replace(
+            "go-version-file: go.mod",
+            "go-version-file: myproj/go.mod",
+        )
+        result = _rewrite_version_file_inputs(content, "myproj")
+        assert "go-version-file: myproj/go.mod" in result
+        assert "myproj/myproj/" not in result
+
+    def test_absolute_path_not_rewritten(self):
+        """Absolute paths are left alone."""
+        content = GO_CI_WORKFLOW.replace(
+            "go-version-file: go.mod",
+            "go-version-file: /etc/go.mod",
+        )
+        result = _rewrite_version_file_inputs(content, "myproj")
+        assert "go-version-file: /etc/go.mod" in result
+
+    def test_integration_go_version_file(self, mock_git_repo, capsys):
+        """Full sync rewrites go-version-file for a Go project."""
+        proj_dir = os.path.join(str(mock_git_repo), "gomod")
+        os.makedirs(proj_dir, exist_ok=True)
+        # go.mod triggers Go target detection
+        with open(os.path.join(proj_dir, "go.mod"), "w") as f:
+            f.write("module example.com/gomod\n\ngo 1.21\n")
+        wf_dir = os.path.join(proj_dir, ".github", "workflows")
+        os.makedirs(wf_dir, exist_ok=True)
+        with open(os.path.join(wf_dir, "ci.yml"), "w") as f:
+            f.write(GO_CI_WORKFLOW)
+
+        _cmd_init({})
+        from rlsbl.workspace import save_workspace
+        save_workspace(".", [{"path": "gomod", "name": "gomod"}])
+        subprocess.run(["git", "add", "."], cwd=str(mock_git_repo), check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "setup"],
+            cwd=str(mock_git_repo), check=True,
+        )
+
+        _cmd_sync({})
+        dest = mock_git_repo / ".github" / "workflows" / "gomod-ci.yml"
+        content = dest.read_text()
+        assert "go-version-file: gomod/go.mod" in content
+        assert "go-version-file: go.mod" not in content
+
+
+class TestPackagesDirInjection:
+    """Bug fix: pypa/gh-action-pypi-publish needs packages-dir in monorepo."""
+
+    def test_packages_dir_injected_no_with(self):
+        """When no with: block exists, one is created with packages-dir."""
+        result = _inject_packages_dir(PYPI_PUBLISH_WORKFLOW, "python")
+        assert "packages-dir: python/dist/" in result
+
+    def test_packages_dir_injected_existing_with(self):
+        """When with: block exists, packages-dir is added to it."""
+        result = _inject_packages_dir(PYPI_PUBLISH_WITH_EXISTING_WITH, "python")
+        assert "packages-dir: python/dist/" in result
+        assert "verbose: true" in result
+
+    def test_packages_dir_not_doubled(self):
+        """If packages-dir already present, don't add another."""
+        content = PYPI_PUBLISH_WITH_EXISTING_WITH.replace(
+            "verbose: true",
+            "verbose: true\n          packages-dir: python/dist/",
+        )
+        result = _inject_packages_dir(content, "python")
+        assert result.count("packages-dir") == 1
+
+    def test_integration_pypi_publish(self, mock_git_repo, capsys):
+        """Full sync injects packages-dir for PyPI publish workflow."""
+        proj_dir = os.path.join(str(mock_git_repo), "mypylib")
+        os.makedirs(proj_dir, exist_ok=True)
+        with open(os.path.join(proj_dir, "pyproject.toml"), "w") as f:
+            f.write('[project]\nname = "mypylib"\nversion = "0.1.0"\n')
+        wf_dir = os.path.join(proj_dir, ".github", "workflows")
+        os.makedirs(wf_dir, exist_ok=True)
+        with open(os.path.join(wf_dir, "ci.yml"), "w") as f:
+            f.write(CI_WORKFLOW)
+        with open(os.path.join(wf_dir, "publish.yml"), "w") as f:
+            f.write(PYPI_PUBLISH_WORKFLOW)
+
+        _cmd_init({})
+        from rlsbl.workspace import save_workspace
+        save_workspace(".", [{"path": "mypylib", "name": "mypylib"}])
+        subprocess.run(["git", "add", "."], cwd=str(mock_git_repo), check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "setup"],
+            cwd=str(mock_git_repo), check=True,
+        )
+
+        _cmd_sync({})
+        dest = mock_git_repo / ".github" / "workflows" / "mypylib-publish.yml"
+        content = dest.read_text()
+        assert "packages-dir: mypylib/dist/" in content
