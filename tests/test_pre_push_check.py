@@ -172,15 +172,15 @@ class TestJsonlReleaseCommitSkipping:
         error = _check_jsonl_changelog(str(repo), refs)
         assert error is None
 
-    def test_mixed_release_and_code_commits_still_checked(self, jsonl_git_repo):
-        """Non-release commits still require JSONL coverage even if release commits are present."""
+    def test_version_bump_skips_entire_check(self, jsonl_git_repo):
+        """A push containing a version bump commit skips the entire check (release push)."""
         repo = jsonl_git_repo
-        # Regular code commit (needs coverage)
+        # Regular code commit (would normally need coverage)
         (repo / "src.py").write_text("x = 1\n")
         _run_git(repo, "add", "src.py")
         _run_git(repo, "commit", "-q", "-m", "feat: add feature")
 
-        # Version bump commit (release, should be skipped)
+        # Version bump commit (release -- validation already ran during rlsbl release)
         (repo / "package.json").write_text('{"name":"pkg","version":"1.0.0"}\n')
         _run_git(repo, "add", "package.json")
         _run_git(repo, "commit", "-q", "-m", "v1.0.0")
@@ -189,9 +189,8 @@ class TestJsonlReleaseCommitSkipping:
         zero = "0" * 40
         refs = [(sha, zero)]
         error = _check_jsonl_changelog(str(repo), refs)
-        # Should fail because the code commit is not covered
-        assert error is not None
-        assert "no entries" in error
+        # Entire check skipped because this is a release push
+        assert error is None
 
     def test_code_commits_with_jsonl_coverage_pass(self, jsonl_git_repo):
         """Code commits with proper JSONL coverage pass alongside release commits."""

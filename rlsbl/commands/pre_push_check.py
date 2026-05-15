@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 from ..changelog import changes_dir_exists, get_changes_dir, read_unreleased, resolve_hashes
-from ..changelog.validate import _is_release_commit
+from ..changelog.validate import _get_commit_message, _is_release_commit
 from ..targets import TARGETS
 from ..workspace import find_workspace_root, load_workspace
 
@@ -59,11 +59,17 @@ def _check_jsonl_changelog(dir_path, refs):
     if pushed_commits is None:
         return None  # Could not determine pushed commits -- skip
 
-    # Filter out release infrastructure commits (version bumps, changelog
-    # finalization) -- these are structural and don't need JSONL coverage.
-    non_release_commits = {sha for sha in pushed_commits if not _is_release_commit(sha)}
+    # If any pushed commit is a version bump (message matches vX.Y.Z),
+    # this is a release push -- validation already ran during rlsbl release.
+    for sha in pushed_commits:
+        if _is_release_commit(sha):
+            msg = _get_commit_message(sha)
+            if msg and re.match(r"^v\d+\.\d+\.\d+$", msg):
+                return None
 
-    # If all pushed commits are release infrastructure, nothing to check
+    # Filter out release infrastructure commits (changelog finalization,
+    # etc.) -- these are structural and don't need JSONL coverage.
+    non_release_commits = {sha for sha in pushed_commits if not _is_release_commit(sha)}
     if not non_release_commits:
         return None
 
