@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from ..changelog import changes_dir_exists, get_changes_dir, read_unreleased, resolve_hashes
-from ..changelog.validate import _unreleased_range
+from ..changelog.validate import _is_changelog_only_commit, _unreleased_range
 from ..targets import TARGETS, detect_targets
 from ..utils import (
     extract_changelog_entry,
@@ -71,7 +71,8 @@ def _collect_status(registry, target_path="."):
             resolved = resolve_hashes(all_hashes)
             covered_shas = {full for full in resolved.values() if full is not None}
 
-            # Count unreleased commits
+            # Count unreleased commits (excluding changelog-only commits,
+            # consistent with changelog validate's coverage check)
             try:
                 range_spec = _unreleased_range()
                 result = subprocess.run(
@@ -79,14 +80,26 @@ def _collect_status(registry, target_path="."):
                     capture_output=True, text=True, timeout=30,
                 )
                 if result.returncode == 0:
-                    unreleased_commits = [
+                    all_unreleased = [
                         line.strip()
                         for line in result.stdout.strip().splitlines()
                         if line.strip()
                     ]
+                    # Filter out changelog-only commits (same exemption as validate)
+                    unreleased_commits = [
+                        c for c in all_unreleased
+                        if not _is_changelog_only_commit(c)
+                    ]
+                    exempted = len(all_unreleased) - len(unreleased_commits)
                     total = len(unreleased_commits)
                     covered = sum(1 for c in unreleased_commits if c in covered_shas)
-                    jsonl_coverage = f"{covered}/{total} commits covered"
+                    if exempted > 0:
+                        jsonl_coverage = (
+                            f"{covered}/{total} commits covered"
+                            f" ({exempted} changelog-only exempted)"
+                        )
+                    else:
+                        jsonl_coverage = f"{covered}/{total} commits covered"
                 else:
                     jsonl_coverage = f"{len(entries)} entries"
             except (subprocess.TimeoutExpired, FileNotFoundError, OSError):

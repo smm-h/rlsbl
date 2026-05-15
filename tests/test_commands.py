@@ -485,6 +485,128 @@ class TestScaffold(unittest.TestCase):
         self.assertTrue(any(s == "merged" for _, s in created))
 
 
+class TestGitignoreSetUnionMerge(unittest.TestCase):
+    """Tests for .gitignore set-union merge in scaffold --update."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+        os.system("git init -q .")
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    def test_gitignore_appends_new_entries(self):
+        """Scaffold --update on .gitignore appends new entries without conflicts."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(tpl_dir)
+
+        # Existing .gitignore with user entries
+        with open(".gitignore", "w") as f:
+            f.write("# User entries\nnode_modules/\n.env\n")
+
+        # Template .gitignore with some overlap and some new entries
+        with open(os.path.join(tpl_dir, "gitignore.tpl"), "w") as f:
+            f.write("# Template entries\nnode_modules/\ndist/\n.credentials.json\n")
+
+        mappings = [{"template": "gitignore.tpl", "target": ".gitignore"}]
+        created, skipped, warnings, _ = process_mappings(
+            tpl_dir, mappings, {}, force=False, update=True,
+        )
+
+        with open(".gitignore") as f:
+            result = f.read()
+
+        # User entries preserved
+        self.assertIn("node_modules/", result)
+        self.assertIn(".env", result)
+        # New entries added
+        self.assertIn("dist/", result)
+        self.assertIn(".credentials.json", result)
+        # No conflict markers
+        self.assertNotIn("<<<<<<<", result)
+        self.assertNotIn("=======", result)
+        self.assertNotIn(">>>>>>>", result)
+        # Should report as updated
+        self.assertTrue(any("updated" in s for _, s in created),
+                        f"Expected 'updated' status, got created={created}")
+
+    def test_gitignore_no_duplicates(self):
+        """Entries already in .gitignore are not duplicated."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(tpl_dir)
+
+        with open(".gitignore", "w") as f:
+            f.write("node_modules/\ndist/\n")
+
+        with open(os.path.join(tpl_dir, "gitignore.tpl"), "w") as f:
+            f.write("node_modules/\ndist/\n")
+
+        mappings = [{"template": "gitignore.tpl", "target": ".gitignore"}]
+        created, skipped, warnings, _ = process_mappings(
+            tpl_dir, mappings, {}, force=False, update=True,
+        )
+
+        with open(".gitignore") as f:
+            result = f.read()
+
+        # Count occurrences
+        self.assertEqual(result.count("node_modules/"), 1)
+        self.assertEqual(result.count("dist/"), 1)
+        # Should be skipped (unchanged)
+        self.assertTrue(any(t == ".gitignore" for t, _ in skipped),
+                        f"Expected .gitignore in skipped, got skipped={skipped}")
+
+    def test_gitignore_preserves_user_comments(self):
+        """User comments and formatting are preserved in the existing file."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(tpl_dir)
+
+        with open(".gitignore", "w") as f:
+            f.write("# My project ignores\nnode_modules/\n\n# Build output\ndist/\n")
+
+        with open(os.path.join(tpl_dir, "gitignore.tpl"), "w") as f:
+            f.write("node_modules/\n.rlsbl/lock\n")
+
+        mappings = [{"template": "gitignore.tpl", "target": ".gitignore"}]
+        process_mappings(tpl_dir, mappings, {}, force=False, update=True)
+
+        with open(".gitignore") as f:
+            result = f.read()
+
+        # User comments preserved
+        self.assertIn("# My project ignores", result)
+        self.assertIn("# Build output", result)
+        # New entry added
+        self.assertIn(".rlsbl/lock", result)
+
+    def test_gitignore_force_overwrites(self):
+        """With --force, .gitignore should be overwritten entirely."""
+        tpl_dir = os.path.join(self.tmp_dir, "_tpls")
+        os.makedirs(tpl_dir)
+
+        with open(".gitignore", "w") as f:
+            f.write("# User entries\nnode_modules/\n.env\n")
+
+        with open(os.path.join(tpl_dir, "gitignore.tpl"), "w") as f:
+            f.write("# Template\ndist/\n")
+
+        mappings = [{"template": "gitignore.tpl", "target": ".gitignore"}]
+        created, skipped, warnings, _ = process_mappings(
+            tpl_dir, mappings, {}, force=True,
+        )
+
+        with open(".gitignore") as f:
+            result = f.read()
+
+        # Force should overwrite completely
+        self.assertIn("dist/", result)
+        self.assertNotIn(".env", result)
+        self.assertTrue(any(s == "overwritten" for _, s in created))
+
+
 class TestHashFunctions(unittest.TestCase):
     """Tests for hash utility functions."""
 
@@ -966,6 +1088,101 @@ class TestStatusJson(unittest.TestCase):
         self.assertEqual(data["target"], "npm")
         self.assertTrue(data["clean"])
         self.assertTrue(data["changelog"])
+
+
+class TestStatusChangelogExemption(unittest.TestCase):
+    """Tests for status exempting changelog-only commits from coverage."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+        # Create a git repo
+        subprocess.run(["git", "init", "-q", "."], check=True)
+        subprocess.run(["git", "config", "user.email", "test@test.local"], check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True)
+        # Create minimal npm project
+        with open("package.json", "w") as f:
+            json.dump({"name": "test-pkg", "version": "0.1.0"}, f, indent=2)
+            f.write("\n")
+        with open("CHANGELOG.md", "w") as f:
+            f.write("# Changelog\n\n## 0.1.0\n\nInitial release.\n")
+        subprocess.run(["git", "add", "package.json", "CHANGELOG.md"], check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "initial"], check=True)
+        subprocess.run(["git", "tag", "v0.1.0"], check=True)
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    def test_changelog_only_commits_exempted_from_coverage(self):
+        """Commits that only touch changelog files should not show as uncovered."""
+        from rlsbl.commands.status import _collect_status
+
+        # Set up JSONL changes directory
+        changes_dir = os.path.join(".rlsbl", "changes")
+        os.makedirs(changes_dir, exist_ok=True)
+
+        # Make a real code commit
+        with open("code.js", "w") as f:
+            f.write("console.log('hello');\n")
+        subprocess.run(["git", "add", "code.js"], check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "feat: add code"], check=True)
+        code_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+        # Add a JSONL entry covering the code commit
+        with open(os.path.join(changes_dir, "unreleased.jsonl"), "w") as f:
+            f.write(json.dumps({
+                "commits": [code_sha[:12]],
+                "user_facing": True,
+                "description": "Add code",
+                "type": "feature",
+            }) + "\n")
+        subprocess.run(["git", "add", os.path.join(changes_dir, "unreleased.jsonl")], check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "changelog: add entry"], check=True)
+
+        # Now there are 2 unreleased commits: the code commit and the changelog commit.
+        # The changelog commit only touches .rlsbl/changes/ and should be exempted.
+        data = _collect_status("npm")
+        # Coverage should show 1/1 (the changelog-only commit exempted)
+        self.assertIn("1/1", data["jsonl_coverage"])
+        self.assertIn("1 changelog-only exempted", data["jsonl_coverage"])
+
+    def test_no_exemption_annotation_when_no_changelog_commits(self):
+        """When there are no changelog-only commits, no exemption note is shown."""
+        from rlsbl.commands.status import _collect_status
+
+        changes_dir = os.path.join(".rlsbl", "changes")
+        os.makedirs(changes_dir, exist_ok=True)
+
+        # Make a real code commit
+        with open("code.js", "w") as f:
+            f.write("console.log('hello');\n")
+        subprocess.run(["git", "add", "code.js"], check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "feat: add code"], check=True)
+        code_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+        # Add a JSONL entry covering the code commit
+        with open(os.path.join(changes_dir, "unreleased.jsonl"), "w") as f:
+            f.write(json.dumps({
+                "commits": [code_sha[:12]],
+                "user_facing": True,
+                "description": "Add code",
+                "type": "feature",
+            }) + "\n")
+
+        # Stage but don't commit the JSONL (so it's part of the code commit conceptually)
+        # Actually, we need the JSONL file on disk but not as a separate commit
+        data = _collect_status("npm")
+        # Should show 1/1 without exemption note
+        self.assertIn("1/1", data["jsonl_coverage"])
+        self.assertNotIn("exempted", data["jsonl_coverage"])
 
 
 class TestMigrateCommand(unittest.TestCase):
