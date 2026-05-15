@@ -8,3 +8,4 @@
 {"commits":["97dd5264bc201955d1eb26fd67eb31e3faf41d67","5a150588680b295c929d3ec9b4df1c754c3625a9","25fb512"],"user_facing":true,"description":"**Fix: pre-push hook compatibility with strictcli.** The pre-push hook no longer passes extra arguments that strictcli rejects. Release pushes (containing a version bump commit) skip the JSONL coverage check entirely since validation already ran during `rlsbl release`.","type":"fix"}
 {"commits":["ade74444cd19787fdc05dc425cbb83ae4734f2ae","f59d5f8b6a35518f1479e9a466bb370a04b680ca","1eebe522c03815b48bf920775af569509e7408cf","99371cc898c9dfebde48b5f2bf0632d3655ebcd8","a12d02b","f527927","bfba1d8","6a7a99c"],"user_facing":false}
 {"commits":["25fb512"],"user_facing":false}
+{"commits":["504a2550d34c"],"user_facing":false}
