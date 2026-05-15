@@ -297,6 +297,68 @@ class TestCmdGenerate:
         assert "Feature Y" in captured.out
         assert "dry-run" in captured.out
 
+    def test_auto_commits(self, rlsbl_repo):
+        """After generating, commit_files is called with changed files."""
+        sha = _make_commit(rlsbl_repo)
+        changes_dir = get_changes_dir(".")
+        append_entry(
+            changes_dir,
+            ChangelogEntry(
+                commits=[sha],
+                user_facing=True,
+                description="Added feature Z",
+                type="feature",
+            ),
+        )
+
+        with mock.patch("rlsbl.commands.changelog_cmd.commit_files") as mock_commit:
+            with mock.patch(
+                "rlsbl.commands.changelog_cmd._get_generated_files",
+                return_value=["CHANGELOG.md"],
+            ):
+                cmd_generate({"dry-run": False})
+                mock_commit.assert_called_once()
+                call_args = mock_commit.call_args
+                assert call_args[0][0] == "changelog: regenerate from JSONL"
+                assert call_args[0][1] == ["CHANGELOG.md"]
+                assert call_args[1]["allow_failure"] is True
+
+    def test_no_commit_flag(self, rlsbl_repo):
+        """With --no-commit, commit_files is NOT called."""
+        sha = _make_commit(rlsbl_repo)
+        changes_dir = get_changes_dir(".")
+        append_entry(
+            changes_dir,
+            ChangelogEntry(
+                commits=[sha],
+                user_facing=True,
+                description="Added feature W",
+                type="feature",
+            ),
+        )
+
+        with mock.patch("rlsbl.commands.changelog_cmd.commit_files") as mock_commit:
+            cmd_generate({"dry-run": False, "no-commit": True})
+            mock_commit.assert_not_called()
+
+    def test_dry_run_does_not_commit(self, rlsbl_repo, capsys):
+        """Dry-run should NOT trigger auto-commit."""
+        sha = _make_commit(rlsbl_repo)
+        changes_dir = get_changes_dir(".")
+        append_entry(
+            changes_dir,
+            ChangelogEntry(
+                commits=[sha],
+                user_facing=True,
+                description="Feature Q",
+                type="feature",
+            ),
+        )
+
+        with mock.patch("rlsbl.commands.changelog_cmd.commit_files") as mock_commit:
+            cmd_generate({"dry-run": True})
+            mock_commit.assert_not_called()
+
     def test_no_changes_dir(self, tmp_path, monkeypatch):
         """Error when .rlsbl/changes/ does not exist."""
         monkeypatch.chdir(tmp_path)

@@ -467,9 +467,10 @@ def cmd_chlog_validate():
 
 @chlog.command(name="generate", help="Compile all validated JSONL changelog entries into a formatted CHANGELOG.md file. Groups entries by type (features, fixes, breaking changes) under the appropriate version heading, preserving existing changelog content for previous releases. Use --dry-run to preview the generated Markdown output without writing to disk, which is useful for reviewing before committing.")
 @strictcli.flag(name="dry-run", type=bool, help="Preview without writing files")
-def cmd_chlog_generate(dry_run):
+@strictcli.flag(name="no-commit", type=bool, help="Skip auto-commit of generated files")
+def cmd_chlog_generate(dry_run, no_commit):
     _require_project_root()
-    flags = {"dry-run": dry_run}
+    flags = {"dry-run": dry_run, "no-commit": no_commit}
     from .commands.changelog_cmd import cmd_generate
     cmd_generate(flags)
 

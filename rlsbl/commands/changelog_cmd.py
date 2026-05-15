@@ -1,6 +1,7 @@
 """Changelog subcommands for adding new entries, validating existing ones, and generating Markdown changelogs from JSONL sources."""
 
 import os
+import subprocess
 import sys
 
 from ..changelog.files import append_entry, changes_dir_exists, get_changes_dir
@@ -146,3 +147,42 @@ def cmd_generate(flags):
     else:
         content = generate_changelog(".")
         print("Generated CHANGELOG.md")
+
+        if not flags.get("no-commit"):
+            # Collect changed files: CHANGELOG.md and per-version .md files
+            changed_files = _get_generated_files(".")
+            if changed_files:
+                commit_files(
+                    "changelog: regenerate from JSONL",
+                    changed_files,
+                    allow_failure=True,
+                )
+
+
+def _get_generated_files(project_path: str) -> list[str]:
+    """Return paths of files modified or created by generate_changelog.
+
+    Checks git status for CHANGELOG.md and .rlsbl/changes/*.md files.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+
+    changes_dir = get_changes_dir(project_path)
+    files = []
+    for line in result.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        filepath = line[3:].strip()
+        # Match CHANGELOG.md or .rlsbl/changes/*.md
+        if filepath == "CHANGELOG.md":
+            files.append(os.path.join(project_path, filepath))
+        elif filepath.startswith(".rlsbl/changes/") and filepath.endswith(".md"):
+            files.append(os.path.join(project_path, filepath))
+    return files
