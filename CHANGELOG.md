@@ -13,7 +13,7 @@
 
 - **Fix: selfdoc CLI documentation.** Replaced incompatible `code-help` directives with auto-generated CLI docs via `selfdoc gen`, fixing the build warning after the strictcli migration.
 - **Fix: monorepo commands commit without safegit.** `monorepo init`, `add`, and `sync` now properly fall back to plain git when safegit is not installed, instead of silently skipping the commit.
-- **Fix: pre-push hook compatibility with strictcli.** The pre-push hook no longer passes extra arguments that strictcli rejects. Release commits (version bump, changelog finalization) are now correctly skipped in JSONL coverage checks.
+- **Fix: pre-push hook compatibility with strictcli.** The pre-push hook no longer passes extra arguments that strictcli rejects. Release pushes (containing a version bump commit) skip the JSONL coverage check entirely since validation already ran during `rlsbl release`.
 
 ## 0.24.0
 
