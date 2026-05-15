@@ -248,10 +248,10 @@ class TestPrePushWithJsonl:
 
 
 class TestPrePushWithoutJsonl:
-    """Pre-push check falls back to heading check when no .rlsbl/changes/."""
+    """Pre-push check warns when no .rlsbl/changes/ but doesn't block."""
 
-    def test_falls_back_to_heading_check(self, tmp_project):
-        """Without .rlsbl/changes/, uses _check_changelog."""
+    def test_warns_no_jsonl(self, tmp_project, capsys):
+        """Without .rlsbl/changes/, warns and exits 0."""
         (tmp_project / "package.json").write_text(
             json.dumps({"name": "test-pkg", "version": "1.0.0"})
         )
@@ -265,6 +265,8 @@ class TestPrePushWithoutJsonl:
             run_cmd(None, [], {})
 
         assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "JSONL changelog not set up" in captured.err
 
 
 # ---------------------------------------------------------------------------
@@ -340,18 +342,14 @@ class TestUnreleasedWithJsonl:
 
 
 class TestUnreleasedWithoutJsonl:
-    """Unreleased command uses keyword matching when no .rlsbl/changes/."""
+    """Unreleased command requires JSONL changelog."""
 
-    def test_keyword_matching_still_works(self, mock_git_repo, capsys):
-        """Without .rlsbl/changes/, keyword matching is used."""
+    def test_errors_without_jsonl(self, mock_git_repo, capsys):
+        """Without .rlsbl/changes/, unreleased exits with error."""
         repo = mock_git_repo
         subprocess.run(["git", "tag", "v1.0.0"], cwd=str(repo), check=True)
 
         _make_commit(repo, "feat.txt", "feat: add widget support")
-
-        (repo / "CHANGELOG.md").write_text(
-            "# Changelog\n\n## Unreleased\n\n- Add widget support\n\n## 1.0.0\n\n- Init\n"
-        )
 
         assert not changes_dir_exists(".")
 
@@ -359,9 +357,9 @@ class TestUnreleasedWithoutJsonl:
 
         with pytest.raises(SystemExit) as exc_info:
             run_cmd(None, [], {})
-        assert exc_info.value.code == 0
+        assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "[COVERED]" in captured.out
+        assert "JSONL changelog not set up" in captured.err
 
 
 # ---------------------------------------------------------------------------
@@ -442,10 +440,10 @@ class TestStatusWithJsonl:
 
 
 class TestStatusWithoutJsonl:
-    """Status command shows no JSONL info when .rlsbl/changes/ is absent."""
+    """Status command shows 'not set up' when .rlsbl/changes/ is absent."""
 
-    def test_no_jsonl_info(self, mock_git_repo, capsys):
-        """Without .rlsbl/changes/, jsonl_coverage is None and not displayed."""
+    def test_shows_not_set_up(self, mock_git_repo, capsys):
+        """Without .rlsbl/changes/, jsonl_coverage is 'not set up'."""
         repo = mock_git_repo
         _setup_npm_project(repo)
         (repo / "CHANGELOG.md").write_text("# Changelog\n\n## 1.0.0\n\n- Init\n")
@@ -455,10 +453,10 @@ class TestStatusWithoutJsonl:
         from rlsbl.commands.status import _collect_status
 
         data = _collect_status("npm")
-        assert data["jsonl_coverage"] is None
+        assert data["jsonl_coverage"] == "not set up"
 
-    def test_no_jsonl_in_text_output(self, mock_git_repo, capsys):
-        """Text output has no JSONL line when no .rlsbl/changes/ exists."""
+    def test_text_output_shows_not_set_up(self, mock_git_repo, capsys):
+        """Text output shows JSONL: not set up when no .rlsbl/changes/ exists."""
         repo = mock_git_repo
         _setup_npm_project(repo)
         (repo / "CHANGELOG.md").write_text("# Changelog\n\n## 1.0.0\n\n- Init\n")
@@ -467,4 +465,4 @@ class TestStatusWithoutJsonl:
 
         run_cmd("npm", [], {})
         captured = capsys.readouterr()
-        assert "JSONL:" not in captured.out
+        assert "JSONL:     not set up" in captured.out

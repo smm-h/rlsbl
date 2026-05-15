@@ -1,8 +1,6 @@
 """Unreleased command that lists commits since the last tag and checks whether each one is covered by a corresponding changelog entry."""
 
 import json
-import os
-import re
 import subprocess
 import sys
 
@@ -59,81 +57,6 @@ def _get_commits_since(tag):
     return commits
 
 
-def _get_unreleased_changelog_text(changelog_path):
-    """Extract changelog text that covers unreleased changes.
-
-    Looks for an "## Unreleased" section first, then falls back to the first
-    section in the file (the one above the last released version).
-    Returns the text content or empty string if nothing found.
-    """
-    if not os.path.isfile(changelog_path):
-        return ""
-
-    with open(changelog_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    # Look for an explicit "## Unreleased" section (case-insensitive)
-    unreleased_match = re.search(
-        r"^## [Uu]nreleased\s*$", content, re.MULTILINE
-    )
-    if unreleased_match:
-        start = unreleased_match.end()
-        next_heading = content.find("\n## ", start)
-        end = len(content) if next_heading == -1 else next_heading
-        return content[start:end].strip()
-
-    # Fall back: grab the first ## section (which is typically the next release)
-    # Only if it doesn't match an already-tagged version
-    first_heading = re.search(r"^## (.+)$", content, re.MULTILINE)
-    if first_heading:
-        start = first_heading.end()
-        next_heading = content.find("\n## ", start)
-        end = len(content) if next_heading == -1 else next_heading
-        # Return the section header + body for keyword matching
-        return first_heading.group(0) + "\n" + content[start:end].strip()
-
-    return ""
-
-
-def _extract_keywords(subject):
-    """Extract significant keywords from a commit subject for matching.
-
-    Strips conventional-commit prefixes (fix:, feat:, etc.) and common
-    noise words, returns lowercase keywords of length >= 3.
-    """
-    # Remove conventional commit prefix
-    cleaned = re.sub(r"^[a-z]+(\([^)]*\))?:\s*", "", subject, flags=re.IGNORECASE)
-    # Split into words, lowercase, filter short/noise words
-    noise = {"the", "and", "for", "with", "from", "into", "that", "this", "not", "are"}
-    words = re.findall(r"[a-zA-Z0-9_-]+", cleaned.lower())
-    return [w for w in words if len(w) >= 3 and w not in noise]
-
-
-def _is_covered(subject, changelog_text):
-    """Check if a commit subject is covered by changelog text.
-
-    Uses keyword matching: if any significant keyword from the subject
-    appears in the changelog text, we consider it covered.
-    """
-    if not changelog_text:
-        return False
-
-    changelog_lower = changelog_text.lower()
-
-    # Direct substring match of the full subject (minus prefix)
-    cleaned = re.sub(r"^[a-z]+(\([^)]*\))?:\s*", "", subject, flags=re.IGNORECASE)
-    if cleaned.lower() in changelog_lower:
-        return True
-
-    # Keyword matching: require at least 2 keywords to match (or 1 if only 1 keyword)
-    keywords = _extract_keywords(subject)
-    if not keywords:
-        return False
-
-    matched = sum(1 for kw in keywords if kw in changelog_lower)
-    threshold = min(2, len(keywords))
-    return matched >= threshold
-
 
 def run_cmd(registry, args, flags):
     """List unreleased commits and their changelog coverage.
@@ -150,24 +73,23 @@ def run_cmd(registry, args, flags):
             print("No unreleased commits.")
         sys.exit(0)
 
-    # Cross-reference each commit against changelog
-    if changes_dir_exists("."):
-        # JSONL mode: exact hash-based matching
-        changes_dir = get_changes_dir(".")
-        entries = read_unreleased(changes_dir)
-        all_hashes = []
-        for entry in entries:
-            all_hashes.extend(entry.commits)
-        resolved = resolve_hashes(all_hashes)
-        covered_shas = {full for full in resolved.values() if full is not None}
-        for commit in commits:
-            commit["covered"] = commit["hash"] in covered_shas
-    else:
-        # Manual mode: keyword-based matching
-        changelog_path = "CHANGELOG.md"
-        changelog_text = _get_unreleased_changelog_text(changelog_path)
-        for commit in commits:
-            commit["covered"] = _is_covered(commit["subject"], changelog_text)
+    # Cross-reference each commit against JSONL changelog
+    if not changes_dir_exists("."):
+        print(
+            "Error: JSONL changelog not set up. Run 'rlsbl scaffold --update' to create .rlsbl/changes/",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    changes_dir = get_changes_dir(".")
+    entries = read_unreleased(changes_dir)
+    all_hashes = []
+    for entry in entries:
+        all_hashes.extend(entry.commits)
+    resolved = resolve_hashes(all_hashes)
+    covered_shas = {full for full in resolved.values() if full is not None}
+    for commit in commits:
+        commit["covered"] = commit["hash"] in covered_shas
 
     covered_count = sum(1 for c in commits if c["covered"])
     total = len(commits)

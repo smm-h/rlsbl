@@ -23,6 +23,10 @@ def _setup_project(tmp_path, hook_name, hook_body):
     (tmp_path / "CHANGELOG.md").write_text(
         "# Changelog\n\n## 1.0.1\n\nPatch release with improvements.\n"
     )
+    # JSONL changelog
+    changes_dir = tmp_path / ".rlsbl" / "changes"
+    changes_dir.mkdir(parents=True, exist_ok=True)
+    (changes_dir / "unreleased.jsonl").write_text("")
     # Hook script
     hooks_dir = tmp_path / ".rlsbl" / "hooks"
     hooks_dir.mkdir(parents=True)
@@ -42,8 +46,12 @@ class TestPreReleaseHookOutput:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_hook_streams_output(
         self,
+        _validate,
+        _gen_cl,
         _gh_inst,
         _gh_auth,
         _clean,
@@ -83,8 +91,12 @@ class TestPreReleaseHookOutput:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_hook_exit_code_in_error_message(
         self,
+        _validate,
+        _gen_cl,
         _gh_inst,
         _gh_auth,
         _clean,
@@ -121,6 +133,9 @@ class TestPreReleaseHookOutput:
         (tmp_project / "CHANGELOG.md").write_text(
             "# Changelog\n\n## 1.0.1\n\nPatch release.\n"
         )
+        changes_dir = tmp_project / ".rlsbl" / "changes"
+        changes_dir.mkdir(parents=True, exist_ok=True)
+        (changes_dir / "unreleased.jsonl").write_text("")
         # No .rlsbl/hooks/pre-release.sh created
 
         with (
@@ -131,6 +146,8 @@ class TestPreReleaseHookOutput:
             patch("rlsbl.commands.release.is_clean_tree", return_value=True),
             patch("rlsbl.commands.release.check_gh_auth", return_value=True),
             patch("rlsbl.commands.release.check_gh_installed", return_value=True),
+            patch("rlsbl.commands.release.generate_changelog"),
+            patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}}),
             patch("rlsbl.commands.release.subprocess") as mock_sp,
         ):
             mock_run.side_effect = ["", "0", "v1.0.0", ""]
@@ -155,8 +172,12 @@ class TestPostReleaseHookOutput:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_failed_hook_is_non_fatal(
         self,
+        _validate,
+        _gen_cl,
         _gh_inst,
         _gh_auth,
         _clean,
@@ -224,8 +245,12 @@ class TestWatchSHABeforePostHook:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_watch_sha_is_pre_hook_commit(
         self,
+        _validate,
+        _gen_cl,
         _gh_inst,
         _gh_auth,
         _clean,
@@ -312,8 +337,12 @@ class TestHookTimeout:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_pre_release_timeout_message_includes_seconds(
         self,
+        _validate,
+        _gen_cl,
         _gh_inst,
         _gh_auth,
         _clean,

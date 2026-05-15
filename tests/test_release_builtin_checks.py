@@ -28,6 +28,9 @@ def _setup_npm_project(tmp_path, test_script=None):
     (tmp_path / "CHANGELOG.md").write_text(
         "# Changelog\n\n## 1.0.1\n\nPatch release with improvements.\n"
     )
+    changes_dir = tmp_path / ".rlsbl" / "changes"
+    changes_dir.mkdir(parents=True, exist_ok=True)
+    (changes_dir / "unreleased.jsonl").write_text("")
 
 
 def _setup_pypi_project(tmp_path):
@@ -38,6 +41,9 @@ def _setup_pypi_project(tmp_path):
     (tmp_path / "CHANGELOG.md").write_text(
         "# Changelog\n\n## 1.0.1\n\nPatch release with improvements.\n"
     )
+    changes_dir = tmp_path / ".rlsbl" / "changes"
+    changes_dir.mkdir(parents=True, exist_ok=True)
+    (changes_dir / "unreleased.jsonl").write_text("")
 
 
 def _setup_go_project(tmp_path):
@@ -260,8 +266,12 @@ class TestTwoHookModel:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_pre_checks_hook_runs_before_tests(
         self,
+        _validate,
+        _gen_cl,
         _gh_inst,
         _gh_auth,
         _clean,
@@ -308,8 +318,12 @@ class TestTwoHookModel:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_pre_release_hook_runs_after_builtin_checks(
         self,
+        _validate,
+        _gen_cl,
         _gh_inst,
         _gh_auth,
         _clean,
@@ -355,8 +369,12 @@ class TestTwoHookModel:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_pre_checks_hook_failure_aborts_before_tests(
         self,
+        _validate,
+        _gen_cl,
         _gh_inst,
         _gh_auth,
         _clean,
@@ -404,8 +422,12 @@ class TestFullFlowOrder:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_execution_order(
         self,
+        _validate,
+        _gen_cl,
         _gh_inst,
         _gh_auth,
         _clean,

@@ -24,24 +24,6 @@ def _detect_version(dir_path="."):
     return None, None
 
 
-def _check_changelog(dir_path, version):
-    """Check that CHANGELOG.md in dir_path has a ## <version> heading.
-
-    Returns None on success, or an error message string on failure.
-    """
-    changelog_path = os.path.join(dir_path, "CHANGELOG.md")
-    if not os.path.exists(changelog_path):
-        return None  # no changelog -- skip
-
-    with open(changelog_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    pattern = re.compile(r"^## " + re.escape(version) + r"\s*$", re.MULTILINE)
-    if pattern.search(content):
-        return None
-
-    return f"CHANGELOG.md has no entry for version {version}"
-
 
 def _check_jsonl_changelog(dir_path, refs):
     """Check JSONL changelog coverage for commits being pushed.
@@ -241,15 +223,11 @@ def _run_monorepo_check(workspace_root, projects, changed_files, refs=None):
     for proj in affected:
         proj_dir = os.path.join(workspace_root, proj["path"])
 
-        if changes_dir_exists(proj_dir) and refs is not None:
-            # JSONL mode: check commit coverage
-            error = _check_jsonl_changelog(proj_dir, refs)
-        else:
-            # Manual mode: check heading
-            version, _ = _detect_version(proj_dir)
-            if not version:
-                continue  # cannot detect version -- skip
-            error = _check_changelog(proj_dir, version)
+        if not changes_dir_exists(proj_dir):
+            continue  # JSONL not set up for this project -- skip
+        if refs is None:
+            continue  # No refs available -- skip
+        error = _check_jsonl_changelog(proj_dir, refs)
 
         if error:
             version, _ = _detect_version(proj_dir)
@@ -260,17 +238,8 @@ def _run_monorepo_check(workspace_root, projects, changed_files, refs=None):
 
     for name, version, error in failures:
         print(f"Error: {name}: {error}.", file=sys.stderr)
-        proj_dir = None
-        for proj in projects:
-            if proj["name"] == name:
-                proj_dir = os.path.join(workspace_root, proj["path"])
-                break
-        if proj_dir and changes_dir_exists(proj_dir):
-            print(f"Add JSONL changelog entries covering all pushed commits for {name}.",
-                  file=sys.stderr)
-        else:
-            print(f"Add a '## {version}' section to {name}'s CHANGELOG.md before pushing.",
-                  file=sys.stderr)
+        print(f"Add JSONL changelog entries covering all pushed commits for {name}.",
+              file=sys.stderr)
     sys.exit(1)
 
 
@@ -297,28 +266,19 @@ def run_cmd(registry, args, flags):
                 # _run_monorepo_check always calls sys.exit, so this is unreachable
 
     # Single-project fallback
-    if changes_dir_exists("."):
-        # JSONL mode: check commit coverage
-        refs = _parse_stdin_refs()
-        if refs is not None:
-            error = _check_jsonl_changelog(".", refs)
-            if error is None:
-                sys.exit(0)
-            print(f"Error: {error}.", file=sys.stderr)
-            print("Add JSONL changelog entries covering all pushed commits.", file=sys.stderr)
-            sys.exit(1)
-        # No refs available (not called from pre-push hook) -- skip
+    if not changes_dir_exists("."):
+        # JSONL changelog not set up -- warn but don't block
+        print("Warning: JSONL changelog not set up. Run 'rlsbl scaffold --update' to create .rlsbl/changes/", file=sys.stderr)
         sys.exit(0)
 
-    # Manual changelog mode
-    version, _project_type = _detect_version()
-    if not version:
-        sys.exit(0)
-
-    error = _check_changelog(".", version)
-    if error is None:
-        sys.exit(0)
-
-    print(f"Error: {error}.", file=sys.stderr)
-    print(f"Add a '## {version}' section before pushing.", file=sys.stderr)
-    sys.exit(1)
+    # JSONL mode: check commit coverage
+    refs = _parse_stdin_refs()
+    if refs is not None:
+        error = _check_jsonl_changelog(".", refs)
+        if error is None:
+            sys.exit(0)
+        print(f"Error: {error}.", file=sys.stderr)
+        print("Add JSONL changelog entries covering all pushed commits.", file=sys.stderr)
+        sys.exit(1)
+    # No refs available (not called from pre-push hook) -- skip
+    sys.exit(0)

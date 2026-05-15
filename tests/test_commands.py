@@ -532,6 +532,10 @@ class TestRelease(unittest.TestCase):
         # Create CHANGELOG.md with entry for the bumped version
         with open("CHANGELOG.md", "w") as f:
             f.write("# Changelog\n\n## 1.0.1\n\nPatch release with bugfixes and improvements.\n")
+        # Create .rlsbl/changes/ with a valid unreleased entry
+        os.makedirs(os.path.join(".rlsbl", "changes"), exist_ok=True)
+        with open(os.path.join(".rlsbl", "changes", "unreleased.jsonl"), "w") as f:
+            f.write('{"commits":["abc1234"],"user_facing":true,"description":"Bugfix","type":"fix"}\n')
 
     def tearDown(self):
         os.chdir(self.orig_dir)
@@ -544,7 +548,9 @@ class TestRelease(unittest.TestCase):
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
-    def test_release_dry_run(self, _gh_inst, _gh_auth, _clean, _branch,
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    def test_release_dry_run(self, _validate, _gen_cl, _gh_inst, _gh_auth, _clean, _branch,
                              _commit_files, mock_run, _push):
         """Dry run should not modify any files."""
         # 1. git fetch origin --quiet (remote-ahead check)
@@ -606,7 +612,10 @@ class TestRelease(unittest.TestCase):
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
-    def test_release_fetch_failure_warns_but_continues(self, _gh_inst, _gh_auth,
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    def test_release_fetch_failure_warns_but_continues(self, _validate, _gen_cl,
+                                                        _gh_inst, _gh_auth,
                                                         _clean, _branch, mock_run):
         """If git fetch fails, warn but don't block the release."""
         from rlsbl.commands.release import run_cmd
@@ -627,7 +636,9 @@ class TestRelease(unittest.TestCase):
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
-    def test_release_skip_remote_check_flag(self, _gh_inst, _gh_auth, _clean,
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    def test_release_skip_remote_check_flag(self, _validate, _gen_cl, _gh_inst, _gh_auth, _clean,
                                              _branch, mock_run):
         """--skip-remote-check should bypass the remote-ahead check entirely."""
         from rlsbl.commands.release import run_cmd

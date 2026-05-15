@@ -91,6 +91,9 @@ class TestMonorepoReleaseLockPlacement:
             f"# Changelog\n\n## {version}\n\n"
             "Patch release with bugfixes and improvements.\n"
         )
+        changes_dir = proj_dir / ".rlsbl" / "changes"
+        changes_dir.mkdir(parents=True, exist_ok=True)
+        (changes_dir / "unreleased.jsonl").write_text("")
 
         subprocess.run(["git", "add", "."], cwd=str(repo_root), check=True)
         subprocess.run(
@@ -105,8 +108,10 @@ class TestMonorepoReleaseLockPlacement:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
     def test_monorepo_release_uses_monorepo_lock_dir(
-        self, _gh_inst, _gh_auth, _clean, _branch, mock_run, _push,
+        self, _validate, _gen_cl, _gh_inst, _gh_auth, _clean, _branch, mock_run, _push,
         mock_git_repo,
     ):
         """Monorepo release puts lock in .rlsbl-monorepo/, not .rlsbl/ at repo root."""

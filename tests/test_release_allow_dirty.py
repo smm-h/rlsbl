@@ -23,6 +23,10 @@ class TestReleaseAllowDirty(unittest.TestCase):
         # Create CHANGELOG.md with entry for the bumped version
         with open("CHANGELOG.md", "w") as f:
             f.write("# Changelog\n\n## 1.0.1\n\nPatch release with bugfixes and improvements.\n")
+        # Create .rlsbl/changes/ for JSONL changelog
+        os.makedirs(os.path.join(".rlsbl", "changes"), exist_ok=True)
+        with open(os.path.join(".rlsbl", "changes", "unreleased.jsonl"), "w") as f:
+            f.write('{"commits":["abc1234"],"user_facing":true,"description":"Bugfix","type":"fix"}\n')
 
     def tearDown(self):
         os.chdir(self.orig_dir)
@@ -46,7 +50,9 @@ class TestReleaseAllowDirty(unittest.TestCase):
     @patch("rlsbl.commands.release.is_clean_tree", return_value=False)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
-    def test_allow_dirty_skips_clean_tree_check(self, _gh_inst, _gh_auth, _clean,
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    def test_allow_dirty_skips_clean_tree_check(self, _validate, _gen_cl, _gh_inst, _gh_auth, _clean,
                                                  _branch, _commit_files, mock_run, _push):
         """With --allow-dirty, a dirty tree should not block the release (dry-run)."""
         from rlsbl.commands.release import run_cmd
@@ -77,7 +83,14 @@ class TestReleaseAllowDirty(unittest.TestCase):
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
     @patch("rlsbl.commands.release.should_tag", return_value=False)
     @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
-    def test_allow_dirty_non_dry_run_passes_recheck(self, _deploy, _tag, _gh_inst,
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    @patch("rlsbl.commands.release.finalize_version")
+    @patch("rlsbl.commands.release.extract_changelog_entry", return_value="- Bugfix")
+    @patch("rlsbl.commands.release.get_changes_dir", return_value=".rlsbl/changes")
+    def test_allow_dirty_non_dry_run_passes_recheck(self, _changes_dir, _extract, _finalize,
+                                                     _validate, _gen_cl,
+                                                     _deploy, _tag, _gh_inst,
                                                      _gh_auth, _clean, _branch,
                                                      _commit_files, mock_run, _push,
                                                      _lock, _unlock):
@@ -129,7 +142,10 @@ class TestReleaseAllowDirty(unittest.TestCase):
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
     @patch("rlsbl.commands.release.should_tag", return_value=False)
     @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
-    def test_allow_dirty_still_catches_new_unexpected_files(self, _deploy, _tag,
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    def test_allow_dirty_still_catches_new_unexpected_files(self, _validate, _gen_cl,
+                                                             _deploy, _tag,
                                                              _gh_inst, _gh_auth,
                                                              _clean, _branch,
                                                              _commit_files, mock_run,

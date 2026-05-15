@@ -11,7 +11,6 @@ import pytest
 from rlsbl.commands.pre_push_check import (
     run_cmd,
     _detect_version,
-    _check_changelog,
     _parse_stdin_refs,
     _get_changed_files,
     _file_matches_project,
@@ -165,29 +164,13 @@ class TestParseStdinRefs:
         assert refs is None
 
 
-class TestCheckChangelog:
-    def test_changelog_exists_with_version(self, tmp_path):
-        (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## 1.0.0\n\n- Stuff\n")
-        assert _check_changelog(str(tmp_path), "1.0.0") is None
-
-    def test_changelog_exists_without_version(self, tmp_path):
-        (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## 0.9.0\n\n- Stuff\n")
-        error = _check_changelog(str(tmp_path), "1.0.0")
-        assert error is not None
-        assert "1.0.0" in error
-
-    def test_no_changelog(self, tmp_path):
-        # No CHANGELOG.md -- skip silently
-        assert _check_changelog(str(tmp_path), "1.0.0") is None
-
-
 # -- Integration tests for run_cmd (single-project, no monorepo) -------------
 
 
-class TestSingleProjectUnchanged:
-    """Existing single-project behavior is preserved."""
+class TestSingleProjectWithoutJsonl:
+    """Without .rlsbl/changes/, pre-push warns and exits 0."""
 
-    def test_exits_zero_with_matching_changelog(self, tmp_project):
+    def test_exits_zero_warns_no_jsonl(self, tmp_project, capsys):
         (tmp_project / "package.json").write_text(
             json.dumps({"name": "test-pkg", "version": "1.0.0"})
         )
@@ -195,25 +178,8 @@ class TestSingleProjectUnchanged:
         with pytest.raises(SystemExit) as exc_info:
             run_cmd(None, [], {})
         assert exc_info.value.code == 0
-
-    def test_exits_one_with_missing_changelog_entry(self, tmp_project, capsys):
-        (tmp_project / "package.json").write_text(
-            json.dumps({"name": "test-pkg", "version": "1.0.0"})
-        )
-        (tmp_project / "CHANGELOG.md").write_text("# Changelog\n\n## 0.9.0\n\n- Old\n")
-        with pytest.raises(SystemExit) as exc_info:
-            run_cmd(None, [], {})
-        assert exc_info.value.code == 1
         captured = capsys.readouterr()
-        assert "1.0.0" in captured.err
-
-    def test_exits_zero_with_no_changelog(self, tmp_project):
-        (tmp_project / "package.json").write_text(
-            json.dumps({"name": "test-pkg", "version": "1.0.0"})
-        )
-        with pytest.raises(SystemExit) as exc_info:
-            run_cmd(None, [], {})
-        assert exc_info.value.code == 0
+        assert "JSONL changelog not set up" in captured.err
 
     def test_exits_zero_with_no_project(self, tmp_project):
         with pytest.raises(SystemExit) as exc_info:
@@ -339,13 +305,14 @@ class TestMonorepoPrePush:
                 run_cmd(None, [], {})
             assert exc_info.value.code == 0
 
-    def test_one_changelog_missing_exits_one(self, tmp_project, capsys):
-        """One project has wrong changelog version -- exit 1 with project name."""
+    def test_projects_without_jsonl_skipped(self, tmp_project, capsys):
+        """Projects without .rlsbl/changes/ are skipped in monorepo pre-push."""
         self._setup_monorepo(tmp_project, [
             {"name": "a", "path": "pkg-a", "version": "1.0.0", "changelog_version": "1.0.0"},
             {"name": "b", "path": "pkg-b", "version": "2.0.0", "changelog_version": "0.0.1"},
         ])
 
+        # Neither project has .rlsbl/changes/, so both are skipped
         changed_files = {"pkg-a/x.js", "pkg-b/y.js"}
         stdin_data = _stdin_line()
 
@@ -355,10 +322,7 @@ class TestMonorepoPrePush:
                    return_value=changed_files):
             with pytest.raises(SystemExit) as exc_info:
                 run_cmd(None, [], {})
-            assert exc_info.value.code == 1
-            captured = capsys.readouterr()
-            assert "b" in captured.err
-            assert "2.0.0" in captured.err
+            assert exc_info.value.code == 0
 
     def test_no_stdin_falls_back_to_single_project(self, tmp_project, capsys):
         """When stdin is empty (e.g., called directly), falls back to single-project."""
@@ -380,7 +344,10 @@ class TestMonorepoPrePush:
             assert exc_info.value.code == 0
 
     def test_watch_glob_triggers_check(self, tmp_project, capsys):
-        """A change in a watched path triggers the project's changelog check."""
+        """A change in a watched path triggers the project's changelog check.
+
+        Without .rlsbl/changes/, the project is skipped (exits 0).
+        """
         self._setup_monorepo(tmp_project, [
             {"name": "a", "path": "pkg-a", "version": "1.0.0",
              "changelog_version": "0.0.1", "watch": ["shared/**"]},
@@ -398,11 +365,8 @@ class TestMonorepoPrePush:
                    return_value=changed_files):
             with pytest.raises(SystemExit) as exc_info:
                 run_cmd(None, [], {})
-            # Should fail because the changelog has 0.0.1 not 1.0.0
-            assert exc_info.value.code == 1
-            captured = capsys.readouterr()
-            assert "a" in captured.err
-            assert "1.0.0" in captured.err
+            # Project has no JSONL changelog, so it's skipped
+            assert exc_info.value.code == 0
 
     def test_files_not_in_any_project_ignored(self, tmp_project, capsys):
         """Files outside all project paths are ignored."""

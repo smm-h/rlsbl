@@ -115,6 +115,10 @@ class TestMultiTargetRelease:
         # Create CHANGELOG.md
         with open("CHANGELOG.md", "w") as f:
             f.write("# Changelog\n\n## 1.0.1\n\nPatch release with improvements.\n")
+        # Create .rlsbl/changes/ for JSONL changelog
+        os.makedirs(os.path.join(".rlsbl", "changes"), exist_ok=True)
+        with open(os.path.join(".rlsbl", "changes", "unreleased.jsonl"), "w") as f:
+            f.write("")
 
     def teardown_method(self):
         os.chdir(self.orig_dir)
@@ -127,8 +131,13 @@ class TestMultiTargetRelease:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    @patch("rlsbl.commands.release.finalize_version")
+    @patch("rlsbl.commands.release.extract_changelog_entry", return_value="- Improvements")
+    @patch("rlsbl.commands.release.get_changes_dir", return_value=".rlsbl/changes")
     def test_secondary_targets_called_when_detected(
-        self, _gh_inst, _gh_auth, _clean, _branch, _commit_files, mock_run, _push
+        self, _changes_dir, _extract, _finalize, _validate, _gen_cl, _gh_inst, _gh_auth, _clean, _branch, _commit_files, mock_run, _push
     ):
         """When a secondary target (docs) is detected, its build/publish are called."""
         # Create selfdoc.json so docs target is detected
@@ -178,8 +187,13 @@ class TestMultiTargetRelease:
     @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
     @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
     @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    @patch("rlsbl.commands.release.finalize_version")
+    @patch("rlsbl.commands.release.extract_changelog_entry", return_value="- Improvements")
+    @patch("rlsbl.commands.release.get_changes_dir", return_value=".rlsbl/changes")
     def test_secondary_target_failure_is_non_fatal(
-        self, _gh_inst, _gh_auth, _clean, _branch, _commit_files, mock_run, _push
+        self, _changes_dir, _extract, _finalize, _validate, _gen_cl, _gh_inst, _gh_auth, _clean, _branch, _commit_files, mock_run, _push
     ):
         """If a secondary target's build/publish raises, release still completes."""
         # Create selfdoc.json so docs target is detected

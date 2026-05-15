@@ -76,10 +76,10 @@ class TestRunCmdEntryExists:
         assert exc_info.value.code == 0
 
 
-class TestRunCmdEntryMissing:
-    """run_cmd exits 1 with error when CHANGELOG.md lacks a version heading."""
+class TestRunCmdWithoutJsonl:
+    """run_cmd warns and exits 0 when JSONL changelog is not set up."""
 
-    def test_exits_one_with_error(self, tmp_project, capsys):
+    def test_warns_no_jsonl(self, tmp_project, capsys):
         (tmp_project / "package.json").write_text(
             json.dumps({"name": "test-pkg", "version": "1.0.0"})
         )
@@ -88,16 +88,11 @@ class TestRunCmdEntryMissing:
         with pytest.raises(SystemExit) as exc_info:
             run_cmd(None, [], {})
 
-        assert exc_info.value.code == 1
+        assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "1.0.0" in captured.err
-        assert "CHANGELOG.md" in captured.err
+        assert "JSONL changelog not set up" in captured.err
 
-
-class TestRunCmdNoChangelog:
-    """run_cmd exits 0 silently when no CHANGELOG.md exists."""
-
-    def test_exits_zero(self, tmp_project):
+    def test_no_changelog_exits_zero(self, tmp_project, capsys):
         (tmp_project / "package.json").write_text(
             json.dumps({"name": "test-pkg", "version": "1.0.0"})
         )
