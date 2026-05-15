@@ -156,7 +156,7 @@
     "description": "e36b18f176377559016e518511dcf012c26c565b678b9f4278b69b6b06c28bfd"
   },
   "rlsbl-commands-pre_push_check.md": {
-    "content": "c73aa32137aa178b21988526d24804a760d35a5d87670b0ab63e59505b3a51af",
+    "content": "2a86dac971488c16544673aa3b8562b64915ecafe52562cfcd15c9f4268bd464",
     "description": "aa8b4fdbdccc784356f19c67891989424f9423eac958b4d621a594205212202a"
   },
   "rlsbl-commands-prs.md": {
@@ -168,7 +168,7 @@
     "description": "c7776d190150330f960501da40b144d7eaa95549b77ddb022210aa638d70f571"
   },
   "rlsbl-commands-release.md": {
-    "content": "571fc56eeed0b977b0b410424a4335fe99a79cde190dac6808aaa67849510b76",
+    "content": "e27f78d409ef0c2ff23d8044e61bf19180e85fcbdc153d3bd3bf9fe651da736a",
     "description": "e981927593031663b99a1e103991533058277a49e71dd229851d43a1d0d542c7"
   },
   "rlsbl-commands-status.md": {
@@ -184,7 +184,7 @@
     "description": "abec7736556bcf624bc090a64c7215664093c26282d16d0c0f1ad526af49fd66"
   },
   "rlsbl-commands-unreleased.md": {
-    "content": "820292acf5c0c0fd8573004ddee197f216101b9ddc8fa580726c42eb3193b66d",
+    "content": "1f48954a5782467c9f430e86fa2fd0b6e217755f8eb594ac145bb73864d7e08f",
     "description": "a9c0938a30ef1aacfdeab9df2cf3701459a8dd0a01cbe0a703742e9c897e110c"
   },
   "rlsbl-commands-watch.md": {
@@ -208,7 +208,7 @@
     "description": "f441c910862159fe6f122b139a2936d6c2d564145431f45134327ae5065d9220"
   },
   "rlsbl-lint-config.md": {
-    "content": "bc0a5dce475c8c7bd314ee68778e106bf472bc46250aa442979f1d50cd56e2bc",
+    "content": "f5155930c84232f0ebb84e0516431734eab6b8e226670964ad05c256272d8076",
     "description": "7bd5f7563c92533da5e95118162faad41c20b76ddd36dd0eddac62eafb272b8e"
   },
   "rlsbl-lint-go_ast.md": {
@@ -264,7 +264,7 @@
     "description": "1dab5473e391e8bb1f1cad9802c9de83079fd1461e8ce00a68091cfa332a2b31"
   },
   "rlsbl-targets-base.md": {
-    "content": "a5a2cfcf8eeff3fb087f918e4c9d3e744c7ed5986e637e6ae4f7dd1542364a46",
+    "content": "49e8f8ec4b2715726d916db32d91610a5d415e97c60be5b415a3fdf7506dc875",
     "description": "d3cef465ea6650eb83544c087112b90d4df665ffeb56fd88a740fb2dfa85df92"
   },
   "rlsbl-targets-cargo.md": {
@@ -356,7 +356,7 @@
     "description": "c862beba815ff2f00df9cdb6a6e9e23af048886ef9258b0ed0a4f78875d18552"
   },
   "targets.md": {
-    "content": "f8559bd55179ea964337305f833ac705204af2541e02af2dbeba6fb6dc4162cd",
+    "content": "1996de9cc627aa1d68b82d9a66f932e818f1ba3d4658baa0cabb7c536032842c",
     "description": "280c0dc50377fcd227fb33c357962c4b434a2cffd51a46547ab93ebf5d0d5f15"
   }
 }
