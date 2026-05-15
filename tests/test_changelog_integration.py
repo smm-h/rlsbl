@@ -84,11 +84,11 @@ class TestReleaseWithJsonl:
         _setup_npm_project(repo)
         _setup_rlsbl_config(repo)
 
+        # Create a baseline version tag before making unreleased commits
+        subprocess.run(["git", "tag", "v0.0.0"], cwd=str(repo), check=True)
+
         sha1 = _make_commit(repo, "feat1.txt", "feat: first feature")
         sha2 = _make_commit(repo, "feat2.txt", "feat: second feature")
-
-        # Set up origin/main behind HEAD for coverage check
-        subprocess.run(["git", "remote", "add", "origin", str(repo)], cwd=str(repo), check=True)
 
         _setup_jsonl_project(repo, [
             (sha1, "First feature", "feature", True),
@@ -106,8 +106,7 @@ class TestReleaseWithJsonl:
 
         # Validate should pass
         result = validate_unreleased(changes_dir)
-        # We may get coverage failures because origin/main == HEAD in this test setup
-        # The important thing is that the system attempts validation
+        # Validation uses v0.0.0..HEAD range to find unreleased commits
 
         # Generate should produce CHANGELOG.md
         generate_changelog(".")
@@ -145,13 +144,10 @@ class TestReleaseJsonlValidationFails:
         _setup_npm_project(repo)
         _setup_rlsbl_config(repo)
 
-        # Create a bare remote that's behind (at initial commit)
-        bare_remote = tmp_path / "remote.git"
-        subprocess.run(["git", "clone", "--bare", str(repo), str(bare_remote)], check=True)
-        subprocess.run(["git", "remote", "add", "origin", str(bare_remote)], cwd=str(repo), check=True)
-        subprocess.run(["git", "push", "origin", "HEAD"], cwd=str(repo), check=True)
+        # Create a baseline version tag before the unreleased commit
+        subprocess.run(["git", "tag", "v0.0.0"], cwd=str(repo), check=True)
 
-        # Now make a new commit that's ahead of origin/main
+        # Now make a new commit that's ahead of the tag
         _make_commit(repo, "feat.txt", "feat: something")
 
         # Create .rlsbl/changes/ with empty unreleased.jsonl
@@ -381,10 +377,10 @@ class TestStatusWithJsonl:
         repo = mock_git_repo
         _setup_npm_project(repo)
 
-        sha = _make_commit(repo, "feat.txt", "feat: something")
+        # Create a baseline version tag before unreleased commits
+        subprocess.run(["git", "tag", "v0.0.0"], cwd=str(repo), check=True)
 
-        # Set up origin/main
-        subprocess.run(["git", "remote", "add", "origin", str(repo)], cwd=str(repo), check=True)
+        sha = _make_commit(repo, "feat.txt", "feat: something")
 
         _setup_jsonl_project(repo, [
             (sha, "Something", "feature", True),
@@ -404,9 +400,10 @@ class TestStatusWithJsonl:
         repo = mock_git_repo
         _setup_npm_project(repo)
 
-        sha = _make_commit(repo, "feat.txt", "feat: something")
+        # Create a baseline version tag before unreleased commits
+        subprocess.run(["git", "tag", "v0.0.0"], cwd=str(repo), check=True)
 
-        subprocess.run(["git", "remote", "add", "origin", str(repo)], cwd=str(repo), check=True)
+        sha = _make_commit(repo, "feat.txt", "feat: something")
 
         _setup_jsonl_project(repo, [
             (sha, "Something", "feature", True),
@@ -426,9 +423,10 @@ class TestStatusWithJsonl:
         repo = mock_git_repo
         _setup_npm_project(repo)
 
-        sha = _make_commit(repo, "feat.txt", "feat: something")
+        # Create a baseline version tag before unreleased commits
+        subprocess.run(["git", "tag", "v0.0.0"], cwd=str(repo), check=True)
 
-        subprocess.run(["git", "remote", "add", "origin", str(repo)], cwd=str(repo), check=True)
+        sha = _make_commit(repo, "feat.txt", "feat: something")
 
         _setup_jsonl_project(repo, [
             (sha, "Something", "feature", True),

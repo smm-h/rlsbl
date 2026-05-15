@@ -50,11 +50,8 @@ def jsonl_git_repo(tmp_path, monkeypatch):
     _run_git(repo, "add", "README.md")
     _run_git(repo, "commit", "-q", "-m", "initial")
 
-    # Create a fake origin/main ref pointing to the initial commit
-    initial_sha = _git_head(repo)
-    refs_dir = repo / ".git" / "refs" / "remotes" / "origin"
-    refs_dir.mkdir(parents=True)
-    (refs_dir / "main").write_text(initial_sha + "\n")
+    # Create a baseline version tag
+    _run_git(repo, "tag", "v0.0.0")
 
     # Set up .rlsbl/changes with empty unreleased.jsonl
     changes = repo / ".rlsbl" / "changes"

@@ -51,7 +51,7 @@ def _make_commit(repo, filename="file.txt", message="change"):
 
 @pytest.fixture
 def rlsbl_repo(tmp_path, monkeypatch):
-    """Create a git repo with .rlsbl/ scaffolding and a fake origin/main."""
+    """Create a git repo with .rlsbl/ scaffolding and a baseline version tag."""
     repo = tmp_path / "repo"
     repo.mkdir()
     monkeypatch.chdir(repo)
@@ -65,11 +65,8 @@ def rlsbl_repo(tmp_path, monkeypatch):
     _run_git(repo, "add", "README.md")
     _run_git(repo, "commit", "-q", "-m", "initial")
 
-    # Fake origin/main ref
-    initial_sha = _git_head(repo)
-    refs_dir = repo / ".git" / "refs" / "remotes" / "origin"
-    refs_dir.mkdir(parents=True)
-    (refs_dir / "main").write_text(initial_sha + "\n")
+    # Create a baseline version tag so <tag>..HEAD works
+    _run_git(repo, "tag", "v0.0.0")
 
     # Set up .rlsbl/changes
     changes = repo / ".rlsbl" / "changes"

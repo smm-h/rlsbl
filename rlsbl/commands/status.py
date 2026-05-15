@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 from ..changelog import changes_dir_exists, get_changes_dir, read_unreleased, resolve_hashes
+from ..changelog.validate import _unreleased_range
 from ..targets import TARGETS, detect_targets
 from ..utils import (
     extract_changelog_entry,
@@ -72,8 +73,9 @@ def _collect_status(registry, target_path="."):
 
             # Count unreleased commits
             try:
+                range_spec = _unreleased_range()
                 result = subprocess.run(
-                    ["git", "log", "--format=%H", "origin/main..HEAD"],
+                    ["git", "log", "--format=%H", range_spec],
                     capture_output=True, text=True, timeout=30,
                 )
                 if result.returncode == 0:

@@ -30,6 +30,38 @@ def _git_log_hashes(range_spec: str) -> list[str]:
         return []
 
 
+def _get_last_version_tag() -> str | None:
+    """Get the most recent version tag (e.g., v0.25.2).
+
+    Returns the tag string or None if no version tags exist.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0", "--match", "v*"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        tag = result.stdout.strip()
+        return tag if tag else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+
+
+def _unreleased_range() -> str:
+    """Return the git log range spec for unreleased commits.
+
+    Uses <last_tag>..HEAD if a version tag exists, otherwise HEAD
+    (all commits, for first release).
+    """
+    tag = _get_last_version_tag()
+    if tag:
+        return f"{tag}..HEAD"
+    return "HEAD"
+
+
 def _git_head() -> str | None:
     """Get the current HEAD commit hash."""
     try:
@@ -236,26 +268,11 @@ def check_hashes_resolve(entries: list[ChangelogEntry]) -> tuple[bool, list[str]
 def check_in_range(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:
     """Check that every resolved hash is in the unreleased range.
 
-    Unreleased range: commits in origin/main..HEAD.
+    Unreleased range: commits since the last version tag (or all commits
+    if no tags exist).
     """
     details: list[str] = []
-    unreleased_commits = set(_git_log_hashes("origin/main..HEAD"))
-    if not unreleased_commits:
-        # If there are no unreleased commits but there are entries, that's okay
-        # if the entries are empty too
-        if entries:
-            # Check if origin/main exists at all
-            try:
-                result = subprocess.run(
-                    ["git", "rev-parse", "--verify", "origin/main"],
-                    capture_output=True, text=True, timeout=10,
-                )
-                if result.returncode != 0:
-                    details.append("origin/main not found; cannot determine unreleased range")
-                    return (False, details)
-            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                details.append("could not verify origin/main")
-                return (False, details)
+    unreleased_commits = set(_git_log_hashes(_unreleased_range()))
 
     all_hashes: list[str] = []
     for entry in entries:
@@ -276,7 +293,7 @@ def check_coverage(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:
     are automatically skipped -- they can never cover themselves.
     """
     details: list[str] = []
-    unreleased_commits = set(_git_log_hashes("origin/main..HEAD"))
+    unreleased_commits = set(_git_log_hashes(_unreleased_range()))
 
     # Collect all resolved hashes from entries
     all_hashes: list[str] = []

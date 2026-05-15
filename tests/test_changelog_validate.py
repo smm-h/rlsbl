@@ -49,7 +49,7 @@ def _git_head(repo):
 
 @pytest.fixture
 def git_repo(tmp_path, monkeypatch):
-    """Create a git repo with an initial commit and a fake origin/main ref."""
+    """Create a git repo with an initial commit and a baseline version tag."""
     repo = tmp_path / "repo"
     repo.mkdir()
     monkeypatch.chdir(repo)
@@ -63,11 +63,8 @@ def git_repo(tmp_path, monkeypatch):
     _run_git(repo, "add", "README.md")
     _run_git(repo, "commit", "-q", "-m", "initial")
 
-    # Create a fake origin/main ref pointing to the initial commit
-    initial_sha = _git_head(repo)
-    refs_dir = repo / ".git" / "refs" / "remotes" / "origin"
-    refs_dir.mkdir(parents=True)
-    (refs_dir / "main").write_text(initial_sha + "\n")
+    # Create a baseline version tag so <tag>..HEAD works
+    _run_git(repo, "tag", "v0.0.0")
 
     # Set up .rlsbl/changes
     changes = repo / ".rlsbl" / "changes"
@@ -126,9 +123,9 @@ class TestCheckInRange:
         assert details == []
 
     def test_fails_when_hash_not_in_range(self, git_repo):
-        # The initial commit is origin/main, so it's not in origin/main..HEAD
+        # The initial commit is at the v0.0.0 tag, so it's not in v0.0.0..HEAD
         initial = _git_head(git_repo)
-        _make_commit(git_repo)  # advance HEAD past origin/main
+        _make_commit(git_repo)  # advance HEAD past the tag
         entries = [ChangelogEntry(commits=[initial], user_facing=False)]
         passed, details = check_in_range(entries)
         assert passed is False
@@ -158,7 +155,7 @@ class TestCheckCoverage:
         assert "not covered" in details[0]
 
     def test_passes_with_no_unreleased_commits(self, git_repo):
-        """If HEAD == origin/main, no commits to cover."""
+        """If HEAD == last tag, no commits to cover."""
         entries = []
         passed, details = check_coverage(entries)
         assert passed is True
