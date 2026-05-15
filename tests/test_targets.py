@@ -133,6 +133,74 @@ class TestPypiWriteVersion:
             assert '# package name' in updated
 
 
+class TestPypiWriteVersionDunderVersion:
+    """Tests for PypiTarget.write_version() updating __version__ in package source."""
+
+    def test_updates_dunder_version_in_package_init(self):
+        """__version__ in pkg/__init__.py is updated after write_version."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            with open(toml_path, "w") as f:
+                f.write('[project]\nname = "my-pkg"\nversion = "1.0.0"\n')
+            pkg_dir = os.path.join(d, "my_pkg")
+            os.makedirs(pkg_dir)
+            init_path = os.path.join(pkg_dir, "__init__.py")
+            with open(init_path, "w") as f:
+                f.write('__version__ = "1.0.0"\n')
+            target.write_version(d, "2.0.0")
+            with open(init_path) as f:
+                content = f.read()
+            assert '__version__ = "2.0.0"' in content
+
+    def test_updates_dunder_version_src_layout(self):
+        """__version__ in src/pkg/__init__.py is updated (src layout)."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            with open(toml_path, "w") as f:
+                f.write('[project]\nname = "my-pkg"\nversion = "1.0.0"\n')
+            pkg_dir = os.path.join(d, "src", "my_pkg")
+            os.makedirs(pkg_dir)
+            init_path = os.path.join(pkg_dir, "__init__.py")
+            with open(init_path, "w") as f:
+                f.write("__version__ = '1.0.0'\n")
+            target.write_version(d, "3.0.0")
+            with open(init_path) as f:
+                content = f.read()
+            assert "__version__ = '3.0.0'" in content
+
+    def test_no_init_py_no_error(self):
+        """No __init__.py -- no error, version still written to pyproject.toml."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            with open(toml_path, "w") as f:
+                f.write('[project]\nname = "my-pkg"\nversion = "1.0.0"\n')
+            target.write_version(d, "2.0.0")
+            with open(toml_path) as f:
+                content = f.read()
+            assert 'version = "2.0.0"' in content
+
+    def test_init_py_without_dunder_version_unchanged(self):
+        """__init__.py without __version__ -- no error, file unchanged."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            with open(toml_path, "w") as f:
+                f.write('[project]\nname = "my-pkg"\nversion = "1.0.0"\n')
+            pkg_dir = os.path.join(d, "my_pkg")
+            os.makedirs(pkg_dir)
+            init_path = os.path.join(pkg_dir, "__init__.py")
+            original = '"""My package."""\n\nfrom .core import main\n'
+            with open(init_path, "w") as f:
+                f.write(original)
+            target.write_version(d, "2.0.0")
+            with open(init_path) as f:
+                content = f.read()
+            assert content == original
+
+
 class TestGoTarget:
     def test_is_release_target(self):
         target = GoTarget()

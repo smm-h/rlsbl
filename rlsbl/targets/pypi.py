@@ -64,7 +64,7 @@ class PypiTarget(BaseTarget):
             raise ValueError(f"No [project].version in {toml_path}")
 
     def write_version(self, dir_path, version):
-        """Write a new version to pyproject.toml using tomlkit for round-trip editing."""
+        """Write a new version to pyproject.toml and __version__ in package source."""
         path = os.path.join(dir_path, "pyproject.toml")
         with open(path, "r", encoding="utf-8") as f:
             doc = tomlkit.parse(f.read())
@@ -73,6 +73,35 @@ class PypiTarget(BaseTarget):
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(tomlkit.dumps(doc))
         os.replace(tmp_path, path)
+
+        self._update_dunder_version(dir_path, doc, version)
+
+    def _update_dunder_version(self, dir_path, doc, version):
+        """Update __version__ in the package's __init__.py if present."""
+        _VERSION_RE = re.compile(r'(__version__\s*=\s*["\'])[\d.]+(["\'])')
+
+        name = doc.get("project", {}).get("name")
+        if not name:
+            return
+
+        pkg_name = name.replace("-", "_")
+        candidates = [
+            os.path.join(dir_path, pkg_name, "__init__.py"),
+            os.path.join(dir_path, "src", pkg_name, "__init__.py"),
+        ]
+
+        for init_path in candidates:
+            if not os.path.isfile(init_path):
+                continue
+            with open(init_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            new_content = _VERSION_RE.sub(rf'\g<1>{version}\g<2>', content)
+            if new_content != content:
+                tmp = init_path + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    f.write(new_content)
+                os.replace(tmp, init_path)
+            break
 
     def version_file(self):
         return "pyproject.toml"
