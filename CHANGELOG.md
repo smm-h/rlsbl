@@ -2,7 +2,7 @@
 
 # Changelog
 
-## Unreleased
+## 0.28.0
 
 ### Breaking
 
