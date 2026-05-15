@@ -79,11 +79,15 @@ class TestReleaseWithDeployTargets:
         monkeypatch.setattr("rlsbl.commands.release.push_if_needed", lambda b: None)
         monkeypatch.setattr("rlsbl.commands.release.get_push_timeout", lambda: 120)
         monkeypatch.setattr("rlsbl.commands.release.get_current_branch", lambda: "main")
+        monkeypatch.setattr("rlsbl.commands.release.finalize_version", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.generate_changelog", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.extract_changelog_entry", lambda *a, **kw: "- Fixed a bug")
+        monkeypatch.setattr("rlsbl.commands.release.get_changes_dir", lambda *a, **kw: ".rlsbl/changes")
 
         _run_release_mutating(
             registry="npm",
             reg=type("FakeReg", (), {
-                "get_version_file": lambda self: None,
+                "version_file": lambda self: None,
                 "write_version": lambda self, p, v: None,
                 "build": lambda self, p, v: None,
                 "publish": lambda self, p, v: None,
@@ -168,12 +172,16 @@ class TestReleaseDeployFailureContinues:
                 return sp.CompletedProcess(args=cmd, returncode=0)
 
         monkeypatch.setattr("rlsbl.commands.release.subprocess", FakeSubprocessModule())
+        monkeypatch.setattr("rlsbl.commands.release.finalize_version", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.generate_changelog", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.extract_changelog_entry", lambda *a, **kw: "- Fixed a bug")
+        monkeypatch.setattr("rlsbl.commands.release.get_changes_dir", lambda *a, **kw: ".rlsbl/changes")
 
         # Should NOT raise -- deploy failure is non-fatal
         _run_release_mutating(
             registry="npm",
             reg=type("FakeReg", (), {
-                "get_version_file": lambda self: None,
+                "version_file": lambda self: None,
                 "write_version": lambda self, p, v: None,
                 "build": lambda self, p, v: None,
                 "publish": lambda self, p, v: None,
@@ -234,11 +242,15 @@ class TestReleaseNoDeployConfig:
         monkeypatch.setattr("rlsbl.commands.release.push_if_needed", lambda b: None)
         monkeypatch.setattr("rlsbl.commands.release.get_push_timeout", lambda: 120)
         monkeypatch.setattr("rlsbl.commands.release.get_current_branch", lambda: "main")
+        monkeypatch.setattr("rlsbl.commands.release.finalize_version", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.generate_changelog", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.extract_changelog_entry", lambda *a, **kw: "- Fixed a bug")
+        monkeypatch.setattr("rlsbl.commands.release.get_changes_dir", lambda *a, **kw: ".rlsbl/changes")
 
         _run_release_mutating(
             registry="npm",
             reg=type("FakeReg", (), {
-                "get_version_file": lambda self: None,
+                "version_file": lambda self: None,
                 "write_version": lambda self, p, v: None,
                 "build": lambda self, p, v: None,
                 "publish": lambda self, p, v: None,
@@ -300,11 +312,15 @@ class TestReleaseDeployConfigErrors:
         monkeypatch.setattr("rlsbl.commands.release.push_if_needed", lambda b: None)
         monkeypatch.setattr("rlsbl.commands.release.get_push_timeout", lambda: 120)
         monkeypatch.setattr("rlsbl.commands.release.get_current_branch", lambda: "main")
+        monkeypatch.setattr("rlsbl.commands.release.finalize_version", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.generate_changelog", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.extract_changelog_entry", lambda *a, **kw: "- Fixed a bug")
+        monkeypatch.setattr("rlsbl.commands.release.get_changes_dir", lambda *a, **kw: ".rlsbl/changes")
 
         _run_release_mutating(
             registry="npm",
             reg=type("FakeReg", (), {
-                "get_version_file": lambda self: None,
+                "version_file": lambda self: None,
                 "write_version": lambda self, p, v: None,
                 "build": lambda self, p, v: None,
                 "publish": lambda self, p, v: None,
@@ -370,11 +386,15 @@ class TestReleaseStopsAtFirstDeployFailure:
         monkeypatch.setattr("rlsbl.commands.release.push_if_needed", lambda b: None)
         monkeypatch.setattr("rlsbl.commands.release.get_push_timeout", lambda: 120)
         monkeypatch.setattr("rlsbl.commands.release.get_current_branch", lambda: "main")
+        monkeypatch.setattr("rlsbl.commands.release.finalize_version", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.generate_changelog", lambda *a, **kw: None)
+        monkeypatch.setattr("rlsbl.commands.release.extract_changelog_entry", lambda *a, **kw: "- Fixed a bug")
+        monkeypatch.setattr("rlsbl.commands.release.get_changes_dir", lambda *a, **kw: ".rlsbl/changes")
 
         _run_release_mutating(
             registry="npm",
             reg=type("FakeReg", (), {
-                "get_version_file": lambda self: None,
+                "version_file": lambda self: None,
                 "write_version": lambda self, p, v: None,
                 "build": lambda self, p, v: None,
                 "publish": lambda self, p, v: None,

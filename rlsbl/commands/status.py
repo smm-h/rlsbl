@@ -29,7 +29,7 @@ def _collect_status(registry, target_path="."):
         sys.exit(1)
 
     version = reg.read_version(target_path)
-    vars_dict = reg.get_template_vars(target_path)
+    vars_dict = reg.template_vars(target_path)
     name = vars_dict.get("name") or "(unknown)"
 
     # Git branch
@@ -50,7 +50,7 @@ def _collect_status(registry, target_path="."):
     except Exception:
         clean = None
 
-    # Changelog
+    # Changelog (generated from JSONL)
     changelog_path = "CHANGELOG.md"
     if os.path.exists(changelog_path):
         entry = extract_changelog_entry(changelog_path, version)
@@ -59,7 +59,7 @@ def _collect_status(registry, target_path="."):
         changelog = None
 
     # JSONL changelog coverage
-    jsonl_coverage = None
+    jsonl_coverage = "not set up"
     if changes_dir_exists(target_path):
         try:
             changes_dir = get_changes_dir(target_path)
@@ -139,7 +139,7 @@ def run_cmd(registry, args, flags):
         r_mod = TARGETS[entry_name]
         if r_mod.check_project_exists(entry_path):
             ver = r_mod.read_version(entry_path)
-            file = r_mod.get_version_file() or "git tag"
+            file = r_mod.version_file() or "git tag"
             path_info = f", path={entry_path}" if entry_path != "." else ""
             print(f"Version:   {ver} ({entry_name}, {file}{path_info})")
 
@@ -170,8 +170,7 @@ def run_cmd(registry, args, flags):
         print(f"Changelog: no entry for {data['version']}")
 
     # JSONL changelog coverage
-    if data.get("jsonl_coverage") is not None:
-        print(f"JSONL:     {data['jsonl_coverage']}")
+    print(f"JSONL:     {data['jsonl_coverage']}")
 
     # CI workflows
     print(f"CI:        {'yes' if data['ci'] else 'missing'}")

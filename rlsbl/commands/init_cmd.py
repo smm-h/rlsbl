@@ -606,7 +606,7 @@ def run_cmd(registry, args, flags):
             write_project_config("private", True)
 
         # Gather template variables
-        vars_dict = reg.get_template_vars(".")
+        vars_dict = reg.template_vars(".")
         from datetime import datetime
         vars_dict["year"] = str(datetime.now().year)
 
@@ -616,11 +616,11 @@ def run_cmd(registry, args, flags):
         existing_hashes = load_hashes()
 
         # Process registry-specific templates
-        reg_mappings = reg.get_template_mappings()
+        reg_mappings = reg.template_mappings()
         if private:
             reg_mappings = _filter_mappings_for_private(reg_mappings)
         reg_created, reg_skipped, reg_warnings, reg_hashes = process_mappings(
-            reg.get_template_dir(),
+            reg.template_dir(),
             reg_mappings,
             vars_dict,
             force,
@@ -631,12 +631,12 @@ def run_cmd(registry, args, flags):
         # Process shared templates (skip if another registry already handled them)
         shared_created, shared_skipped, shared_warnings, shared_hashes = [], [], [], {}
         if not flags.get("skip-shared"):
-            shared_mappings = reg.get_shared_template_mappings()
+            shared_mappings = reg.shared_template_mappings()
             if private:
                 shared_mappings = _replace_post_release_hook_for_private(shared_mappings)
             shared_mappings = _append_deploy_workflow_if_configured(shared_mappings)
             shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
-                reg.get_shared_template_dir(),
+                reg.shared_template_dir(),
                 shared_mappings,
                 vars_dict,
                 force,
@@ -908,12 +908,12 @@ def _merge_template_vars(registries_list, primary, target_paths):
     merged = {}
     # Primary target's vars as base (un-namespaced)
     primary_target = TARGETS[primary]
-    primary_vars = primary_target.get_template_vars(target_paths.get(primary, "."))
+    primary_vars = primary_target.template_vars(target_paths.get(primary, "."))
     merged.update(primary_vars)
     # All targets' vars namespaced
     for target_name in registries_list:
         target = TARGETS[target_name]
-        target_vars = target.get_template_vars(target_paths.get(target_name, "."))
+        target_vars = target.template_vars(target_paths.get(target_name, "."))
         for key, value in target_vars.items():
             merged[f"{target_name}.{key}"] = value
     return merged
@@ -968,9 +968,9 @@ def run_cmd_multi(registries_list, args, flags):
         existing_hashes = load_hashes()
 
         # Process primary registry CI template only (publish will come from merged)
-        ci_mappings = [m for m in reg.get_template_mappings() if "publish" not in m["template"]]
+        ci_mappings = [m for m in reg.template_mappings() if "publish" not in m["template"]]
         ci_created, ci_skipped, ci_warnings, ci_hashes = process_mappings(
-            reg.get_template_dir(),
+            reg.template_dir(),
             ci_mappings,
             vars_dict,
             force,
@@ -1037,12 +1037,12 @@ def run_cmd_multi(registries_list, args, flags):
                 merged_skipped.append((publish_target, "exists"))
 
         # Process shared templates (once)
-        shared_mappings = reg.get_shared_template_mappings()
+        shared_mappings = reg.shared_template_mappings()
         if private:
             shared_mappings = _replace_post_release_hook_for_private(shared_mappings)
         shared_mappings = _append_deploy_workflow_if_configured(shared_mappings)
         shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
-            reg.get_shared_template_dir(),
+            reg.shared_template_dir(),
             shared_mappings,
             vars_dict,
             force,
