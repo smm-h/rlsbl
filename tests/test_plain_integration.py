@@ -187,7 +187,7 @@ class TestSyncSkipsPlain:
         from unittest.mock import patch
         with patch("rlsbl.utils.find_commit_tool", return_value="git"):
             _cmd_sync({})
-        router = mock_git_repo / ".github" / "workflows" / "publish-router.yml"
+        router = mock_git_repo / ".github" / "workflows" / "publish.yml"
         assert router.exists(), "Publish router should be generated (npm has publish)"
         content = router.read_text()
         assert "shared-config" not in content, (

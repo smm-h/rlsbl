@@ -199,7 +199,7 @@ class TestRouterGeneration:
             ("core", {"ci": True, "publish": True}),
         ])
         _cmd_sync({})
-        router = mock_git_repo / ".github" / "workflows" / "publish-router.yml"
+        router = mock_git_repo / ".github" / "workflows" / "publish.yml"
         assert router.exists()
         content = router.read_text()
         assert "startsWith(github.event.release.tag_name, 'tooling@v')" in content

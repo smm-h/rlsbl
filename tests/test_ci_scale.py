@@ -268,14 +268,14 @@ class TestPublishRouterScale:
     """Publish router generation with 30 projects."""
 
     def test_syntactic_validity(self):
-        """Generated publish-router.yml parses as valid YAML."""
+        """Generated publish router parses as valid YAML."""
         projects = _make_projects(PROJECT_COUNT)
         content = _generate_publish_router(projects)
         parsed = _parse_workflow_yaml(content)
         assert isinstance(parsed, dict)
 
     def test_job_count(self):
-        """publish-router has exactly 30 project jobs (no detect job)."""
+        """Publish router has exactly 30 project jobs (no detect job)."""
         projects = _make_projects(PROJECT_COUNT)
         content = _generate_publish_router(projects)
         parsed = _parse_workflow_yaml(content)
@@ -283,7 +283,7 @@ class TestPublishRouterScale:
         assert len(jobs) == PROJECT_COUNT
 
     def test_no_duplicate_job_names(self):
-        """All job names in publish-router are unique."""
+        """All job names in publish router are unique."""
         projects = _make_projects(PROJECT_COUNT)
         content = _generate_publish_router(projects)
         parsed = _parse_workflow_yaml(content)
