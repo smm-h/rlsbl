@@ -2,6 +2,18 @@
 
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **`rlsbl yank` command.** Deprecate or delete past releases. Soft yank (`rlsbl yank v1.2.3`) marks the GitHub Release as a pre-release with a deprecation notice. Hard yank (`rlsbl yank v1.2.3 --hard`) deletes the GitHub Release and its git tag entirely.
+- **PyPI release bumps `__version__`.** Python source files containing `__version__` are now updated alongside `pyproject.toml` during release, keeping runtime version introspection in sync.
+- **Strict type validation for JSONL entries.** Changelog entries with `user_facing: true` now require `type` to be one of `feature`, `fix`, or `breaking`. Unrecognized types are rejected during validation and `changelog add`.
+
+### Fixes
+
+- **Fix: scaffold stays in sub-project directory.** In monorepos, `rlsbl scaffold` no longer walks up to the repo root when project files already exist in the current directory. Previously this caused scaffold to operate on the wrong project.
+
 ## 0.25.4
 
 - No user-facing changes.
