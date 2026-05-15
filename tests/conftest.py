@@ -59,7 +59,7 @@ def mock_git_repo(tmp_project):
     Returns the Path object for the repo root.
     """
     subprocess.run(
-        ["git", "init", "-q"],
+        ["git", "init", "-q", "-b", "main"],
         cwd=str(tmp_project),
         check=True,
     )
