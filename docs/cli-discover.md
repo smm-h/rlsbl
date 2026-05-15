@@ -7,7 +7,7 @@ generated: true
 
 # rlsbl discover
 
-List rlsbl ecosystem projects
+Search GitHub for repositories tagged with the rlsbl topic and list them. Use --mine to filter results to only your own repositories. Requires the gh CLI to be authenticated.
 
 ## Flags
 

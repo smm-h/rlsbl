@@ -7,7 +7,7 @@ generated: true
 
 # rlsbl deploy
 
-Deploy to configured targets
+Run the configured deployment pipeline for the project. Supports named deploy targets, dry-run preview of what would be deployed, and a --force flag to override branch restrictions.
 
 ## Flags
 

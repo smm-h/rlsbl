@@ -7,7 +7,7 @@ generated: true
 
 # rlsbl edit-release
 
-Update GitHub Release notes from CHANGELOG.md
+Sync the GitHub Release notes for a given version with the corresponding CHANGELOG.md entry. Defaults to the current version if none is specified. Use --dry-run to preview changes without updating GitHub.
 
 ## Flags
 

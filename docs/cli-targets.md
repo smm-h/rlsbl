@@ -7,4 +7,4 @@ generated: true
 
 # rlsbl targets
 
-List available release targets
+List all release targets detected in the current project directory, showing which ecosystems (npm, PyPI, Go, Cargo, etc.) are active based on manifest files found.

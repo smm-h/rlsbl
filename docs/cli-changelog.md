@@ -7,11 +7,11 @@ generated: true
 
 # rlsbl changelog
 
-Structured changelog management
+Structured changelog management using JSONL entries. Add, validate, and generate CHANGELOG.md from per-commit changelog entries stored in unreleased.jsonl for precise, auditable release notes.
 
 ## changelog add
 
-Add an entry to unreleased.jsonl
+Append a structured changelog entry to unreleased.jsonl with a description, entry type (feature, fix, breaking), and optional commit hashes. Auto-commits the file unless --no-commit is passed.
 
 ### Flags
 
@@ -21,14 +21,15 @@ Add an entry to unreleased.jsonl
 | `--description` |  | str |  |  | Entry description |
 | `--type` |  | str |  |  | Entry type (feature, fix, breaking) |
 | `--no-user-facing` |  | bool |  |  | Mark as non-user-facing |
+| `--no-commit` |  | bool |  |  | Skip auto-commit of unreleased.jsonl |
 
 ## changelog validate
 
-Validate unreleased changelog entries
+Parse and validate all entries in unreleased.jsonl, checking for schema conformance, required fields, valid entry types, and referential integrity of commit hashes.
 
 ## changelog generate
 
-Generate CHANGELOG.md from JSONL files
+Compile all validated JSONL changelog entries into a formatted CHANGELOG.md file, grouping entries by type and version. Use --dry-run to preview the generated output without writing to disk.
 
 ### Flags
 

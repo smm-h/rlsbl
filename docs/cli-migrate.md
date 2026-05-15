@@ -7,7 +7,7 @@ generated: true
 
 # rlsbl migrate
 
-Run config migrations (via migrable)
+Run pending configuration migrations to update .rlsbl config files to the latest schema. Use --dry-run to preview changes without applying, or --status to see which migrations are pending.
 
 ## Flags
 

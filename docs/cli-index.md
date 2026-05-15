@@ -7,30 +7,30 @@ generated: true
 
 # rlsbl CLI Reference
 
-Release orchestration and project scaffolding for npm, PyPI, and Go
+Release orchestration and project scaffolding CLI. Automates version bumping, changelog validation, tagging, GitHub Releases, and CI/CD scaffolding for npm, PyPI, Go, Cargo, Deno, and more.
 
 Version: __version__
 
 ## Commands
 
-- [release](cli-release.html) -- Orchestrate a release
-- [status](cli-status.html) -- Show project status
-- [scaffold](cli-scaffold.html) -- Scaffold release infrastructure
-- [check](cli-check.html) -- Check name availability on a registry
-- [edit-release](cli-edit-release.html) -- Update GitHub Release notes from CHANGELOG.md
-- [undo](cli-undo.html) -- Revert the last release
-- [discover](cli-discover.html) -- List rlsbl ecosystem projects
-- [watch](cli-watch.html) -- Watch CI runs for a commit
-- [pre-push-check](cli-pre-push-check.html) -- Verify CHANGELOG entry for current version
-- [prs](cli-prs.html) -- List open pull requests
-- [unreleased](cli-unreleased.html) -- Audit changelog coverage for unreleased commits
-- [targets](cli-targets.html) -- List available release targets
-- [record-gif](cli-record-gif.html) -- Record a demo GIF with vhs
-- [migrate](cli-migrate.html) -- Run config migrations (via migrable)
-- [doctor](cli-doctor.html) -- Diagnose and repair release state
-- [deploy](cli-deploy.html) -- Deploy to configured targets
+- [release](cli-release.html) -- Bump the project version, validate the changelog, commit, tag, push, and create a GitHub Release. Supports patch, minor, and major bumps with dry-run preview and non-interactive mode for CI.
+- [status](cli-status.html) -- Display the current project version, branch, last release tag, unreleased commit count, and changelog coverage. Outputs plain text by default or structured JSON with the --json flag.
+- [scaffold](cli-scaffold.html) -- Generate or update CI/CD workflows, git hooks, changelog, and license files for the detected release target. Use --update for three-way merge preserving customizations, or --force to overwrite all files.
+- [check](cli-check.html) -- Query npm, PyPI, or other registries to check whether one or more package names are available. Accepts multiple names as positional arguments and respects a configurable delay between checks.
+- [edit-release](cli-edit-release.html) -- Sync the GitHub Release notes for a given version with the corresponding CHANGELOG.md entry. Defaults to the current version if none is specified. Use --dry-run to preview changes without updating GitHub.
+- [undo](cli-undo.html) -- Revert the most recent release by deleting the GitHub Release, removing the git tag from local and remote, and reverting the version bump commit. Requires a manual git push afterward to finalize.
+- [discover](cli-discover.html) -- Search GitHub for repositories tagged with the rlsbl topic and list them. Use --mine to filter results to only your own repositories. Requires the gh CLI to be authenticated.
+- [watch](cli-watch.html) -- Poll GitHub Actions CI workflow runs for a specific commit SHA and report pass or fail status. Defaults to HEAD if no SHA is provided. Useful after rlsbl release to monitor the publish pipeline.
+- [pre-push-check](cli-pre-push-check.html) -- Verify that CHANGELOG.md contains an entry matching the current project version. Designed to run as a git pre-push hook to prevent pushing releases without documented changes.
+- [prs](cli-prs.html) -- List all open pull requests for the current repository using the GitHub CLI. Shows PR number, title, author, and branch for a quick overview of pending work.
+- [unreleased](cli-unreleased.html) -- List commits between the latest release tag and HEAD, and check whether each has a corresponding changelog entry. Outputs a coverage report in plain text or JSON to help prepare the next release.
+- [targets](cli-targets.html) -- List all release targets detected in the current project directory, showing which ecosystems (npm, PyPI, Go, Cargo, etc.) are active based on manifest files found.
+- [record-gif](cli-record-gif.html) -- Record an animated GIF demo of rlsbl commands using the vhs terminal recorder. Configurable width, height, font size, and duration for consistent, reproducible demo recordings.
+- [migrate](cli-migrate.html) -- Run pending configuration migrations to update .rlsbl config files to the latest schema. Use --dry-run to preview changes without applying, or --status to see which migrations are pending.
+- [doctor](cli-doctor.html) -- Run diagnostic checks on the project release state, including version consistency, tag alignment, changelog coverage, and config validity. Use --fix to auto-repair issues where possible.
+- [deploy](cli-deploy.html) -- Run the configured deployment pipeline for the project. Supports named deploy targets, dry-run preview of what would be deployed, and a --force flag to override branch restrictions.
 
 ## Command Groups
 
-- [changelog](cli-changelog.html) -- Structured changelog management
-- [monorepo](cli-monorepo.html) -- Monorepo workspace management
+- [changelog](cli-changelog.html) -- Structured changelog management using JSONL entries. Add, validate, and generate CHANGELOG.md from per-commit changelog entries stored in unreleased.jsonl for precise, auditable release notes.
+- [monorepo](cli-monorepo.html) -- Manage monorepo workspaces with multiple independently-versioned projects. Initialize workspaces, add or remove projects, sync CI workflows, check name availability, and analyze dependency graphs.

@@ -7,4 +7,4 @@ generated: true
 
 # rlsbl prs
 
-List open pull requests
+List all open pull requests for the current repository using the GitHub CLI. Shows PR number, title, author, and branch for a quick overview of pending work.

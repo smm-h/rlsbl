@@ -7,15 +7,15 @@ generated: true
 
 # rlsbl monorepo
 
-Monorepo workspace management
+Manage monorepo workspaces with multiple independently-versioned projects. Initialize workspaces, add or remove projects, sync CI workflows, check name availability, and analyze dependency graphs.
 
 ## monorepo init
 
-Initialize a monorepo workspace
+Create a new monorepo workspace by generating the .rlsbl-monorepo directory and an empty workspace.toml file. Run this at the repository root before adding individual projects.
 
 ## monorepo add
 
-Add a project to the workspace
+Register a project directory in the monorepo workspace.toml. Specify the path and optionally set a name, target registry, watch patterns, subtree remote, dependencies, and library flag.
 
 ### Flags
 
@@ -36,7 +36,7 @@ Add a project to the workspace
 
 ## monorepo remove
 
-Remove a project from the workspace
+Unregister a project from the monorepo workspace.toml by its path. Removes the project entry from the workspace configuration without deleting any files on disk.
 
 ### Arguments
 
@@ -46,19 +46,19 @@ Remove a project from the workspace
 
 ## monorepo list
 
-List all projects in the workspace
+Display all projects registered in the monorepo workspace.toml, showing each project's name, path, target registry, and configured options like watch patterns and dependencies.
 
 ## monorepo sync
 
-Sync CI workflows from projects to repo root
+Copy and merge CI workflow files from individual project scaffolds into the repository root .github/workflows directory, ensuring all projects have their publish and test pipelines active.
 
 ## monorepo status
 
-Show status of all projects
+Show the version, last release tag, and unreleased commit count for every project in the monorepo workspace. Provides a quick overview of which projects are ready for release.
 
 ## monorepo check-names
 
-Check name availability for all projects
+Check package name availability on a registry for all projects in the workspace. Supports optional prefix and suffix to test naming conventions, with configurable delay between registry queries.
 
 ### Flags
 
@@ -71,8 +71,8 @@ Check name availability for all projects
 
 ## monorepo release-order
 
-Show topological release order for projects
+Compute and display the topological release order for all workspace projects based on their declared depends-on relationships. Projects with no dependencies appear first.
 
 ## monorepo outdated
 
-Show outdated intra-workspace dependencies
+Scan all workspace projects for intra-workspace dependencies that reference older versions than what is currently published. Helps identify which projects need a version bump after upstream releases.

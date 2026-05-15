@@ -7,7 +7,7 @@ generated: true
 
 # rlsbl scaffold
 
-Scaffold release infrastructure
+Generate or update CI/CD workflows, git hooks, changelog, and license files for the detected release target. Use --update for three-way merge preserving customizations, or --force to overwrite all files.
 
 ## Flags
 

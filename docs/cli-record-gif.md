@@ -7,7 +7,7 @@ generated: true
 
 # rlsbl record-gif
 
-Record a demo GIF with vhs
+Record an animated GIF demo of rlsbl commands using the vhs terminal recorder. Configurable width, height, font size, and duration for consistent, reproducible demo recordings.
 
 ## Flags
 

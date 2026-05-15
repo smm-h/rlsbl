@@ -7,7 +7,7 @@ generated: true
 
 # rlsbl undo
 
-Revert the last release
+Revert the most recent release by deleting the GitHub Release, removing the git tag from local and remote, and reverting the version bump commit. Requires a manual git push afterward to finalize.
 
 ## Flags
 

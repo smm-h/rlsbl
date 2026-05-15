@@ -7,7 +7,7 @@ generated: true
 
 # rlsbl doctor
 
-Diagnose and repair release state
+Run diagnostic checks on the project release state, including version consistency, tag alignment, changelog coverage, and config validity. Use --fix to auto-repair issues where possible.
 
 ## Flags
 

@@ -7,4 +7,4 @@ generated: true
 
 # rlsbl pre-push-check
 
-Verify CHANGELOG entry for current version
+Verify that CHANGELOG.md contains an entry matching the current project version. Designed to run as a git pre-push hook to prevent pushing releases without documented changes.

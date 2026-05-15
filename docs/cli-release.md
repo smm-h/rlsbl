@@ -7,7 +7,7 @@ generated: true
 
 # rlsbl release
 
-Orchestrate a release
+Bump the project version, validate the changelog, commit, tag, push, and create a GitHub Release. Supports patch, minor, and major bumps with dry-run preview and non-interactive mode for CI.
 
 ## Flags
 
