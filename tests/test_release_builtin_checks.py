@@ -182,10 +182,20 @@ class TestBuiltinTestRunner:
 class TestBuiltinLintRunner:
     """Tests for _run_builtin_lint()."""
 
+    def test_lint_skipped_for_non_library(self, tmp_project, capsys):
+        """When is_library is False (default), lint is skipped."""
+        with patch("rlsbl.lint.lint_library") as mock_lint:
+            result = _run_builtin_lint({})
+
+            assert result is True
+            mock_lint.assert_not_called()
+            captured = capsys.readouterr()
+            assert "Skipping lint (not a library project)" in captured.out
+
     def test_lint_passes_with_no_results(self, tmp_project):
         """When lint_library returns empty list, lint passes."""
         with patch("rlsbl.lint.lint_library", return_value=[]) as mock_lint:
-            result = _run_builtin_lint({})
+            result = _run_builtin_lint({}, is_library=True)
 
             assert result is True
             mock_lint.assert_called_once_with(".")
@@ -201,7 +211,7 @@ class TestBuiltinLintRunner:
 
         with patch("rlsbl.lint.lint_library", return_value=errors):
             with pytest.raises(SystemExit) as exc_info:
-                _run_builtin_lint({})
+                _run_builtin_lint({}, is_library=True)
 
             assert exc_info.value.code == 1
 
@@ -215,7 +225,7 @@ class TestBuiltinLintRunner:
         ]
 
         with patch("rlsbl.lint.lint_library", return_value=warnings):
-            result = _run_builtin_lint({})
+            result = _run_builtin_lint({}, is_library=True)
 
             assert result is True
 
@@ -434,7 +444,7 @@ class TestFullFlowOrder:
             # Short-circuit: skip-tests so no subprocess is needed
             return True
 
-        def tracking_lint(flags):
+        def tracking_lint(flags, is_library=False):
             execution_order.append("lint")
             # Short-circuit: skip-lint so no subprocess is needed
             return True

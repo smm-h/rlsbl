@@ -165,12 +165,17 @@ def _run_builtin_tests(registry, flags):
     return True
 
 
-def _run_builtin_lint(flags):
+def _run_builtin_lint(flags, is_library=False):
     """Run built-in library lint.
 
     Counts errors and warnings from lint results. Exits on errors.
+    Only runs on library projects (monorepo projects with library = true).
     """
     if flags.get("skip-lint") or flags.get("dry-run"):
+        return True
+
+    if not is_library:
+        print("Skipping lint (not a library project)")
         return True
 
     print("Running lint...")
@@ -270,6 +275,7 @@ def run_cmd(registry, args, flags):
     monorepo_root = find_workspace_root(".")
     monorepo_name = None
     monorepo_project_path = None
+    is_library = False
 
     if monorepo_root:
         project = resolve_project(monorepo_root, ".")
@@ -279,6 +285,7 @@ def run_cmd(registry, args, flags):
             sys.exit(1)
         monorepo_name = project["name"]
         monorepo_project_path = project["path"]
+        is_library = bool(project.get("library"))
         # Change to monorepo root so all paths (git and filesystem) are
         # relative to the repo root, matching git's expectations.
         os.chdir(monorepo_root)
@@ -396,7 +403,7 @@ def run_cmd(registry, args, flags):
     _run_builtin_tests(registry, flags)
 
     # Built-in lint runner
-    _run_builtin_lint(flags)
+    _run_builtin_lint(flags, is_library=is_library)
 
     # Run pre-release hook if present
     pre_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-release.sh")
@@ -657,12 +664,19 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         changes_dir = get_changes_dir(version_dir)
         finalize_version(changes_dir, new_version)
         log(f"Finalized JSONL changelog for {new_version}")
+        # Regenerate CHANGELOG.md so version headings reflect the finalized
+        # version (e.g. "## 0.25.0") instead of "## Unreleased"
+        generate_changelog(version_dir)
+        changelog_path = os.path.join(version_dir, "CHANGELOG.md")
+        changelog_entry = extract_changelog_entry(changelog_path, new_version)
+        log("Regenerated CHANGELOG.md with version heading")
         # Commit the finalized JSONL file and the new empty unreleased.jsonl
         jsonl_finalized = os.path.normpath(os.path.join(changes_dir, f"{new_version}.jsonl"))
         jsonl_unreleased = os.path.normpath(os.path.join(changes_dir, "unreleased.jsonl"))
         # Also commit the generated per-version .md file if it exists
         jsonl_md = os.path.normpath(os.path.join(changes_dir, f"{new_version}.md"))
-        finalize_files = [jsonl_finalized, jsonl_unreleased]
+        changelog_file = vpath("CHANGELOG.md")
+        finalize_files = [jsonl_finalized, jsonl_unreleased, changelog_file]
         if os.path.exists(jsonl_md):
             finalize_files.append(jsonl_md)
         commit_files(f"chore: finalize changelog for {new_version}", finalize_files)
