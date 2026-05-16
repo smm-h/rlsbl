@@ -108,10 +108,12 @@ def resolve_release_targets(primary, flags, version_dir="."):
     return baseline
 
 
-def _run_builtin_tests(registry, flags):
+def _run_builtin_tests(registry, flags, project_dir=None):
     """Run built-in tests for the detected project type.
 
     Detects the project type from registry and runs the appropriate test command.
+    When project_dir is set (monorepo mode), subprocess calls use it as cwd and
+    filesystem checks are resolved relative to it.
     Returns True if tests pass, calls sys.exit(1) on failure.
     """
     if flags.get("skip-tests") or flags.get("dry-run"):
@@ -126,26 +128,26 @@ def _run_builtin_tests(registry, flags):
             sync_cmd = ["uv", "sync"]
             if not uv_verbose:
                 sync_cmd.append("--quiet")
-            result = subprocess.run(sync_cmd)
+            result = subprocess.run(sync_cmd, cwd=project_dir)
             if result.returncode != 0:
                 print("Error: uv sync failed.", file=sys.stderr)
                 sys.exit(1)
-            result = subprocess.run(["uv", "run", "pytest"])
+            result = subprocess.run(["uv", "run", "pytest"], cwd=project_dir)
         elif shutil.which("pytest"):
-            result = subprocess.run(["pytest"])
+            result = subprocess.run(["pytest"], cwd=project_dir)
         else:
             print("Warning: neither uv nor pytest found, skipping tests.", file=sys.stderr)
             return True
     elif registry == "go":
-        result = subprocess.run(["go", "test", "./...", "-race", "-short", "-count=1"])
+        result = subprocess.run(["go", "test", "./...", "-race", "-short", "-count=1"], cwd=project_dir)
     elif registry == "npm":
-        pkg_path = "package.json"
+        pkg_path = os.path.join(project_dir, "package.json") if project_dir else "package.json"
         if os.path.exists(pkg_path):
             try:
                 with open(pkg_path, "r", encoding="utf-8") as f:
                     pkg = json.load(f)
                 if pkg.get("scripts", {}).get("test"):
-                    result = subprocess.run(["npm", "test"])
+                    result = subprocess.run(["npm", "test"], cwd=project_dir)
                 else:
                     print("No test script in package.json, skipping tests.")
                     return True
@@ -165,11 +167,12 @@ def _run_builtin_tests(registry, flags):
     return True
 
 
-def _run_builtin_lint(flags, is_library=False):
+def _run_builtin_lint(flags, is_library=False, project_dir=None):
     """Run built-in library lint.
 
     Counts errors and warnings from lint results. Exits on errors.
     Only runs on library projects (monorepo projects with library = true).
+    When project_dir is set (monorepo mode), lint runs against that directory.
     """
     if flags.get("skip-lint") or flags.get("dry-run"):
         return True
@@ -182,7 +185,7 @@ def _run_builtin_lint(flags, is_library=False):
 
     from ..lint import lint_library
 
-    results = lint_library(".")
+    results = lint_library(project_dir if project_dir else ".")
 
     errors = [r for r in results if r.severity == "error"]
     warnings = [r for r in results if r.severity == "warning"]
@@ -389,11 +392,15 @@ def run_cmd(registry, args, flags):
             print(f"Error: pre-checks hook timed out after {hook_timeout}s.", file=sys.stderr)
             sys.exit(1)
 
+    # In monorepo mode, tests and lint must run from the project subdirectory
+    # (not the monorepo root that os.chdir switched to).
+    abs_project_dir = os.path.join(monorepo_root, monorepo_project_path) if monorepo_root else None
+
     # Built-in test runner
-    _run_builtin_tests(registry, flags)
+    _run_builtin_tests(registry, flags, project_dir=abs_project_dir)
 
     # Built-in lint runner
-    _run_builtin_lint(flags, is_library=is_library)
+    _run_builtin_lint(flags, is_library=is_library, project_dir=abs_project_dir)
 
     # Run pre-release hook if present
     pre_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-release.sh")

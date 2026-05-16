@@ -182,6 +182,144 @@ class TestBuiltinTestRunner:
 
 
 # ---------------------------------------------------------------------------
+# Monorepo CWD tests for built-in test runner
+# ---------------------------------------------------------------------------
+
+class TestBuiltinTestRunnerCwd:
+    """Tests that _run_builtin_tests passes project_dir as cwd to subprocess."""
+
+    def test_pypi_cwd_standalone(self, tmp_project):
+        """In standalone mode (project_dir=None), subprocess.run gets cwd=None."""
+        _setup_pypi_project(tmp_project)
+
+        with (
+            patch("rlsbl.commands.release.shutil.which") as mock_which,
+            patch("rlsbl.commands.release.subprocess.run") as mock_run,
+            patch("rlsbl.commands.release.read_project_config", return_value={}),
+        ):
+            mock_which.return_value = "/usr/bin/uv"
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+
+            _run_builtin_tests("pypi", {})
+
+            for c in mock_run.call_args_list:
+                assert c.kwargs.get("cwd") is None
+
+    def test_pypi_cwd_monorepo(self, tmp_project):
+        """In monorepo mode, subprocess.run gets cwd=project_dir."""
+        _setup_pypi_project(tmp_project)
+        project_dir = str(tmp_project / "libs" / "mylib")
+
+        with (
+            patch("rlsbl.commands.release.shutil.which") as mock_which,
+            patch("rlsbl.commands.release.subprocess.run") as mock_run,
+            patch("rlsbl.commands.release.read_project_config", return_value={}),
+        ):
+            mock_which.return_value = "/usr/bin/uv"
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+
+            _run_builtin_tests("pypi", {}, project_dir=project_dir)
+
+            assert mock_run.call_count == 2
+            for c in mock_run.call_args_list:
+                assert c.kwargs.get("cwd") == project_dir
+
+    def test_pypi_fallback_pytest_cwd_monorepo(self, tmp_project):
+        """Fallback pytest call also gets cwd=project_dir in monorepo mode."""
+        _setup_pypi_project(tmp_project)
+        project_dir = str(tmp_project / "libs" / "mylib")
+
+        with (
+            patch("rlsbl.commands.release.shutil.which") as mock_which,
+            patch("rlsbl.commands.release.subprocess.run") as mock_run,
+            patch("rlsbl.commands.release.read_project_config", return_value={}),
+        ):
+            def which_side_effect(name):
+                if name == "uv":
+                    return None
+                if name == "pytest":
+                    return "/usr/bin/pytest"
+                return None
+
+            mock_which.side_effect = which_side_effect
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+
+            _run_builtin_tests("pypi", {}, project_dir=project_dir)
+
+            assert mock_run.call_count == 1
+            assert mock_run.call_args.kwargs.get("cwd") == project_dir
+
+    def test_go_cwd_monorepo(self, tmp_project):
+        """Go test command gets cwd=project_dir in monorepo mode."""
+        _setup_go_project(tmp_project)
+        project_dir = str(tmp_project / "libs" / "mygolib")
+
+        with patch("rlsbl.commands.release.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+
+            _run_builtin_tests("go", {}, project_dir=project_dir)
+
+            assert mock_run.call_count == 1
+            assert mock_run.call_args.kwargs.get("cwd") == project_dir
+
+    def test_go_cwd_standalone(self, tmp_project):
+        """Go test command gets cwd=None in standalone mode."""
+        _setup_go_project(tmp_project)
+
+        with patch("rlsbl.commands.release.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+
+            _run_builtin_tests("go", {})
+
+            assert mock_run.call_count == 1
+            assert mock_run.call_args.kwargs.get("cwd") is None
+
+    def test_npm_cwd_monorepo(self, tmp_project):
+        """npm test command gets cwd=project_dir in monorepo mode."""
+        project_dir = tmp_project / "libs" / "mynpmlib"
+        project_dir.mkdir(parents=True)
+        pkg = {"name": "test-pkg", "version": "1.0.0", "scripts": {"test": "jest"}}
+        (project_dir / "package.json").write_text(json.dumps(pkg) + "\n")
+
+        with patch("rlsbl.commands.release.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+
+            _run_builtin_tests("npm", {}, project_dir=str(project_dir))
+
+            assert mock_run.call_count == 1
+            assert mock_run.call_args.kwargs.get("cwd") == str(project_dir)
+
+    def test_npm_cwd_standalone(self, tmp_project):
+        """npm test command gets cwd=None in standalone mode."""
+        _setup_npm_project(tmp_project, test_script="jest")
+
+        with patch("rlsbl.commands.release.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+
+            _run_builtin_tests("npm", {})
+
+            assert mock_run.call_count == 1
+            assert mock_run.call_args.kwargs.get("cwd") is None
+
+    def test_npm_package_json_resolved_in_project_dir(self, tmp_project):
+        """npm checks package.json in project_dir, not cwd."""
+        # The cwd (tmp_project) has no package.json, but project_dir does
+        project_dir = tmp_project / "libs" / "mynpmlib"
+        project_dir.mkdir(parents=True)
+        pkg = {"name": "test-pkg", "version": "1.0.0", "scripts": {"test": "jest"}}
+        (project_dir / "package.json").write_text(json.dumps(pkg) + "\n")
+
+        with patch("rlsbl.commands.release.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+
+            result = _run_builtin_tests("npm", {}, project_dir=str(project_dir))
+
+            assert result is True
+            assert mock_run.call_count == 1
+            assert mock_run.call_args[0][0] == ["npm", "test"]
+
+
+# ---------------------------------------------------------------------------
 # Built-in lint runner tests
 # ---------------------------------------------------------------------------
 
@@ -250,6 +388,30 @@ class TestBuiltinLintRunner:
 
             assert result is True
             mock_lint.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Monorepo CWD tests for built-in lint runner
+# ---------------------------------------------------------------------------
+
+class TestBuiltinLintRunnerCwd:
+    """Tests that _run_builtin_lint passes project_dir to lint_library."""
+
+    def test_lint_standalone_uses_dot(self, tmp_project):
+        """In standalone mode (project_dir=None), lint_library gets '.'."""
+        with patch("rlsbl.lint.lint_library", return_value=[]) as mock_lint:
+            _run_builtin_lint({}, is_library=True)
+
+            mock_lint.assert_called_once_with(".")
+
+    def test_lint_monorepo_uses_project_dir(self, tmp_project):
+        """In monorepo mode, lint_library gets the project_dir path."""
+        project_dir = "/repo/root/libs/mylib"
+
+        with patch("rlsbl.lint.lint_library", return_value=[]) as mock_lint:
+            _run_builtin_lint({}, is_library=True, project_dir=project_dir)
+
+            mock_lint.assert_called_once_with(project_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -461,12 +623,12 @@ class TestFullFlowOrder:
         original_tests = _run_builtin_tests
         original_lint = _run_builtin_lint
 
-        def tracking_tests(registry, flags):
+        def tracking_tests(registry, flags, project_dir=None):
             execution_order.append("tests")
             # Short-circuit: skip-tests so no subprocess is needed
             return True
 
-        def tracking_lint(flags, is_library=False):
+        def tracking_lint(flags, is_library=False, project_dir=None):
             execution_order.append("lint")
             # Short-circuit: skip-lint so no subprocess is needed
             return True
