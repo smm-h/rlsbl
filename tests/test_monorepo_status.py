@@ -6,6 +6,7 @@ import subprocess
 
 import pytest
 
+from rlsbl.changelog.validate import _unreleased_range
 from rlsbl.commands.monorepo import _cmd_init, _cmd_add, _cmd_status
 from rlsbl.workspace import load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 
@@ -218,6 +219,142 @@ class TestStatusMonorepoAware:
         assert "Part of monorepo" in captured.out
         # Root is not a registered project, so no mono tag
         assert "Mono tag" not in captured.out
+
+
+class TestStatusTagScoping:
+    """Tests that status coverage uses monorepo-scoped tags via tag_prefix."""
+
+    def test_monorepo_passes_tag_prefix(self, mock_git_repo, monkeypatch, capsys):
+        """In a monorepo project, _unreleased_range receives the project name as tag_prefix."""
+        from unittest.mock import patch
+
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "mylib", version="1.0.0")
+        _cmd_add(["mylib"], {})
+
+        # Set up .rlsbl/changes so coverage code path is triggered
+        changes_dir = mock_git_repo / "mylib" / ".rlsbl" / "changes"
+        changes_dir.mkdir(parents=True, exist_ok=True)
+        (changes_dir / "unreleased.jsonl").write_text("")
+
+        capsys.readouterr()
+
+        os.chdir(str(mock_git_repo / "mylib"))
+
+        captured_calls = []
+        original_unreleased_range = _unreleased_range
+
+        def spy_unreleased_range(tag_prefix=None):
+            captured_calls.append(tag_prefix)
+            return original_unreleased_range(tag_prefix=tag_prefix)
+
+        with patch(
+            "rlsbl.commands.status._unreleased_range",
+            side_effect=spy_unreleased_range,
+        ):
+            from rlsbl.commands.status import run_cmd
+            run_cmd("npm", [], {})
+
+        assert len(captured_calls) == 1
+        assert captured_calls[0] == "mylib"
+
+    def test_standalone_no_tag_prefix(self, mock_git_repo, monkeypatch, capsys):
+        """In a standalone project, _unreleased_range receives no tag_prefix."""
+        from unittest.mock import patch
+
+        # Create a standalone npm project (no monorepo init)
+        with open(str(mock_git_repo / "package.json"), "w") as f:
+            json.dump({"name": "standalone", "version": "1.0.0"}, f)
+
+        # Set up .rlsbl/changes so coverage code path is triggered
+        changes_dir = mock_git_repo / ".rlsbl" / "changes"
+        changes_dir.mkdir(parents=True, exist_ok=True)
+        (changes_dir / "unreleased.jsonl").write_text("")
+
+        capsys.readouterr()
+
+        captured_calls = []
+        original_unreleased_range = _unreleased_range
+
+        def spy_unreleased_range(tag_prefix=None):
+            captured_calls.append(tag_prefix)
+            return original_unreleased_range(tag_prefix=tag_prefix)
+
+        with patch(
+            "rlsbl.commands.status._unreleased_range",
+            side_effect=spy_unreleased_range,
+        ):
+            from rlsbl.commands.status import run_cmd
+            run_cmd("npm", [], {})
+
+        assert len(captured_calls) == 1
+        assert captured_calls[0] is None
+
+    def test_collect_status_forwards_tag_prefix(self, mock_git_repo, capsys):
+        """_collect_status passes tag_prefix through to _unreleased_range."""
+        from unittest.mock import patch
+
+        with open(str(mock_git_repo / "package.json"), "w") as f:
+            json.dump({"name": "test-pkg", "version": "1.0.0"}, f)
+
+        # Set up .rlsbl/changes
+        changes_dir = mock_git_repo / ".rlsbl" / "changes"
+        changes_dir.mkdir(parents=True, exist_ok=True)
+        (changes_dir / "unreleased.jsonl").write_text("")
+
+        captured_calls = []
+        original_unreleased_range = _unreleased_range
+
+        def spy_unreleased_range(tag_prefix=None):
+            captured_calls.append(tag_prefix)
+            return original_unreleased_range(tag_prefix=tag_prefix)
+
+        with patch(
+            "rlsbl.commands.status._unreleased_range",
+            side_effect=spy_unreleased_range,
+        ):
+            from rlsbl.commands.status import _collect_status
+            _collect_status("npm", ".", tag_prefix="my-project")
+
+        assert len(captured_calls) == 1
+        assert captured_calls[0] == "my-project"
+
+    def test_monorepo_root_no_tag_prefix(self, mock_git_repo, monkeypatch, capsys):
+        """At monorepo root (not a registered project), tag_prefix is None."""
+        from unittest.mock import patch
+
+        _cmd_init({})
+        _make_npm_project(mock_git_repo, "core", version="1.0.0")
+        _cmd_add(["core"], {})
+
+        # Create a package.json at root so status works
+        with open(str(mock_git_repo / "package.json"), "w") as f:
+            json.dump({"name": "monorepo-root", "version": "0.0.1"}, f)
+
+        # Set up .rlsbl/changes at root
+        changes_dir = mock_git_repo / ".rlsbl" / "changes"
+        changes_dir.mkdir(parents=True, exist_ok=True)
+        (changes_dir / "unreleased.jsonl").write_text("")
+
+        capsys.readouterr()
+
+        captured_calls = []
+        original_unreleased_range = _unreleased_range
+
+        def spy_unreleased_range(tag_prefix=None):
+            captured_calls.append(tag_prefix)
+            return original_unreleased_range(tag_prefix=tag_prefix)
+
+        with patch(
+            "rlsbl.commands.status._unreleased_range",
+            side_effect=spy_unreleased_range,
+        ):
+            from rlsbl.commands.status import run_cmd
+            run_cmd("npm", [], {})
+
+        assert len(captured_calls) == 1
+        # Root is not a project in the workspace, so no tag prefix
+        assert captured_calls[0] is None
 
 
 class TestMonorepoStatusWatch:

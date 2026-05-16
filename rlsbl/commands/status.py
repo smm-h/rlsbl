@@ -17,8 +17,11 @@ from ..utils import (
 from ..workspace import find_workspace_root, load_workspace, resolve_project
 
 
-def _collect_status(registry, target_path="."):
+def _collect_status(registry, target_path=".", tag_prefix=None):
     """Collect status data as a dict.
+
+    When tag_prefix is set (monorepo mode), it is forwarded to
+    _unreleased_range so coverage uses the correct scoped tag.
 
     Returns None and prints an error if the project does not exist.
     """
@@ -74,7 +77,7 @@ def _collect_status(registry, target_path="."):
             # Count unreleased commits (excluding changelog-only commits,
             # consistent with changelog validate's coverage check)
             try:
-                range_spec = _unreleased_range()
+                range_spec = _unreleased_range(tag_prefix=tag_prefix)
                 result = subprocess.run(
                     ["git", "log", "--format=%H", range_spec],
                     capture_output=True, text=True, timeout=30,
@@ -139,7 +142,21 @@ def run_cmd(registry, args, flags):
 
     # Use per-target path for the primary registry
     primary_path = target_paths.get(registry, ".")
-    data = _collect_status(registry, primary_path)
+
+    # Detect monorepo context early so coverage uses scoped tags
+    monorepo_project = None
+    monorepo_count = None
+    try:
+        ws_root = find_workspace_root(".")
+        if ws_root is not None:
+            ws_projects = load_workspace(ws_root)
+            monorepo_count = len(ws_projects)
+            monorepo_project = resolve_project(ws_root, ".")
+    except Exception:
+        pass
+
+    tag_prefix = monorepo_project["name"] if monorepo_project else None
+    data = _collect_status(registry, primary_path, tag_prefix=tag_prefix)
 
     if flags.get("json"):
         print(_json.dumps(data, indent=2))
@@ -189,16 +206,9 @@ def run_cmd(registry, args, flags):
     print(f"CI:        {'yes' if data['ci'] else 'missing'}")
     print(f"Publish:   {'yes' if data['publish'] else 'missing'}")
 
-    # Monorepo awareness
-    try:
-        ws_root = find_workspace_root(".")
-        if ws_root is not None:
-            projects = load_workspace(ws_root)
-            project = resolve_project(ws_root, ".")
-            if project is not None:
-                mono_tag = f"{project['name']}@v{data['version']}"
-                print(f"Mono tag:  {mono_tag}")
-            count = len(projects)
-            print(f"Part of monorepo ({count} project{'s' if count != 1 else ''}). Run 'rlsbl monorepo status' for all.")
-    except Exception:
-        pass
+    # Monorepo awareness (detection already done above)
+    if monorepo_count is not None:
+        if monorepo_project is not None:
+            mono_tag = f"{monorepo_project['name']}@v{data['version']}"
+            print(f"Mono tag:  {mono_tag}")
+        print(f"Part of monorepo ({monorepo_count} project{'s' if monorepo_count != 1 else ''}). Run 'rlsbl monorepo status' for all.")
