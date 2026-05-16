@@ -1,8 +1,10 @@
 """Undo command that reverts the last release by deleting the GitHub Release, removing the git tag, and reverting the version bump commit."""
 
+import os
 import sys
 
 from ..utils import run, check_gh_installed, check_gh_auth, get_push_timeout, get_current_branch, push_if_needed, is_clean_tree
+from ..workspace import find_workspace_root, resolve_project
 
 # Status constants for step results
 OK = "OK"
@@ -35,9 +37,21 @@ def run_cmd(registry, args, flags):
         print("Error: working tree is not clean. Commit your changes first.", file=sys.stderr)
         sys.exit(1)
 
-    # Find the latest tag
+    # Monorepo detection
+    monorepo_name = None
+    ws_root = find_workspace_root(".")
+    if ws_root:
+        project = resolve_project(ws_root, ".")
+        if project is None:
+            print("Error: current directory is inside a monorepo but not inside any project.", file=sys.stderr)
+            sys.exit(1)
+        monorepo_name = project["name"]
+        os.chdir(ws_root)
+
+    # Find the latest tag (scoped to project in monorepo mode)
+    match_pattern = f"{monorepo_name}@v*" if monorepo_name else "v*"
     try:
-        tag = run("git", ["describe", "--tags", "--abbrev=0"])
+        tag = run("git", ["describe", "--tags", "--abbrev=0", "--match", match_pattern])
     except Exception:
         print("Error: no tags found. Nothing to undo.", file=sys.stderr)
         sys.exit(1)
@@ -82,15 +96,24 @@ def run_cmd(registry, args, flags):
         results.append(("Delete local tag", FAILED, f"git tag -d {tag}"))
 
     # Revert the version bump commit (should be HEAD)
+    # In monorepo mode, commit message is "<project>: release v<version>"
+    # In standalone mode, commit message is the tag string (e.g., "v1.2.3")
+    if monorepo_name:
+        # tag is "<project>@v<version>", extract version part
+        version_part = tag.split("@", 1)[1] if "@" in tag else tag
+        expected_msg = f"{monorepo_name}: release {version_part}"
+    else:
+        expected_msg = tag
+
     reverted = False
     try:
         head_msg = run("git", ["log", "-1", "--format=%s"])
-        if head_msg == tag:
+        if head_msg == expected_msg:
             run("git", ["revert", "--no-edit", "HEAD"])
             reverted = True
             results.append(("Revert commit", OK, "-"))
         else:
-            results.append(("Revert commit", SKIPPED, f"HEAD ({head_msg}) does not match tag ({tag})"))
+            results.append(("Revert commit", SKIPPED, f"HEAD ({head_msg}) does not match expected ({expected_msg})"))
     except Exception:
         results.append(("Revert commit", FAILED, "git revert --no-edit HEAD"))
 
