@@ -372,3 +372,349 @@ class TestHookTimeout:
             assert exc_info.value.code == 1
             captured = capsys.readouterr()
             assert "timed out after 45s" in captured.err
+
+
+class TestHookCwdStandalone:
+    """Tests that hook subprocess.run calls receive cwd=None in standalone mode."""
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    def test_pre_checks_hook_cwd_none_standalone(
+        self,
+        _validate,
+        _gen_cl,
+        _gh_inst,
+        _gh_auth,
+        _clean,
+        _branch,
+        _commit_files,
+        mock_run,
+        _push,
+        tmp_project,
+    ):
+        """In standalone mode, pre-checks hook subprocess.run gets cwd=None."""
+        _setup_project(tmp_project, "pre-checks.sh", "#!/bin/bash\necho ok\n")
+        mock_run.side_effect = ["", "0", "v1.0.0", ""]
+
+        with patch("rlsbl.commands.release.subprocess") as mock_sp:
+            mock_sp.run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            mock_sp.CalledProcessError = subprocess.CalledProcessError
+            mock_sp.TimeoutExpired = subprocess.TimeoutExpired
+
+            from rlsbl.commands.release import run_cmd
+
+            run_cmd("npm", ["patch"], {"dry-run": True, "quiet": True, "yes": True})
+
+            assert mock_sp.run.call_count >= 1
+            # The pre-checks hook call should have cwd=None
+            pre_checks_call = mock_sp.run.call_args_list[0]
+            assert pre_checks_call.kwargs.get("cwd") is None
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    def test_pre_release_hook_cwd_none_standalone(
+        self,
+        _validate,
+        _gen_cl,
+        _gh_inst,
+        _gh_auth,
+        _clean,
+        _branch,
+        _commit_files,
+        mock_run,
+        _push,
+        tmp_project,
+    ):
+        """In standalone mode, pre-release hook subprocess.run gets cwd=None."""
+        _setup_project(tmp_project, "pre-release.sh", "#!/bin/bash\necho ok\n")
+        mock_run.side_effect = ["", "0", "v1.0.0", ""]
+
+        with patch("rlsbl.commands.release.subprocess") as mock_sp:
+            mock_sp.run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            mock_sp.CalledProcessError = subprocess.CalledProcessError
+            mock_sp.TimeoutExpired = subprocess.TimeoutExpired
+
+            from rlsbl.commands.release import run_cmd
+
+            run_cmd("npm", ["patch"], {"dry-run": True, "quiet": True, "yes": True})
+
+            assert mock_sp.run.call_count >= 1
+            # The pre-release hook call should have cwd=None
+            pre_release_call = mock_sp.run.call_args_list[0]
+            assert pre_release_call.kwargs.get("cwd") is None
+
+    @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
+    @patch("rlsbl.commands.release.should_tag", return_value=False)
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    def test_post_release_hook_cwd_none_standalone(
+        self,
+        _validate,
+        _gen_cl,
+        _gh_inst,
+        _gh_auth,
+        _clean,
+        _branch,
+        _commit_files,
+        _push,
+        _should_tag,
+        _deploy,
+        tmp_project,
+    ):
+        """In standalone mode, post-release hook subprocess.run gets cwd=None."""
+        _setup_project(tmp_project, "post-release.sh", "#!/bin/bash\necho ok\n")
+
+        def fake_run(cmd, args=None, timeout=120, env=None):
+            full = [cmd] + (args or [])
+            joined = " ".join(full)
+            if "rev-list" in joined:
+                return "0"
+            if "tag" in joined and "-l" in joined:
+                if "v1.0.0" in joined:
+                    return "v1.0.0"
+                return ""
+            if "rev-parse" in joined:
+                return "abc123"
+            if "status --porcelain" in joined:
+                return ""
+            if "diff --name-only" in joined:
+                return ""
+            return ""
+
+        with (
+            patch("rlsbl.commands.release.run", side_effect=fake_run),
+            patch("rlsbl.commands.release.subprocess") as mock_sp,
+        ):
+            mock_sp.run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            mock_sp.CalledProcessError = subprocess.CalledProcessError
+            mock_sp.TimeoutExpired = subprocess.TimeoutExpired
+
+            from rlsbl.commands.release import run_cmd
+
+            run_cmd("npm", ["patch"], {"quiet": True, "yes": True})
+
+            # Find the post-release hook call (it's the one with post-release.sh in args)
+            post_release_calls = [
+                c for c in mock_sp.run.call_args_list
+                if len(c[0][0]) > 1 and "post-release.sh" in c[0][0][1]
+            ]
+            assert len(post_release_calls) == 1
+            assert post_release_calls[0].kwargs.get("cwd") is None
+
+
+class TestHookCwdMonorepo:
+    """Tests that hook subprocess.run calls receive cwd=project_dir in monorepo mode."""
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    @patch("rlsbl.commands.release._run_builtin_tests", return_value=True)
+    @patch("rlsbl.commands.release._run_builtin_lint", return_value=True)
+    def test_pre_checks_hook_cwd_monorepo(
+        self,
+        _lint,
+        _tests,
+        _validate,
+        _gen_cl,
+        _gh_inst,
+        _gh_auth,
+        _clean,
+        _branch,
+        _commit_files,
+        mock_run,
+        _push,
+        monorepo_fixture,
+    ):
+        """In monorepo mode, pre-checks hook subprocess.run gets cwd=project_dir."""
+        ns = monorepo_fixture
+        # Create pre-checks hook in the python subproject
+        hooks_dir = ns.python_dir / ".rlsbl" / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        (hooks_dir / "pre-checks.sh").write_text("#!/bin/bash\necho ok\n")
+        (hooks_dir / "pre-checks.sh").chmod(0o755)
+        # CHANGELOG.md must exist for extract_changelog_entry after generate_changelog mock
+        (ns.python_dir / "CHANGELOG.md").write_text(
+            "# Changelog\n\n## 0.1.1\n\nPatch release.\n"
+        )
+
+        # chdir to the python subproject (run_cmd detects monorepo from here)
+        os.chdir(ns.python_dir)
+
+        mock_run.side_effect = ["", "0", "mypylib@v0.1.0", ""]
+
+        with patch("rlsbl.commands.release.subprocess") as mock_sp:
+            mock_sp.run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            mock_sp.CalledProcessError = subprocess.CalledProcessError
+            mock_sp.TimeoutExpired = subprocess.TimeoutExpired
+
+            from rlsbl.commands.release import run_cmd
+
+            run_cmd("pypi", ["patch"], {"dry-run": True, "quiet": True, "yes": True})
+
+            # Find the pre-checks hook call
+            pre_checks_calls = [
+                c for c in mock_sp.run.call_args_list
+                if len(c[0][0]) > 1 and "pre-checks.sh" in c[0][0][1]
+            ]
+            assert len(pre_checks_calls) == 1
+            assert pre_checks_calls[0].kwargs.get("cwd") == str(ns.python_dir)
+
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    @patch("rlsbl.commands.release._run_builtin_tests", return_value=True)
+    @patch("rlsbl.commands.release._run_builtin_lint", return_value=True)
+    def test_pre_release_hook_cwd_monorepo(
+        self,
+        _lint,
+        _tests,
+        _validate,
+        _gen_cl,
+        _gh_inst,
+        _gh_auth,
+        _clean,
+        _branch,
+        _commit_files,
+        mock_run,
+        _push,
+        monorepo_fixture,
+    ):
+        """In monorepo mode, pre-release hook subprocess.run gets cwd=project_dir."""
+        ns = monorepo_fixture
+        hooks_dir = ns.python_dir / ".rlsbl" / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        (hooks_dir / "pre-release.sh").write_text("#!/bin/bash\necho ok\n")
+        (hooks_dir / "pre-release.sh").chmod(0o755)
+        (ns.python_dir / "CHANGELOG.md").write_text(
+            "# Changelog\n\n## 0.1.1\n\nPatch release.\n"
+        )
+
+        os.chdir(ns.python_dir)
+
+        mock_run.side_effect = ["", "0", "mypylib@v0.1.0", ""]
+
+        with patch("rlsbl.commands.release.subprocess") as mock_sp:
+            mock_sp.run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            mock_sp.CalledProcessError = subprocess.CalledProcessError
+            mock_sp.TimeoutExpired = subprocess.TimeoutExpired
+
+            from rlsbl.commands.release import run_cmd
+
+            run_cmd("pypi", ["patch"], {"dry-run": True, "quiet": True, "yes": True})
+
+            # Find the pre-release hook call
+            pre_release_calls = [
+                c for c in mock_sp.run.call_args_list
+                if len(c[0][0]) > 1 and "pre-release.sh" in c[0][0][1]
+            ]
+            assert len(pre_release_calls) == 1
+            assert pre_release_calls[0].kwargs.get("cwd") == str(ns.python_dir)
+
+    @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
+    @patch("rlsbl.commands.release.should_tag", return_value=False)
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    @patch("rlsbl.commands.release._run_builtin_tests", return_value=True)
+    @patch("rlsbl.commands.release._run_builtin_lint", return_value=True)
+    def test_post_release_hook_cwd_monorepo(
+        self,
+        _lint,
+        _tests,
+        _validate,
+        _gen_cl,
+        _gh_inst,
+        _gh_auth,
+        _clean,
+        _branch,
+        _commit_files,
+        _push,
+        _should_tag,
+        _deploy,
+        monorepo_fixture,
+    ):
+        """In monorepo mode, post-release hook subprocess.run gets cwd=project_dir."""
+        ns = monorepo_fixture
+        hooks_dir = ns.python_dir / ".rlsbl" / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        (hooks_dir / "post-release.sh").write_text("#!/bin/bash\necho ok\n")
+        (hooks_dir / "post-release.sh").chmod(0o755)
+        (ns.python_dir / "CHANGELOG.md").write_text(
+            "# Changelog\n\n## 0.1.1\n\nPatch release.\n"
+        )
+
+        os.chdir(ns.python_dir)
+
+        def fake_run(cmd, args=None, timeout=120, env=None):
+            full = [cmd] + (args or [])
+            joined = " ".join(full)
+            if "rev-list" in joined:
+                return "0"
+            if "tag" in joined and "-l" in joined:
+                if "mypylib@v0.1.0" in joined:
+                    return "mypylib@v0.1.0"
+                return ""
+            if "rev-parse" in joined:
+                return "abc123"
+            if "status --porcelain" in joined:
+                return ""
+            if "diff --name-only" in joined:
+                return ""
+            return ""
+
+        with (
+            patch("rlsbl.commands.release.run", side_effect=fake_run),
+            patch("rlsbl.commands.release.subprocess") as mock_sp,
+        ):
+            mock_sp.run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            mock_sp.CalledProcessError = subprocess.CalledProcessError
+            mock_sp.TimeoutExpired = subprocess.TimeoutExpired
+
+            from rlsbl.commands.release import run_cmd
+
+            run_cmd("pypi", ["patch"], {"quiet": True, "yes": True})
+
+            # Find the post-release hook call
+            post_release_calls = [
+                c for c in mock_sp.run.call_args_list
+                if len(c[0][0]) > 1 and "post-release.sh" in c[0][0][1]
+            ]
+            assert len(post_release_calls) == 1
+            assert post_release_calls[0].kwargs.get("cwd") == str(ns.python_dir)
