@@ -2,6 +2,20 @@
 
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **New command.** `rlsbl monorepo lint` detects unregistered projects and stale workspace entries.
+
+### Fixes
+
+- **Fix.** Pre-push hook now recognizes monorepo release commit messages and filters coverage checks to only commits affecting each sub-project.
+- **Fix.** Release commit now includes all version files modified by targets (`__init__.py` for PyPI, `build.zig.zon` for Zig, dynamically-chosen file for Maven).
+- **Fix.** Built-in tests, lint, and hook scripts now run from the correct sub-project directory in monorepo mode.
+- **Fix.** Changelog validation, `rlsbl status`, and `rlsbl changelog validate` now use project-scoped tags (`<name>@v*`) in monorepo mode.
+- **Fix.** `rlsbl undo` now correctly finds project-scoped tags and matches monorepo release commit messages.
+
 ## 0.28.1
 
 ### Fixes
