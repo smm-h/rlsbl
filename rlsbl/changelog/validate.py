@@ -30,14 +30,18 @@ def _git_log_hashes(range_spec: str) -> list[str]:
         return []
 
 
-def _get_last_version_tag() -> str | None:
+def _get_last_version_tag(tag_prefix: str | None = None) -> str | None:
     """Get the most recent version tag (e.g., v0.25.2).
+
+    When tag_prefix is set (monorepo mode), matches tags like
+    ``<tag_prefix>@v*`` instead of plain ``v*``.
 
     Returns the tag string or None if no version tags exist.
     """
+    match_pattern = f"{tag_prefix}@v*" if tag_prefix else "v*"
     try:
         result = subprocess.run(
-            ["git", "describe", "--tags", "--abbrev=0", "--match", "v*"],
+            ["git", "describe", "--tags", "--abbrev=0", "--match", match_pattern],
             capture_output=True,
             text=True,
             timeout=10,
@@ -50,13 +54,14 @@ def _get_last_version_tag() -> str | None:
         return None
 
 
-def _unreleased_range() -> str:
+def _unreleased_range(tag_prefix: str | None = None) -> str:
     """Return the git log range spec for unreleased commits.
 
     Uses <last_tag>..HEAD if a version tag exists, otherwise HEAD
-    (all commits, for first release).
+    (all commits, for first release). Passes tag_prefix through to
+    _get_last_version_tag for monorepo-aware tag discovery.
     """
-    tag = _get_last_version_tag()
+    tag = _get_last_version_tag(tag_prefix)
     if tag:
         return f"{tag}..HEAD"
     return "HEAD"
@@ -113,10 +118,19 @@ def _is_changelog_only_commit(sha: str) -> bool:
         return True
 
     for path in files:
-        if not any(
-            path.startswith(pat) if pat.endswith("/") else path == pat
-            for pat in _CHANGELOG_PATTERNS
-        ):
+        # In monorepos, paths have a subproject prefix (e.g. "go/.rlsbl/changes/").
+        # Match against each suffix of path segments so prefixed paths are recognized.
+        segments = path.split("/")
+        matched = False
+        for i in range(len(segments)):
+            suffix = "/".join(segments[i:])
+            if any(
+                suffix.startswith(pat) if pat.endswith("/") else suffix == pat
+                for pat in _CHANGELOG_PATTERNS
+            ):
+                matched = True
+                break
+        if not matched:
             return False
 
     return True

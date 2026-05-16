@@ -11,10 +11,12 @@ from conftest import run_git as _run_git, git_head as _git_head, make_commit as 
 from rlsbl.changelog.schema import ChangelogEntry
 from rlsbl.changelog.files import append_entry, read_unreleased
 from rlsbl.changelog.validate import (
+    _get_last_version_tag,
     _is_cache_valid,
     _is_changelog_only_commit,
     _is_release_commit,
     _read_cache,
+    _unreleased_range,
     _write_cache,
     check_coverage,
     check_hashes_resolve,
@@ -520,3 +522,95 @@ class TestIsReleaseCommit:
         sha = _git_head(git_repo)
         assert _is_changelog_only_commit(sha) is True
         assert _is_release_commit(sha) is True
+
+
+class TestGetLastVersionTag:
+    """Tests for _get_last_version_tag with monorepo tag_prefix support."""
+
+    @pytest.fixture
+    def git_repo(self, tmp_path, monkeypatch):
+        """Create a git repo with an initial commit but NO version tag."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        monkeypatch.chdir(repo)
+
+        _run_git(repo, "init", "-q")
+        _run_git(repo, "config", "user.email", "test@test.local")
+        _run_git(repo, "config", "user.name", "Test")
+
+        (repo / "README.md").write_text("# test\n")
+        _run_git(repo, "add", "README.md")
+        _run_git(repo, "commit", "-q", "-m", "initial")
+
+        return repo
+
+    def test_no_tags_returns_none(self, git_repo):
+        """With no version tags at all, returns None."""
+        assert _get_last_version_tag() is None
+
+    def test_plain_tag_returns_tag(self, git_repo):
+        """With a plain v0.1.0 tag, returns that tag."""
+        _run_git(git_repo, "tag", "v0.1.0")
+        assert _get_last_version_tag() == "v0.1.0"
+
+    def test_prefix_matches_prefixed_tag(self, git_repo):
+        """With tag_prefix='mylib' and a mylib@v0.1.0 tag, returns the prefixed tag."""
+        _run_git(git_repo, "tag", "mylib@v0.1.0")
+        assert _get_last_version_tag(tag_prefix="mylib") == "mylib@v0.1.0"
+
+    def test_prefix_ignores_plain_tags(self, git_repo):
+        """With tag_prefix='mylib', plain v0.1.0 tags are ignored (returns None)."""
+        _run_git(git_repo, "tag", "v0.1.0")
+        assert _get_last_version_tag(tag_prefix="mylib") is None
+
+    def test_no_prefix_ignores_prefixed_tags(self, git_repo):
+        """Without tag_prefix, prefixed tags like mylib@v0.1.0 are ignored."""
+        _run_git(git_repo, "tag", "mylib@v0.1.0")
+        assert _get_last_version_tag() is None
+
+    def test_prefix_picks_latest_prefixed_tag(self, git_repo):
+        """With multiple prefixed tags, returns the most recent (by commit reachability)."""
+        _run_git(git_repo, "tag", "mylib@v0.1.0")
+        _make_commit(git_repo)
+        _run_git(git_repo, "tag", "mylib@v0.2.0")
+        assert _get_last_version_tag(tag_prefix="mylib") == "mylib@v0.2.0"
+
+
+class TestUnreleasedRange:
+    """Tests for _unreleased_range with monorepo tag_prefix support."""
+
+    @pytest.fixture
+    def git_repo(self, tmp_path, monkeypatch):
+        """Create a git repo with an initial commit but NO version tag."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        monkeypatch.chdir(repo)
+
+        _run_git(repo, "init", "-q")
+        _run_git(repo, "config", "user.email", "test@test.local")
+        _run_git(repo, "config", "user.name", "Test")
+
+        (repo / "README.md").write_text("# test\n")
+        _run_git(repo, "add", "README.md")
+        _run_git(repo, "commit", "-q", "-m", "initial")
+
+        return repo
+
+    def test_no_tags_returns_head(self, git_repo):
+        """With no tags, returns 'HEAD' (all commits, first release)."""
+        assert _unreleased_range() == "HEAD"
+
+    def test_with_plain_tag(self, git_repo):
+        """With a plain v0.1.0 tag, returns 'v0.1.0..HEAD'."""
+        _run_git(git_repo, "tag", "v0.1.0")
+        assert _unreleased_range() == "v0.1.0..HEAD"
+
+    def test_with_tag_prefix(self, git_repo):
+        """With tag_prefix and a matching prefixed tag, returns prefixed range."""
+        _run_git(git_repo, "tag", "mylib@v0.1.0")
+        assert _unreleased_range(tag_prefix="mylib") == "mylib@v0.1.0..HEAD"
+
+    def test_with_tag_prefix_no_matching_tag(self, git_repo):
+        """With tag_prefix but no matching prefixed tag, returns 'HEAD'."""
+        _run_git(git_repo, "tag", "v0.1.0")
+        assert _unreleased_range(tag_prefix="mylib") == "HEAD"
