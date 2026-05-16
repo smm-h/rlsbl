@@ -24,19 +24,67 @@ def _detect_version(dir_path="."):
 
 
 
-def _check_jsonl_changelog(dir_path, refs):
+def _get_commit_files(sha):
+    """Get the list of files changed by a single commit.
+
+    Returns a list of file paths relative to the repo root, or None on error.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+
+    return [line.strip() for line in result.stdout.strip().splitlines() if line.strip()]
+
+
+def _filter_commits_for_project(commits, project):
+    """Filter commits to only those that touch files belonging to a project.
+
+    Takes a set of commit SHAs and a project dict. For each commit, gets its
+    changed files and checks whether any file matches the project (by path
+    prefix or watch globs).
+
+    Returns the subset of commits where at least one file belongs to the project.
+    """
+    filtered = set()
+    for sha in commits:
+        files = _get_commit_files(sha)
+        if files is None:
+            # Cannot determine files -- include the commit to be safe
+            filtered.add(sha)
+            continue
+        for filepath in files:
+            if _file_matches_project(filepath, project):
+                filtered.add(sha)
+                break
+    return filtered
+
+
+def _check_jsonl_changelog(dir_path, refs, pushed_commits=None):
     """Check JSONL changelog coverage for commits being pushed.
 
     Verifies that every commit in the push range exists in at least one
     unreleased.jsonl entry's commits list.
+
+    When pushed_commits is provided, uses that set directly instead of
+    calling _get_pushed_commits(refs). This allows callers (e.g. monorepo
+    check) to pass a pre-filtered set of commits.
 
     Returns None on success, or an error message string on failure.
     """
     changes_dir = get_changes_dir(dir_path)
     entries = read_unreleased(changes_dir)
 
-    # Get pushed commits from the refs
-    pushed_commits = _get_pushed_commits(refs)
+    # Get pushed commits from the refs, or use the provided set
+    if pushed_commits is None:
+        pushed_commits = _get_pushed_commits(refs)
     if pushed_commits is None:
         return None  # Could not determine pushed commits -- skip
 
@@ -212,10 +260,21 @@ def _affected_projects(changed_files, projects):
 def _run_monorepo_check(workspace_root, projects, changed_files, refs=None):
     """Check changelogs for all affected monorepo projects.
 
+    Filters pushed commits per project so that a commit touching only one
+    project does not require changelog coverage in other projects.
+
     Returns exit code 0 on success, 1 if any project fails.
     """
     affected = _affected_projects(changed_files, projects)
     if not affected:
+        sys.exit(0)
+
+    if refs is None:
+        sys.exit(0)
+
+    # Get all pushed commits once, then filter per project
+    all_pushed = _get_pushed_commits(refs)
+    if all_pushed is None:
         sys.exit(0)
 
     failures = []
@@ -224,9 +283,13 @@ def _run_monorepo_check(workspace_root, projects, changed_files, refs=None):
 
         if not changes_dir_exists(proj_dir):
             continue  # JSONL not set up for this project -- skip
-        if refs is None:
-            continue  # No refs available -- skip
-        error = _check_jsonl_changelog(proj_dir, refs)
+
+        # Filter to only commits that touch this project's files
+        proj_commits = _filter_commits_for_project(all_pushed, proj)
+        if not proj_commits:
+            continue  # No commits relevant to this project
+
+        error = _check_jsonl_changelog(proj_dir, refs, pushed_commits=proj_commits)
 
         if error:
             version, _ = _detect_version(proj_dir)

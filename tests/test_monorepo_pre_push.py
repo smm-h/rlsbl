@@ -7,13 +7,15 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from conftest import make_workspace as _make_workspace
+from conftest import run_git, git_head, make_commit, make_workspace as _make_workspace
 from rlsbl.commands.pre_push_check import (
     run_cmd,
     _detect_version,
     _parse_stdin_refs,
     _get_changed_files,
+    _get_commit_files,
     _file_matches_project,
+    _filter_commits_for_project,
     _affected_projects,
     _run_monorepo_check,
 )
@@ -365,4 +367,174 @@ class TestMonorepoPrePush:
             with pytest.raises(SystemExit) as exc_info:
                 run_cmd(None, [], {})
             # No projects affected, so exit 0
+            assert exc_info.value.code == 0
+
+
+# -- Tests for path-based commit filtering -----------------------------------
+
+
+class TestGetCommitFiles:
+    """Unit tests for _get_commit_files."""
+
+    def test_returns_files_for_commit(self, monorepo_fixture):
+        """Returns the list of files changed by a commit."""
+        root = monorepo_fixture.root
+        sha = make_commit(root, "go/main.go", "add go file")
+        files = _get_commit_files(sha)
+        assert files == ["go/main.go"]
+
+    def test_returns_multiple_files(self, monorepo_fixture):
+        """Returns all files when a commit touches multiple."""
+        root = monorepo_fixture.root
+        (root / "python" / "lib.py").write_text("# lib\n")
+        (root / "go" / "main.go").write_text("// main\n")
+        run_git(root, "add", "python/lib.py", "go/main.go")
+        run_git(root, "commit", "-q", "-m", "cross-project change")
+        sha = git_head(root)
+        files = _get_commit_files(sha)
+        assert sorted(files) == ["go/main.go", "python/lib.py"]
+
+
+class TestFilterCommitsForProject:
+    """Unit tests for _filter_commits_for_project."""
+
+    def test_go_only_commit_not_in_python(self, monorepo_fixture):
+        """A commit touching only go/ files is NOT included for the python project."""
+        root = monorepo_fixture.root
+        sha = make_commit(root, "go/main.go", "go-only change")
+
+        python_proj = {"path": "python", "name": "mypylib"}
+        result = _filter_commits_for_project({sha}, python_proj)
+        assert result == set()
+
+    def test_go_only_commit_in_go(self, monorepo_fixture):
+        """A commit touching only go/ files IS included for the go project."""
+        root = monorepo_fixture.root
+        sha = make_commit(root, "go/main.go", "go-only change")
+
+        go_proj = {"path": "go", "name": "mygolib"}
+        result = _filter_commits_for_project({sha}, go_proj)
+        assert result == {sha}
+
+    def test_cross_project_commit_in_both(self, monorepo_fixture):
+        """A commit touching both python/ and go/ is included for both projects."""
+        root = monorepo_fixture.root
+        (root / "python" / "lib.py").write_text("# lib\n")
+        (root / "go" / "main.go").write_text("// main\n")
+        run_git(root, "add", "python/lib.py", "go/main.go")
+        run_git(root, "commit", "-q", "-m", "cross-project")
+        sha = git_head(root)
+
+        python_proj = {"path": "python", "name": "mypylib"}
+        go_proj = {"path": "go", "name": "mygolib"}
+        assert _filter_commits_for_project({sha}, python_proj) == {sha}
+        assert _filter_commits_for_project({sha}, go_proj) == {sha}
+
+    def test_python_only_commit_not_in_go(self, monorepo_fixture):
+        """A commit touching only python/ files is NOT included for the go project."""
+        root = monorepo_fixture.root
+        sha = make_commit(root, "python/app.py", "python-only change")
+
+        go_proj = {"path": "go", "name": "mygolib"}
+        result = _filter_commits_for_project({sha}, go_proj)
+        assert result == set()
+
+    def test_python_only_commit_in_python(self, monorepo_fixture):
+        """A commit touching only python/ files IS included for the python project."""
+        root = monorepo_fixture.root
+        sha = make_commit(root, "python/app.py", "python-only change")
+
+        python_proj = {"path": "python", "name": "mypylib"}
+        result = _filter_commits_for_project({sha}, python_proj)
+        assert result == {sha}
+
+
+class TestMonorepoPathFiltering:
+    """Integration tests: monorepo pre-push check filters commits per project."""
+
+    def _write_jsonl_entry(self, proj_dir, commits, user_facing=False):
+        """Append a JSONL entry to a project's unreleased.jsonl."""
+        changes_dir = proj_dir / ".rlsbl" / "changes"
+        entry = {"commits": commits, "user_facing": user_facing}
+        if user_facing:
+            entry["description"] = "Test change."
+            entry["type"] = "feature"
+        with open(changes_dir / "unreleased.jsonl", "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+    def test_go_only_commit_does_not_require_python_coverage(self, monorepo_fixture, capsys):
+        """A commit touching only go/ does NOT need coverage in python's changelog."""
+        root = monorepo_fixture.root
+        projects = monorepo_fixture.projects
+
+        # Make a commit that only touches go/
+        go_sha = make_commit(root, "go/main.go", "go-only change")
+
+        # Add coverage in go's changelog, but NOT in python's
+        self._write_jsonl_entry(monorepo_fixture.go_dir, [go_sha[:12]])
+        run_git(root, "add", "go/.rlsbl/changes/unreleased.jsonl")
+        run_git(root, "commit", "-q", "-m", "changelog: go entry")
+
+        # Changed files span only go/
+        changed_files = {"go/main.go"}
+
+        # The pushed commits include both the go change and the changelog commit
+        # We mock _get_pushed_commits to return just the go commit
+        # (changelog commits are release infra and get filtered out anyway)
+        with patch("rlsbl.commands.pre_push_check._get_pushed_commits",
+                   return_value={go_sha}):
+            with pytest.raises(SystemExit) as exc_info:
+                _run_monorepo_check(str(root), projects, changed_files, refs=[("fake", "fake")])
+            assert exc_info.value.code == 0
+
+    def test_cross_project_commit_requires_both_changelogs(self, monorepo_fixture, capsys):
+        """A commit touching both python/ and go/ requires coverage in BOTH changelogs."""
+        root = monorepo_fixture.root
+        projects = monorepo_fixture.projects
+
+        # Make a cross-project commit
+        (root / "python" / "lib.py").write_text("# lib\n")
+        (root / "go" / "main.go").write_text("// main\n")
+        run_git(root, "add", "python/lib.py", "go/main.go")
+        run_git(root, "commit", "-q", "-m", "cross-project change")
+        cross_sha = git_head(root)
+
+        # Add coverage ONLY in go's changelog
+        self._write_jsonl_entry(monorepo_fixture.go_dir, [cross_sha[:12]])
+        run_git(root, "add", "go/.rlsbl/changes/unreleased.jsonl")
+        run_git(root, "commit", "-q", "-m", "changelog: go entry")
+
+        # Changed files span both projects
+        changed_files = {"python/lib.py", "go/main.go"}
+
+        with patch("rlsbl.commands.pre_push_check._get_pushed_commits",
+                   return_value={cross_sha}):
+            with pytest.raises(SystemExit) as exc_info:
+                _run_monorepo_check(str(root), projects, changed_files, refs=[("fake", "fake")])
+            # Should fail because python's changelog is missing coverage
+            assert exc_info.value.code == 1
+            captured = capsys.readouterr()
+            assert "mypylib" in captured.err
+
+    def test_python_only_commit_requires_only_python_coverage(self, monorepo_fixture, capsys):
+        """A commit touching only python/ requires coverage only in python's changelog."""
+        root = monorepo_fixture.root
+        projects = monorepo_fixture.projects
+
+        # Make a python-only commit
+        py_sha = make_commit(root, "python/app.py", "python-only change")
+
+        # Add coverage ONLY in python's changelog
+        self._write_jsonl_entry(monorepo_fixture.python_dir, [py_sha[:12]])
+        run_git(root, "add", "python/.rlsbl/changes/unreleased.jsonl")
+        run_git(root, "commit", "-q", "-m", "changelog: python entry")
+
+        # Changed files span only python/
+        changed_files = {"python/app.py"}
+
+        with patch("rlsbl.commands.pre_push_check._get_pushed_commits",
+                   return_value={py_sha}):
+            with pytest.raises(SystemExit) as exc_info:
+                _run_monorepo_check(str(root), projects, changed_files, refs=[("fake", "fake")])
+            # Should pass -- python has coverage, go is not checked
             assert exc_info.value.code == 0
