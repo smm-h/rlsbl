@@ -562,6 +562,12 @@ def cmd_mono_outdated():
     _cmd_outdated({})
 
 
+@mono.command(name="lint", help="Detect unregistered projects and stale workspace entries. Scans first-level directories for recognized project manifests and compares against workspace.toml. Exits non-zero if any issues are found.")
+def cmd_mono_lint():
+    from .commands.monorepo import _cmd_lint
+    _cmd_lint({})
+
+
 # ---------------------------------------------------------------------------
 # Variadic arg extraction
 # ---------------------------------------------------------------------------
