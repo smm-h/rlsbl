@@ -10,6 +10,7 @@ from ..changelog.resolve import resolve_hash
 from ..changelog.schema import ChangelogEntry, validate_schema
 from ..changelog.validate import validate_unreleased
 from ..utils import commit_files
+from ..workspace import find_workspace_root, resolve_project
 
 
 def cmd_add(flags):
@@ -91,8 +92,25 @@ def cmd_validate(flags):
         print("Error: .rlsbl/changes/ does not exist.", file=sys.stderr)
         sys.exit(1)
 
+    # Detect monorepo context for tag-scoped validation
+    tag_prefix = None
+    monorepo_root = find_workspace_root(".")
+    if monorepo_root:
+        project = resolve_project(monorepo_root, ".")
+        if project is None:
+            print(
+                "Error: current directory is inside a monorepo but not inside any project.",
+                file=sys.stderr,
+            )
+            print(
+                "Run 'rlsbl monorepo status' to see registered projects.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        tag_prefix = project["name"]
+
     changes_dir = get_changes_dir(".")
-    results = validate_unreleased(changes_dir)
+    results = validate_unreleased(changes_dir, tag_prefix=tag_prefix)
 
     overall = results["passed"]
     for name, (passed, details) in results["checks"].items():

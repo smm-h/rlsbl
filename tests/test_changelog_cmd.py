@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from conftest import run_git as _run_git, git_head as _git_head, make_commit as _make_commit
+from conftest import run_git as _run_git, git_head as _git_head, make_commit as _make_commit, make_workspace as _make_workspace
 from rlsbl.changelog.files import (
     append_entry,
     get_changes_dir,
@@ -207,6 +207,102 @@ class TestCmdValidate:
     def test_no_changes_dir(self, tmp_path, monkeypatch):
         """Error when .rlsbl/changes/ does not exist."""
         monkeypatch.chdir(tmp_path)
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_validate({})
+        assert exc_info.value.code == 1
+
+    def test_standalone_no_tag_prefix(self, rlsbl_repo):
+        """In standalone mode, validate_unreleased is called without tag_prefix."""
+        sha = _make_commit(rlsbl_repo)
+        changes_dir = get_changes_dir(".")
+        append_entry(changes_dir, ChangelogEntry(commits=[sha], user_facing=False))
+
+        with mock.patch("rlsbl.commands.changelog_cmd.validate_unreleased", wraps=cmd_validate.__module__) as _:
+            # Use a more direct approach: mock validate_unreleased and check args
+            pass
+
+        with mock.patch("rlsbl.commands.changelog_cmd.validate_unreleased") as mock_validate:
+            mock_validate.return_value = {
+                "passed": True,
+                "checks": {
+                    "hashes_resolve": (True, []),
+                    "in_range": (True, []),
+                    "coverage": (True, []),
+                    "no_orphans": (True, []),
+                    "schema": (True, []),
+                },
+            }
+            cmd_validate({})
+            mock_validate.assert_called_once_with(changes_dir, tag_prefix=None)
+
+    def test_monorepo_passes_tag_prefix(self, tmp_path, monkeypatch):
+        """In monorepo context, validate_unreleased receives tag_prefix."""
+        monkeypatch.chdir(tmp_path)
+
+        _run_git(tmp_path, "init", "-q")
+        _run_git(tmp_path, "config", "user.email", "test@test.local")
+        _run_git(tmp_path, "config", "user.name", "Test")
+
+        (tmp_path / "README.md").write_text("# mono\n")
+        _run_git(tmp_path, "add", "README.md")
+        _run_git(tmp_path, "commit", "-q", "-m", "initial")
+
+        # Create monorepo workspace
+        _make_workspace(tmp_path, [{"path": "sub", "name": "mysub"}])
+
+        # Create subproject with changelog dir
+        sub_dir = tmp_path / "sub"
+        (sub_dir / ".rlsbl" / "changes").mkdir(parents=True)
+        (sub_dir / ".rlsbl" / "changes" / "unreleased.jsonl").write_text("")
+
+        _run_git(tmp_path, "add", ".")
+        _run_git(tmp_path, "commit", "-q", "-m", "add workspace")
+        _run_git(tmp_path, "tag", "mysub@v0.1.0")
+
+        # cd into the subproject
+        monkeypatch.chdir(sub_dir)
+
+        sha = _make_commit(tmp_path, "sub/code.py", "subproject change")
+        changes_dir = get_changes_dir(".")
+        append_entry(changes_dir, ChangelogEntry(commits=[sha], user_facing=False))
+
+        with mock.patch("rlsbl.commands.changelog_cmd.validate_unreleased") as mock_validate:
+            mock_validate.return_value = {
+                "passed": True,
+                "checks": {
+                    "hashes_resolve": (True, []),
+                    "in_range": (True, []),
+                    "coverage": (True, []),
+                    "no_orphans": (True, []),
+                    "schema": (True, []),
+                },
+            }
+            cmd_validate({})
+            mock_validate.assert_called_once_with(changes_dir, tag_prefix="mysub")
+
+    def test_monorepo_unregistered_project_errors(self, tmp_path, monkeypatch):
+        """Error when inside a monorepo but not in a registered project."""
+        monkeypatch.chdir(tmp_path)
+
+        _run_git(tmp_path, "init", "-q")
+        _run_git(tmp_path, "config", "user.email", "test@test.local")
+        _run_git(tmp_path, "config", "user.name", "Test")
+
+        (tmp_path / "README.md").write_text("# mono\n")
+        _run_git(tmp_path, "add", "README.md")
+        _run_git(tmp_path, "commit", "-q", "-m", "initial")
+
+        # Create monorepo workspace with one registered project
+        _make_workspace(tmp_path, [{"path": "registered", "name": "myreg"}])
+        _run_git(tmp_path, "add", ".")
+        _run_git(tmp_path, "commit", "-q", "-m", "add workspace")
+
+        # Create an unregistered dir with .rlsbl/changes so changes_dir_exists passes
+        unregistered = tmp_path / "unregistered"
+        (unregistered / ".rlsbl" / "changes").mkdir(parents=True)
+
+        monkeypatch.chdir(unregistered)
+
         with pytest.raises(SystemExit) as exc_info:
             cmd_validate({})
         assert exc_info.value.code == 1
