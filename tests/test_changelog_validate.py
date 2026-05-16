@@ -405,6 +405,39 @@ class TestIsChangelogOnlyCommit:
         sha = _git_head(git_repo)
         assert _is_changelog_only_commit(sha) is True
 
+    def test_monorepo_prefixed_changelog_paths(self, git_repo):
+        """Commit touching only monorepo-prefixed changelog paths is changelog-only."""
+        # Simulate monorepo sub-project changelog files
+        py_changes = git_repo / "python" / ".rlsbl" / "changes"
+        py_changes.mkdir(parents=True)
+        (py_changes / "unreleased.jsonl").write_text(
+            '{"commits":["abc"],"user_facing":false}\n'
+        )
+        go_dir = git_repo / "go"
+        go_dir.mkdir(parents=True)
+        (go_dir / "CHANGELOG.md").write_text("## 1.0.0\n- stuff\n")
+        _run_git(git_repo, "add", "python/.rlsbl/changes/unreleased.jsonl")
+        _run_git(git_repo, "add", "go/CHANGELOG.md")
+        _run_git(git_repo, "commit", "-q", "-m", "update monorepo changelogs")
+        sha = _git_head(git_repo)
+        assert _is_changelog_only_commit(sha) is True
+
+    def test_monorepo_mixed_paths(self, git_repo):
+        """Commit touching monorepo changelog AND code files is NOT changelog-only."""
+        py_changes = git_repo / "python" / ".rlsbl" / "changes"
+        py_changes.mkdir(parents=True)
+        (py_changes / "unreleased.jsonl").write_text(
+            '{"commits":["abc"],"user_facing":false}\n'
+        )
+        py_src = git_repo / "python" / "src"
+        py_src.mkdir(parents=True)
+        (py_src / "main.py").write_text("print('hello')\n")
+        _run_git(git_repo, "add", "python/.rlsbl/changes/unreleased.jsonl")
+        _run_git(git_repo, "add", "python/src/main.py")
+        _run_git(git_repo, "commit", "-q", "-m", "mixed monorepo commit")
+        sha = _git_head(git_repo)
+        assert _is_changelog_only_commit(sha) is False
+
 
 class TestChangelogOnlyCoverage:
     """Integration tests: changelog-only commits are skipped in coverage."""
