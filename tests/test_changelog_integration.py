@@ -7,6 +7,7 @@ import sys
 
 import pytest
 
+from conftest import make_commit as _make_commit
 from rlsbl.changelog import (
     ChangelogEntry,
     append_entry,
@@ -14,22 +15,6 @@ from rlsbl.changelog import (
     get_changes_dir,
     serialize_entry,
 )
-
-
-def _make_commit(repo_path, filename, message):
-    """Create a file, add it, and commit. Returns the full commit SHA."""
-    filepath = repo_path / filename
-    filepath.write_text(f"content of {filename}\n")
-    subprocess.run(["git", "add", str(filepath)], cwd=str(repo_path), check=True)
-    subprocess.run(
-        ["git", "commit", "-q", "-m", message],
-        cwd=str(repo_path), check=True,
-    )
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=str(repo_path), capture_output=True, text=True, check=True,
-    )
-    return result.stdout.strip()
 
 
 def _setup_jsonl_project(repo_path, commits_and_entries):

@@ -7,6 +7,7 @@ import time
 
 import pytest
 
+from conftest import run_git as _run_git, git_head as _git_head, make_commit as _make_commit
 from rlsbl.changelog.schema import ChangelogEntry
 from rlsbl.changelog.files import append_entry, read_unreleased
 from rlsbl.changelog.validate import (
@@ -22,29 +23,6 @@ from rlsbl.changelog.validate import (
     check_schema,
     validate_unreleased,
 )
-
-
-def _run_git(repo, *args):
-    """Run a git command in the given repo directory."""
-    subprocess.run(
-        ["git"] + list(args),
-        cwd=str(repo),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-
-def _git_head(repo):
-    """Get HEAD hash."""
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=str(repo),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
 
 
 @pytest.fixture
@@ -71,15 +49,6 @@ def git_repo(tmp_path, monkeypatch):
     changes.mkdir(parents=True)
 
     return repo
-
-
-def _make_commit(repo, filename="file.txt", message="change"):
-    """Make a commit and return its hash."""
-    filepath = repo / filename
-    filepath.write_text(f"content-{time.monotonic_ns()}\n")
-    _run_git(repo, "add", filename)
-    _run_git(repo, "commit", "-q", "-m", message)
-    return _git_head(repo)
 
 
 class TestCheckHashesResolve:

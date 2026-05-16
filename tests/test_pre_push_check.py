@@ -1,37 +1,14 @@
 """Tests for the full run_cmd flow of rlsbl.commands.pre_push_check."""
 
 import json
-import subprocess
 
 import pytest
 
+from conftest import run_git as _run_git, git_head as _git_head
 from rlsbl.commands.pre_push_check import (
     _check_jsonl_changelog,
     run_cmd,
 )
-
-
-def _run_git(repo, *args):
-    """Run a git command in the given repo directory."""
-    subprocess.run(
-        ["git"] + list(args),
-        cwd=str(repo),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-
-def _git_head(repo):
-    """Get HEAD hash."""
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=str(repo),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
 
 
 @pytest.fixture

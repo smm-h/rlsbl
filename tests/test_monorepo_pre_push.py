@@ -2,12 +2,12 @@
 
 import json
 import os
-import subprocess
 from io import StringIO
 from unittest.mock import patch, MagicMock
 
 import pytest
 
+from conftest import make_workspace as _make_workspace
 from rlsbl.commands.pre_push_check import (
     run_cmd,
     _detect_version,
@@ -17,26 +17,6 @@ from rlsbl.commands.pre_push_check import (
     _affected_projects,
     _run_monorepo_check,
 )
-from rlsbl.workspace import WORKSPACE_DIR, WORKSPACE_FILE
-
-
-# -- Helpers ------------------------------------------------------------------
-
-
-def _make_workspace(root, projects):
-    """Create a .rlsbl-monorepo/workspace.toml with the given project list."""
-    ws_dir = root / WORKSPACE_DIR
-    ws_dir.mkdir(exist_ok=True)
-    lines = []
-    for proj in projects:
-        lines.append("[[projects]]")
-        lines.append(f'path = "{proj["path"]}"')
-        lines.append(f'name = "{proj["name"]}"')
-        if "watch" in proj:
-            watch_items = ", ".join(f'"{w}"' for w in proj["watch"])
-            lines.append(f"watch = [{watch_items}]")
-        lines.append("")
-    (ws_dir / WORKSPACE_FILE).write_text("\n".join(lines))
 
 
 def _make_npm_project(root, subdir, version="1.0.0", changelog_version=None):

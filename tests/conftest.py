@@ -3,8 +3,64 @@
 import json
 import os
 import subprocess
+import time
 
 import pytest
+
+from rlsbl.workspace import WORKSPACE_DIR, WORKSPACE_FILE
+
+
+# ---------------------------------------------------------------------------
+# Utility functions (imported explicitly by test modules)
+# ---------------------------------------------------------------------------
+
+
+def run_git(repo, *args):
+    """Run a git command in the given repo directory."""
+    subprocess.run(
+        ["git"] + list(args),
+        cwd=str(repo),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def git_head(repo):
+    """Get HEAD hash."""
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def make_commit(repo, filename="file.txt", message="change"):
+    """Make a commit and return its hash."""
+    filepath = repo / filename
+    filepath.write_text(f"content-{time.monotonic_ns()}\n")
+    run_git(repo, "add", filename)
+    run_git(repo, "commit", "-q", "-m", message)
+    return git_head(repo)
+
+
+def make_workspace(root, projects):
+    """Create a .rlsbl-monorepo/workspace.toml with the given project list."""
+    ws_dir = root / WORKSPACE_DIR
+    ws_dir.mkdir(exist_ok=True)
+    lines = []
+    for proj in projects:
+        lines.append("[[projects]]")
+        lines.append(f'path = "{proj["path"]}"')
+        lines.append(f'name = "{proj["name"]}"')
+        if "watch" in proj:
+            watch_items = ", ".join(f'"{w}"' for w in proj["watch"])
+            lines.append(f"watch = [{watch_items}]")
+        lines.append("")
+    (ws_dir / WORKSPACE_FILE).write_text("\n".join(lines))
 
 
 class FakeResponse:
