@@ -64,7 +64,11 @@ class PypiTarget(BaseTarget):
             raise ValueError(f"No [project].version in {toml_path}")
 
     def write_version(self, dir_path, version):
-        """Write a new version to pyproject.toml and __version__ in package source."""
+        """Write a new version to pyproject.toml and __version__ in package source.
+
+        Returns a list of relative file paths (relative to dir_path) that
+        were modified.
+        """
         path = os.path.join(dir_path, "pyproject.toml")
         with open(path, "r", encoding="utf-8") as f:
             doc = tomlkit.parse(f.read())
@@ -74,23 +78,33 @@ class PypiTarget(BaseTarget):
             f.write(tomlkit.dumps(doc))
         os.replace(tmp_path, path)
 
-        self._update_dunder_version(dir_path, doc, version)
+        modified = ["pyproject.toml"]
+        dunder_path = self._update_dunder_version(dir_path, doc, version)
+        if dunder_path:
+            modified.append(dunder_path)
+        return modified
 
     def _update_dunder_version(self, dir_path, doc, version):
-        """Update __version__ in the package's __init__.py if present."""
+        """Update __version__ in the package's __init__.py if present.
+
+        Returns the relative path (relative to dir_path) of the file that
+        was modified, or None if no file was updated.
+        """
         _VERSION_RE = re.compile(r'(__version__\s*=\s*["\'])[\d.]+(["\'])')
 
         name = doc.get("project", {}).get("name")
         if not name:
-            return
+            return None
 
         pkg_name = name.replace("-", "_")
         candidates = [
-            os.path.join(dir_path, pkg_name, "__init__.py"),
-            os.path.join(dir_path, "src", pkg_name, "__init__.py"),
+            (os.path.join(dir_path, pkg_name, "__init__.py"),
+             os.path.join(pkg_name, "__init__.py")),
+            (os.path.join(dir_path, "src", pkg_name, "__init__.py"),
+             os.path.join("src", pkg_name, "__init__.py")),
         ]
 
-        for init_path in candidates:
+        for init_path, rel_path in candidates:
             if not os.path.isfile(init_path):
                 continue
             with open(init_path, "r", encoding="utf-8") as f:
@@ -101,7 +115,9 @@ class PypiTarget(BaseTarget):
                 with open(tmp, "w", encoding="utf-8") as f:
                     f.write(new_content)
                 os.replace(tmp, init_path)
+                return rel_path
             break
+        return None
 
     def version_file(self):
         return "pyproject.toml"

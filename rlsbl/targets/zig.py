@@ -63,8 +63,11 @@ class ZigTarget(BaseTarget):
         return read_zig_version(dir_path)
 
     def write_version(self, dir_path, version):
-        """Write version, delegating to zig_version helpers."""
-        write_zig_version(dir_path, version)
+        """Write version, delegating to zig_version helpers.
+
+        Returns a list of relative file paths that were modified.
+        """
+        return write_zig_version(dir_path, version)
 
     def version_file(self):
         return VERSION_FILE

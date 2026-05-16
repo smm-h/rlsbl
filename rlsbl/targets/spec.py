@@ -54,7 +54,11 @@ class SpecTarget(BaseTarget):
         return data["version"]
 
     def write_version(self, dir_path, version):
-        """Write the new version to version.json atomically."""
+        """Write the new version to version.json atomically.
+
+        Returns a list of relative file paths (relative to dir_path) that
+        were modified.
+        """
         path = self._version_json_path(dir_path)
         # Read existing data to preserve other fields
         if os.path.exists(path):
@@ -68,6 +72,7 @@ class SpecTarget(BaseTarget):
             json.dump(data, f, indent=2)
             f.write("\n")
         os.replace(tmp_path, path)
+        return [os.path.relpath(path, dir_path)]
 
     def version_file(self):
         return "version.json"

@@ -58,6 +58,15 @@ class BaseTarget:
     def get_project_init_hint(self):
         return ""
 
+    def write_version(self, dir_path, version):
+        """Write a new version to the target's version file(s).
+
+        Returns a list of relative file paths (relative to dir_path) that
+        were modified. Subclasses must override this method and return the
+        actual paths written.
+        """
+        return []
+
     def build(self, dir_path, version):
         pass
 

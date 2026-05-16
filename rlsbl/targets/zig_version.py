@@ -46,7 +46,10 @@ def read_zig_version(dir_path):
 
 
 def write_zig_version(dir_path, version):
-    """Write the version to VERSION (atomic) and sync build.zig.zon if present."""
+    """Write the version to VERSION (atomic) and sync build.zig.zon if present.
+
+    Returns a list of relative file paths that were modified.
+    """
     # Write VERSION atomically
     version_path = os.path.join(dir_path, VERSION_FILE)
     tmp_path = version_path + ".tmp"
@@ -54,10 +57,12 @@ def write_zig_version(dir_path, version):
         f.write(version + "\n")
     os.replace(tmp_path, version_path)
 
+    modified = [VERSION_FILE]
+
     # Sync build.zig.zon if it exists
     zon_path = os.path.join(dir_path, ZON_FILE)
     if not os.path.exists(zon_path):
-        return
+        return modified
 
     with open(zon_path, "r", encoding="utf-8") as f:
         content = f.read()
@@ -70,9 +75,12 @@ def write_zig_version(dir_path, version):
             "Warning: could not sync version to build.zig.zon",
             file=sys.stderr,
         )
-        return
+        return modified
 
     zon_tmp = zon_path + ".tmp"
     with open(zon_tmp, "w", encoding="utf-8") as f:
         f.write(new_content)
     os.replace(zon_tmp, zon_path)
+    modified.append(ZON_FILE)
+
+    return modified

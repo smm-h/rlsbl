@@ -995,3 +995,181 @@ class TestDetectTargetsAutoDetection:
         result = detect_targets(".")
         result_names = [entry.name for entry in result]
         assert target_name in result_names
+
+
+class TestWriteVersionReturnPaths:
+    """Tests that write_version() returns the list of modified file paths."""
+
+    def test_pypi_returns_both_files_with_dunder_version(self):
+        """PypiTarget.write_version returns both pyproject.toml and __init__.py."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            with open(toml_path, "w") as f:
+                f.write('[project]\nname = "my-pkg"\nversion = "1.0.0"\n')
+            pkg_dir = os.path.join(d, "my_pkg")
+            os.makedirs(pkg_dir)
+            init_path = os.path.join(pkg_dir, "__init__.py")
+            with open(init_path, "w") as f:
+                f.write('__version__ = "1.0.0"\n')
+            result = target.write_version(d, "2.0.0")
+            assert result == ["pyproject.toml", os.path.join("my_pkg", "__init__.py")]
+
+    def test_pypi_returns_both_files_src_layout(self):
+        """PypiTarget.write_version returns src-layout __init__.py path."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            with open(toml_path, "w") as f:
+                f.write('[project]\nname = "my-pkg"\nversion = "1.0.0"\n')
+            pkg_dir = os.path.join(d, "src", "my_pkg")
+            os.makedirs(pkg_dir)
+            init_path = os.path.join(pkg_dir, "__init__.py")
+            with open(init_path, "w") as f:
+                f.write('__version__ = "1.0.0"\n')
+            result = target.write_version(d, "2.0.0")
+            assert result == ["pyproject.toml", os.path.join("src", "my_pkg", "__init__.py")]
+
+    def test_pypi_returns_only_pyproject_without_init(self):
+        """PypiTarget.write_version returns only pyproject.toml when no __init__.py."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            with open(toml_path, "w") as f:
+                f.write('[project]\nname = "my-pkg"\nversion = "1.0.0"\n')
+            result = target.write_version(d, "2.0.0")
+            assert result == ["pyproject.toml"]
+
+    def test_pypi_returns_only_pyproject_when_init_has_no_dunder(self):
+        """PypiTarget.write_version returns only pyproject.toml when __init__.py lacks __version__."""
+        target = PypiTarget()
+        with tempfile.TemporaryDirectory() as d:
+            toml_path = os.path.join(d, "pyproject.toml")
+            with open(toml_path, "w") as f:
+                f.write('[project]\nname = "my-pkg"\nversion = "1.0.0"\n')
+            pkg_dir = os.path.join(d, "my_pkg")
+            os.makedirs(pkg_dir)
+            init_path = os.path.join(pkg_dir, "__init__.py")
+            with open(init_path, "w") as f:
+                f.write('"""My package."""\n')
+            result = target.write_version(d, "2.0.0")
+            assert result == ["pyproject.toml"]
+
+    def test_zig_returns_both_files_with_zon(self):
+        """ZigTarget.write_version returns VERSION and build.zig.zon when zon exists."""
+        from rlsbl.targets.zig import ZigTarget
+        target = ZigTarget()
+        with tempfile.TemporaryDirectory() as d:
+            zon_content = '.{\n    .name = "my-project",\n    .version = "0.1.0",\n}\n'
+            with open(os.path.join(d, "build.zig.zon"), "w") as f:
+                f.write(zon_content)
+            result = target.write_version(d, "1.0.0")
+            assert result == ["VERSION", "build.zig.zon"]
+
+    def test_zig_returns_only_version_without_zon(self):
+        """ZigTarget.write_version returns only VERSION when no build.zig.zon."""
+        from rlsbl.targets.zig import ZigTarget
+        target = ZigTarget()
+        with tempfile.TemporaryDirectory() as d:
+            result = target.write_version(d, "1.0.0")
+            assert result == ["VERSION"]
+
+    def test_maven_returns_gradle_properties(self, tmp_path):
+        """MavenTarget.write_version returns the gradle.properties path."""
+        from rlsbl.targets.maven import MavenTarget
+        target = MavenTarget()
+        (tmp_path / "build.gradle.kts").write_text('plugins { id("java") }')
+        (tmp_path / "gradle.properties").write_text("VERSION_NAME=1.0.0\n")
+        result = target.write_version(str(tmp_path), "2.0.0")
+        assert result == ["gradle.properties"]
+
+    def test_maven_returns_pom_xml(self, tmp_path):
+        """MavenTarget.write_version returns pom.xml when that is the version source."""
+        from rlsbl.targets.maven import MavenTarget
+        pom = '<project><version>1.0.0</version></project>'
+        (tmp_path / "pom.xml").write_text(pom)
+        result = MavenTarget().write_version(str(tmp_path), "2.0.0")
+        assert result == ["pom.xml"]
+
+    def test_npm_returns_package_json(self, tmp_path):
+        """NpmTarget.write_version returns ['package.json']."""
+        target = NpmTarget()
+        (tmp_path / "package.json").write_text(json.dumps({"name": "test", "version": "1.0.0"}))
+        result = target.write_version(str(tmp_path), "2.0.0")
+        assert result == ["package.json"]
+
+    def test_go_returns_version_file(self, tmp_path):
+        """GoTarget.write_version returns ['VERSION']."""
+        target = GoTarget()
+        result = target.write_version(str(tmp_path), "1.0.0")
+        assert result == ["VERSION"]
+
+    def test_cargo_returns_cargo_toml(self, tmp_path):
+        """CargoTarget.write_version returns ['Cargo.toml']."""
+        target = CargoTarget()
+        (tmp_path / "Cargo.toml").write_text('[package]\nname = "test"\nversion = "1.0.0"\n')
+        result = target.write_version(str(tmp_path), "2.0.0")
+        assert result == ["Cargo.toml"]
+
+    def test_deno_returns_deno_json(self, tmp_path):
+        """DenoTarget.write_version returns ['deno.json']."""
+        target = DenoTarget()
+        (tmp_path / "deno.json").write_text('{"name": "test", "version": "1.0.0"}')
+        result = target.write_version(str(tmp_path), "2.0.0")
+        assert result == ["deno.json"]
+
+    def test_deno_returns_deno_jsonc(self, tmp_path):
+        """DenoTarget.write_version returns ['deno.jsonc'] for jsonc files."""
+        target = DenoTarget()
+        (tmp_path / "deno.jsonc").write_text('// comment\n{"name": "test", "version": "1.0.0"}')
+        result = target.write_version(str(tmp_path), "2.0.0")
+        assert result == ["deno.jsonc"]
+
+    def test_hex_returns_mix_exs(self, tmp_path):
+        """HexTarget.write_version returns ['mix.exs']."""
+        target = HexTarget()
+        (tmp_path / "mix.exs").write_text('defmodule T do\n  [version: "1.0.0"]\nend')
+        result = target.write_version(str(tmp_path), "2.0.0")
+        assert result == ["mix.exs"]
+
+    def test_spec_returns_version_json(self, tmp_path):
+        """SpecTarget.write_version returns ['version.json']."""
+        target = SpecTarget()
+        (tmp_path / "version.json").write_text('{"version": "1.0.0"}')
+        result = target.write_version(str(tmp_path), "2.0.0")
+        assert result == ["version.json"]
+
+    def test_spec_returns_spec_subdir_path(self, tmp_path):
+        """SpecTarget.write_version returns relative path when version.json is in spec/."""
+        target = SpecTarget()
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "version.json").write_text('{"version": "1.0.0"}')
+        result = target.write_version(str(tmp_path), "2.0.0")
+        assert result == [os.path.join("spec", "version.json")]
+
+    def test_docs_returns_empty(self):
+        """DocsTarget.write_version returns [] (no-op)."""
+        from rlsbl.targets.docs import DocsTarget
+        target = DocsTarget()
+        with tempfile.TemporaryDirectory() as d:
+            result = target.write_version(d, "1.0.0")
+            assert result == []
+
+    def test_plain_returns_version_file(self, tmp_path):
+        """PlainTarget.write_version returns ['VERSION']."""
+        from rlsbl.targets.plain import PlainTarget
+        target = PlainTarget()
+        result = target.write_version(str(tmp_path), "1.0.0")
+        assert result == ["VERSION"]
+
+    def test_swift_returns_version_file(self, tmp_path):
+        """SwiftTarget.write_version returns ['VERSION']."""
+        target = SwiftTarget()
+        result = target.write_version(str(tmp_path), "1.0.0")
+        assert result == ["VERSION"]
+
+    def test_swift_apple_returns_version_file(self, tmp_path):
+        """SwiftAppleTarget.write_version returns ['VERSION']."""
+        target = SwiftAppleTarget()
+        result = target.write_version(str(tmp_path), "1.0.0")
+        assert result == ["VERSION"]

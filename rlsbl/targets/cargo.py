@@ -64,7 +64,10 @@ class CargoTarget(BaseTarget):
         return str(doc["package"]["version"])
 
     def write_version(self, dir_path, version):
-        """Write version to Cargo.toml using tomlkit round-trip (preserves comments)."""
+        """Write version to Cargo.toml using tomlkit round-trip (preserves comments).
+
+        Returns a list of relative file paths that were modified.
+        """
         cargo_path = os.path.join(dir_path, "Cargo.toml")
         with open(cargo_path, "r", encoding="utf-8") as f:
             doc = tomlkit.parse(f.read())
@@ -73,6 +76,7 @@ class CargoTarget(BaseTarget):
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(tomlkit.dumps(doc))
         os.replace(tmp_path, cargo_path)
+        return [self.version_file()]
 
     def version_file(self):
         return "Cargo.toml"

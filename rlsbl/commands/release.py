@@ -510,12 +510,13 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         """
         return os.path.normpath(os.path.join(t_path, filename))
 
-    # Pre-compute which files will be modified
+    # Pre-compute expected version files for the confirmation prompt display.
+    # The actual files_to_commit list is built from write_version() return
+    # values below, which may include additional files (e.g. __init__.py).
     version_file = reg.version_file()
-    files_to_commit = []
+    preview_files = []
     if version_file:
-        files_to_commit.append(target_vpath(primary_path, version_file))
-    # Sync version to other configured/detected targets (per-target paths)
+        preview_files.append(target_vpath(primary_path, version_file))
     for t_name, t_path in target_paths.items():
         if t_name == registry:
             continue
@@ -523,15 +524,15 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         if other_reg and other_reg.check_project_exists(t_path):
             other_file = other_reg.version_file()
             if other_file:
-                files_to_commit.append(target_vpath(t_path, other_file))
+                preview_files.append(target_vpath(t_path, other_file))
 
     # Confirmation prompt (skip with --yes)
     if not flags.get("yes"):
         bump_label = f" ({bump_type})" if bump_type else ""
         print(f"\nAbout to release {new_version}{bump_label} on {branch}")
         print(f"  Tag: {tag}")
-        if files_to_commit:
-            print(f"  Files: {', '.join(files_to_commit)}")
+        if preview_files:
+            print(f"  Files: {', '.join(preview_files)}")
         else:
             print("  Files: (none -- version is the git tag)")
         if should_tag(flags):
@@ -546,10 +547,14 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
             sys.exit(0)
 
     # Write new version to version files (skip if version didn't change, e.g. first release)
+    # Build files_to_commit from the paths actually modified by write_version().
+    files_to_commit = []
     if new_version != current_version:
-        if version_file:
-            reg.write_version(primary_path, new_version)
-            log(f"Updated version in {target_vpath(primary_path, version_file)}")
+        modified = reg.write_version(primary_path, new_version)
+        for rel in modified:
+            files_to_commit.append(target_vpath(primary_path, rel))
+        if modified:
+            log(f"Updated version in {', '.join(target_vpath(primary_path, r) for r in modified)}")
 
         # Sync version to other configured/detected targets (per-target paths)
         for t_name, t_path in target_paths.items():
@@ -557,10 +562,11 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
                 continue
             other_reg = TARGETS.get(t_name)
             if other_reg and other_reg.check_project_exists(t_path):
-                other_file = other_reg.version_file()
-                if other_file:
-                    other_reg.write_version(t_path, new_version)
-                    log(f"Synced version to {target_vpath(t_path, other_file)}")
+                other_modified = other_reg.write_version(t_path, new_version)
+                for rel in other_modified:
+                    files_to_commit.append(target_vpath(t_path, rel))
+                if other_modified:
+                    log(f"Synced version to {', '.join(target_vpath(t_path, r) for r in other_modified)}")
 
     # Ecosystem tagging: add keyword to manifests if enabled
     if should_tag(flags):

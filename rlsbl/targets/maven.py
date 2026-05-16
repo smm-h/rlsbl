@@ -155,10 +155,16 @@ class MavenTarget(BaseTarget):
         raise ValueError(f"Unknown format: {fmt}")
 
     def write_version(self, dir_path, version):
-        """Write version to the same file it was read from."""
+        """Write version to the same file it was read from.
+
+        Returns a list of relative file paths (relative to dir_path) that
+        were modified.
+        """
         filepath, fmt = self._find_version_file(dir_path)
         if filepath is None:
             raise ValueError(f"No version source found in {dir_path}")
+
+        rel_path = os.path.relpath(filepath, dir_path)
 
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
@@ -210,7 +216,7 @@ class MavenTarget(BaseTarget):
                 with open(tmp_path, "a", encoding="utf-8") as f:
                     f.write("\n")
             os.replace(tmp_path, filepath)
-            return
+            return [rel_path]
 
         else:
             raise ValueError(f"Unknown format: {fmt}")
@@ -220,6 +226,7 @@ class MavenTarget(BaseTarget):
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(new_content)
         os.replace(tmp_path, filepath)
+        return [rel_path]
 
     def version_file(self):
         # Dynamic: depends on project. Return None and let callers use read_version.

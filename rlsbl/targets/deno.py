@@ -74,6 +74,8 @@ class DenoTarget(BaseTarget):
 
         For deno.json, uses standard JSON rewrite preserving indent.
         For deno.jsonc, uses regex replacement to preserve comments.
+
+        Returns a list of relative file paths that were modified.
         """
         config_path = self._config_path(dir_path)
         if not config_path:
@@ -102,6 +104,7 @@ class DenoTarget(BaseTarget):
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(new_content)
         os.replace(tmp_path, config_path)
+        return [os.path.basename(config_path)]
 
     def version_file(self):
         return "deno.json"

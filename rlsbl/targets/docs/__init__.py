@@ -37,7 +37,7 @@ class DocsTarget(BaseTarget):
 
     def write_version(self, dir_path, version):
         """No-op: docs inherit version from primary target."""
-        pass
+        return []
 
     def version_file(self):
         """No version file -- docs inherit from primary target."""

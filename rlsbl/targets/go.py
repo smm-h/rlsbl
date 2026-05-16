@@ -146,12 +146,16 @@ class GoTarget(BaseTarget):
             return f.read().strip()
 
     def write_version(self, dir_path, version):
-        """Write the new version to the VERSION file."""
+        """Write the new version to the VERSION file.
+
+        Returns a list of relative file paths that were modified.
+        """
         version_path = os.path.join(dir_path, VERSION_FILE)
         tmp_path = version_path + ".tmp"
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(version + "\n")
         os.replace(tmp_path, version_path)
+        return [self.version_file()]
 
     def version_file(self):
         return VERSION_FILE

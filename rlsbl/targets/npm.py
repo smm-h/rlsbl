@@ -86,7 +86,10 @@ class NpmTarget(BaseTarget):
         return pkg["version"]
 
     def write_version(self, dir_path, version):
-        """Write a new version to package.json, preserving formatting."""
+        """Write a new version to package.json, preserving formatting.
+
+        Returns a list of relative file paths that were modified.
+        """
         pkg_path = os.path.join(dir_path, "package.json")
         with open(pkg_path, "r", encoding="utf-8") as f:
             raw = f.read()
@@ -106,6 +109,7 @@ class NpmTarget(BaseTarget):
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(output)
         os.replace(tmp_path, pkg_path)
+        return [self.version_file()]
 
     def version_file(self):
         return "package.json"

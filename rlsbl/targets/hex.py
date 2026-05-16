@@ -43,7 +43,10 @@ class HexTarget(BaseTarget):
         return match.group(1)
 
     def write_version(self, dir_path, version):
-        """Write a new version to mix.exs."""
+        """Write a new version to mix.exs.
+
+        Returns a list of relative file paths that were modified.
+        """
         mix_path = os.path.join(dir_path, "mix.exs")
         with open(mix_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -56,6 +59,7 @@ class HexTarget(BaseTarget):
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(new_content)
         os.replace(tmp_path, mix_path)
+        return [self.version_file()]
 
     def version_file(self):
         return "mix.exs"
