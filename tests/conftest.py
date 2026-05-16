@@ -175,3 +175,71 @@ def mock_gh(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
 
     return {"urlopen_calls": urlopen_calls, "subprocess_calls": subprocess_calls}
+
+
+@pytest.fixture
+def monorepo_fixture(tmp_path, monkeypatch):
+    """Create a full monorepo workspace with two subprojects, tags, and changelogs.
+
+    Yields a SimpleNamespace with:
+        root        -- Path to the repo root
+        projects    -- list of project dicts
+        python_dir  -- absolute Path to the python subproject
+        go_dir      -- absolute Path to the go subproject
+    """
+    from types import SimpleNamespace
+
+    monkeypatch.chdir(tmp_path)
+
+    # Initialize git repo
+    run_git(tmp_path, "init", "-q", "-b", "main")
+    run_git(tmp_path, "config", "user.email", "test@test.local")
+    run_git(tmp_path, "config", "user.name", "Test")
+
+    # Initial commit so HEAD exists
+    readme = tmp_path / "README.md"
+    readme.write_text("# monorepo test\n")
+    run_git(tmp_path, "add", "README.md")
+    run_git(tmp_path, "commit", "-q", "-m", "initial")
+
+    # Define projects
+    projects = [
+        {"path": "python", "name": "mypylib"},
+        {"path": "go", "name": "mygolib"},
+    ]
+
+    # Create workspace.toml
+    make_workspace(tmp_path, projects)
+
+    # Create subproject directories and changelog files
+    python_dir = tmp_path / "python"
+    go_dir = tmp_path / "go"
+
+    (python_dir / ".rlsbl" / "changes").mkdir(parents=True)
+    (python_dir / ".rlsbl" / "changes" / "unreleased.jsonl").write_text("")
+
+    (go_dir / ".rlsbl" / "changes").mkdir(parents=True)
+    (go_dir / ".rlsbl" / "changes" / "unreleased.jsonl").write_text("")
+
+    # Create minimal project files
+    (python_dir / "pyproject.toml").write_text(
+        '[project]\nname = "mypylib"\nversion = "0.1.0"\n'
+    )
+    (go_dir / "VERSION").write_text("0.1.0\n")
+
+    # Commit all subproject files
+    run_git(tmp_path, "add", WORKSPACE_DIR)
+    run_git(tmp_path, "add", "python")
+    run_git(tmp_path, "add", "go")
+    run_git(tmp_path, "commit", "-q", "-m", "add monorepo projects")
+
+    # Tag both subprojects
+    run_git(tmp_path, "tag", "mypylib@v0.1.0")
+    run_git(tmp_path, "tag", "mygolib@v0.1.0")
+
+    yield SimpleNamespace(
+        root=tmp_path,
+        projects=projects,
+        python_dir=python_dir,
+        go_dir=go_dir,
+    )
