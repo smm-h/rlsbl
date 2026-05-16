@@ -161,6 +161,26 @@ class TestJsonlReleaseCommitSkipping:
         # Entire check skipped because this is a release push
         assert error is None
 
+    def test_monorepo_version_bump_skips_entire_check(self, jsonl_git_repo):
+        """A monorepo release commit ('mylib: release v1.2.3') skips the entire check."""
+        repo = jsonl_git_repo
+        # Regular code commit (would normally need coverage)
+        (repo / "src.py").write_text("x = 1\n")
+        _run_git(repo, "add", "src.py")
+        _run_git(repo, "commit", "-q", "-m", "feat: add feature")
+
+        # Monorepo release commit
+        (repo / "package.json").write_text('{"name":"pkg","version":"1.2.3"}\n')
+        _run_git(repo, "add", "package.json")
+        _run_git(repo, "commit", "-q", "-m", "mylib: release v1.2.3")
+        sha = _git_head(repo)
+
+        zero = "0" * 40
+        refs = [(sha, zero)]
+        error = _check_jsonl_changelog(str(repo), refs)
+        # Entire check skipped because this is a monorepo release push
+        assert error is None
+
     def test_code_commits_with_jsonl_coverage_pass(self, jsonl_git_repo):
         """Code commits with proper JSONL coverage pass alongside release commits."""
         repo = jsonl_git_repo

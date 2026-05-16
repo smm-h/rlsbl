@@ -2,12 +2,11 @@
 
 import fnmatch
 import os
-import re
 import subprocess
 import sys
 
 from ..changelog import changes_dir_exists, get_changes_dir, read_unreleased, resolve_hashes
-from ..changelog.validate import _get_commit_message, _is_release_commit
+from ..changelog.validate import _RELEASE_MSG_RE, _get_commit_message, _is_release_commit
 from ..targets import TARGETS
 from ..workspace import find_workspace_root, load_workspace
 
@@ -46,7 +45,7 @@ def _check_jsonl_changelog(dir_path, refs):
     for sha in pushed_commits:
         if _is_release_commit(sha):
             msg = _get_commit_message(sha)
-            if msg and re.match(r"^v\d+\.\d+\.\d+$", msg):
+            if msg and _RELEASE_MSG_RE.match(msg):
                 return None
 
     # Filter out release infrastructure commits (changelog finalization,
