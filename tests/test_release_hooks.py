@@ -584,6 +584,10 @@ class TestHookCwdMonorepo:
             ]
             assert len(pre_checks_calls) == 1
             assert pre_checks_calls[0].kwargs.get("cwd") == str(ns.python_dir)
+            # Script path must be absolute (not relative, which would double-prefix)
+            script_path = pre_checks_calls[0][0][0][1]
+            assert os.path.isabs(script_path)
+            assert script_path.endswith(".rlsbl/hooks/pre-checks.sh")
 
     @patch("rlsbl.commands.release.push_if_needed")
     @patch("rlsbl.commands.release.run")
@@ -641,6 +645,10 @@ class TestHookCwdMonorepo:
             ]
             assert len(pre_release_calls) == 1
             assert pre_release_calls[0].kwargs.get("cwd") == str(ns.python_dir)
+            # Script path must be absolute (not relative, which would double-prefix)
+            script_path = pre_release_calls[0][0][0][1]
+            assert os.path.isabs(script_path)
+            assert script_path.endswith(".rlsbl/hooks/pre-release.sh")
 
     @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
     @patch("rlsbl.commands.release.should_tag", return_value=False)
@@ -718,3 +726,7 @@ class TestHookCwdMonorepo:
             ]
             assert len(post_release_calls) == 1
             assert post_release_calls[0].kwargs.get("cwd") == str(ns.python_dir)
+            # Script path must be absolute (not relative, which would double-prefix)
+            script_path = post_release_calls[0][0][0][1]
+            assert os.path.isabs(script_path)
+            assert script_path.endswith(".rlsbl/hooks/post-release.sh")

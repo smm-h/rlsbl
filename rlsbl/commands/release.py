@@ -383,6 +383,7 @@ def run_cmd(registry, args, flags):
     # Run pre-checks hook if present
     pre_checks_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-checks.sh")
     if os.path.exists(pre_checks_script):
+        pre_checks_script = os.path.abspath(pre_checks_script)
         log("Running pre-checks hook...")
         hook_timeout = get_hook_timeout()
         try:
@@ -405,6 +406,7 @@ def run_cmd(registry, args, flags):
     # Run pre-release hook if present
     pre_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-release.sh")
     if os.path.exists(pre_release_script):
+        pre_release_script = os.path.abspath(pre_release_script)
         log("Running pre-release hook...")
         hook_timeout = get_hook_timeout()
         try:
@@ -803,6 +805,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     # Run post-release hook if present (non-fatal: release is already complete)
     post_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "post-release.sh")
     if os.path.exists(post_release_script):
+        post_release_script = os.path.abspath(post_release_script)
         log("Running post-release hook...")
         hook_timeout = get_hook_timeout()
         try:
