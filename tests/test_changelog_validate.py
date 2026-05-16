@@ -629,3 +629,59 @@ class TestUnreleasedRange:
         """With tag_prefix but no matching prefixed tag, returns 'HEAD'."""
         _run_git(git_repo, "tag", "v0.1.0")
         assert _unreleased_range(tag_prefix="mylib") == "HEAD"
+
+
+class TestMonorepoValidation:
+    """Integration tests for validate_unreleased with tag_prefix (monorepo mode)."""
+
+    def test_validate_with_tag_prefix_passes(self, monorepo_fixture):
+        """validate_unreleased with correct tag_prefix passes when all commits are covered."""
+        root = monorepo_fixture.root
+        python_dir = monorepo_fixture.python_dir
+
+        # Add a commit touching python/ files
+        src_dir = python_dir / "src"
+        src_dir.mkdir(exist_ok=True)
+        (src_dir / "lib.py").write_text("x = 1\n")
+        _run_git(root, "add", "python/src/lib.py")
+        _run_git(root, "commit", "-q", "-m", "add python lib")
+        sha = _git_head(root)
+
+        # Add a JSONL entry covering that commit
+        changes_dir = str(python_dir / ".rlsbl" / "changes")
+        from rlsbl.changelog.files import append_entry
+        from rlsbl.changelog.schema import ChangelogEntry
+        append_entry(changes_dir, ChangelogEntry(commits=[sha], user_facing=False))
+
+        result = validate_unreleased(changes_dir, tag_prefix="mypylib")
+        assert result["passed"] is True
+        for check_name, (passed, _details) in result["checks"].items():
+            assert passed is True, f"check {check_name} failed: {_details}"
+
+    def test_validate_without_tag_prefix_fails_in_monorepo(self, monorepo_fixture):
+        """Without tag_prefix, validation fails because plain v* tags don't exist."""
+        root = monorepo_fixture.root
+        python_dir = monorepo_fixture.python_dir
+
+        # Add a commit touching python/ files
+        src_dir = python_dir / "src"
+        src_dir.mkdir(exist_ok=True)
+        (src_dir / "lib.py").write_text("y = 2\n")
+        _run_git(root, "add", "python/src/lib.py")
+        _run_git(root, "commit", "-q", "-m", "add python lib 2")
+        sha = _git_head(root)
+
+        # Add a JSONL entry covering that commit
+        changes_dir = str(python_dir / ".rlsbl" / "changes")
+        from rlsbl.changelog.files import append_entry
+        from rlsbl.changelog.schema import ChangelogEntry
+        append_entry(changes_dir, ChangelogEntry(commits=[sha], user_facing=False))
+
+        # Without tag_prefix, _get_last_version_tag() with --match 'v*' can't
+        # find 'mypylib@v0.1.0', so range becomes "HEAD" (all commits).
+        # The initial and workspace commits are not covered, so coverage fails.
+        result = validate_unreleased(changes_dir)
+        assert result["passed"] is False
+        passed, details = result["checks"]["coverage"]
+        assert passed is False
+        assert any("not covered" in d for d in details)

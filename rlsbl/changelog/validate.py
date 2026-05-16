@@ -279,14 +279,14 @@ def check_hashes_resolve(entries: list[ChangelogEntry]) -> tuple[bool, list[str]
     return (len(details) == 0, details)
 
 
-def check_in_range(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:
+def check_in_range(entries: list[ChangelogEntry], tag_prefix: str | None = None) -> tuple[bool, list[str]]:
     """Check that every resolved hash is in the unreleased range.
 
     Unreleased range: commits since the last version tag (or all commits
-    if no tags exist).
+    if no tags exist). When tag_prefix is set, scopes to monorepo tags.
     """
     details: list[str] = []
-    unreleased_commits = set(_git_log_hashes(_unreleased_range()))
+    unreleased_commits = set(_git_log_hashes(_unreleased_range(tag_prefix)))
 
     all_hashes: list[str] = []
     for entry in entries:
@@ -300,14 +300,15 @@ def check_in_range(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:
     return (len(details) == 0, details)
 
 
-def check_coverage(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:
+def check_coverage(entries: list[ChangelogEntry], tag_prefix: str | None = None) -> tuple[bool, list[str]]:
     """Check that every unreleased commit appears in at least one entry.
 
     Commits that only touch changelog files (.rlsbl/changes/*, CHANGELOG.md)
     are automatically skipped -- they can never cover themselves.
+    When tag_prefix is set, scopes to monorepo tags.
     """
     details: list[str] = []
-    unreleased_commits = set(_git_log_hashes(_unreleased_range()))
+    unreleased_commits = set(_git_log_hashes(_unreleased_range(tag_prefix)))
 
     # Collect all resolved hashes from entries
     all_hashes: list[str] = []
@@ -363,7 +364,7 @@ def check_schema(entries: list[ChangelogEntry]) -> tuple[bool, list[str]]:
 # Combined validation
 # ---------------------------------------------------------------------------
 
-def validate_unreleased(changes_dir: str) -> dict:
+def validate_unreleased(changes_dir: str, tag_prefix: str | None = None) -> dict:
     """Run all 5 validation checks on unreleased.jsonl.
 
     Returns a dict with:
@@ -371,7 +372,8 @@ def validate_unreleased(changes_dir: str) -> dict:
     - "passed": overall bool (True only if all checks pass)
 
     Uses validation cache: if the cache is valid and HEAD hasn't changed,
-    skips full revalidation.
+    skips full revalidation. When tag_prefix is set, scopes range checks
+    to monorepo tags (e.g. ``<tag_prefix>@v*``).
     """
     entries = read_unreleased(changes_dir)
 
@@ -398,8 +400,8 @@ def validate_unreleased(changes_dir: str) -> dict:
 
     checks = {
         "hashes_resolve": check_hashes_resolve(entries),
-        "in_range": check_in_range(entries),
-        "coverage": check_coverage(entries),
+        "in_range": check_in_range(entries, tag_prefix),
+        "coverage": check_coverage(entries, tag_prefix),
         "no_orphans": check_no_orphans(entries),
         "schema": check_schema(entries),
     }

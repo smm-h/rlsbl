@@ -356,7 +356,7 @@ def run_cmd(registry, args, flags):
         sys.exit(1)
 
     changes_dir = get_changes_dir(version_dir)
-    validation = validate_unreleased(changes_dir)
+    validation = validate_unreleased(changes_dir, tag_prefix=monorepo_name)
     if not validation["passed"]:
         print("Error: JSONL changelog validation failed:", file=sys.stderr)
         for check_name, (passed, details) in validation["checks"].items():
@@ -376,6 +376,10 @@ def run_cmd(registry, args, flags):
         sys.exit(1)
     changelog_entry = extract_changelog_entry(changelog_path, new_version)
 
+    # In monorepo mode, hooks/tests/lint must run from the project subdirectory
+    # (not the monorepo root that os.chdir switched to).
+    abs_project_dir = os.path.join(monorepo_root, monorepo_project_path) if monorepo_root else None
+
     # Run pre-checks hook if present
     pre_checks_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-checks.sh")
     if os.path.exists(pre_checks_script):
@@ -384,17 +388,13 @@ def run_cmd(registry, args, flags):
         try:
             env = os.environ.copy()
             env["RLSBL_VERSION"] = new_version
-            subprocess.run(["bash", pre_checks_script], env=env, check=True, timeout=hook_timeout)
+            subprocess.run(["bash", pre_checks_script], env=env, check=True, timeout=hook_timeout, cwd=abs_project_dir)
         except subprocess.CalledProcessError as e:
             print(f"Error: pre-checks hook exited with code {e.returncode}.", file=sys.stderr)
             sys.exit(1)
         except subprocess.TimeoutExpired:
             print(f"Error: pre-checks hook timed out after {hook_timeout}s.", file=sys.stderr)
             sys.exit(1)
-
-    # In monorepo mode, tests and lint must run from the project subdirectory
-    # (not the monorepo root that os.chdir switched to).
-    abs_project_dir = os.path.join(monorepo_root, monorepo_project_path) if monorepo_root else None
 
     # Built-in test runner
     _run_builtin_tests(registry, flags, project_dir=abs_project_dir)
@@ -410,7 +410,7 @@ def run_cmd(registry, args, flags):
         try:
             env = os.environ.copy()
             env["RLSBL_VERSION"] = new_version
-            subprocess.run(["bash", pre_release_script], env=env, check=True, timeout=hook_timeout)
+            subprocess.run(["bash", pre_release_script], env=env, check=True, timeout=hook_timeout, cwd=abs_project_dir)
         except subprocess.CalledProcessError as e:
             print(f"Error: pre-release hook exited with code {e.returncode}.", file=sys.stderr)
             sys.exit(1)
@@ -484,6 +484,7 @@ def run_cmd(registry, args, flags):
             target_paths=target_paths,
             lock_dir=lock_dir,
             pre_existing_dirty=pre_existing_dirty,
+            abs_project_dir=abs_project_dir,
         )
     finally:
         release_lock()
@@ -496,7 +497,8 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
                           version_dir=".", commit_msg=None,
                           primary_path=None, target_paths=None,
                           lock_dir=".rlsbl",
-                          pre_existing_dirty=None):
+                          pre_existing_dirty=None,
+                          abs_project_dir=None):
     """Inner release logic that runs under the advisory lock (mutating phase)."""
     if commit_msg is None:
         commit_msg = tag
@@ -806,7 +808,7 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         try:
             env = os.environ.copy()
             env["RLSBL_VERSION"] = new_version
-            subprocess.run(["bash", post_release_script], env=env, check=True, timeout=hook_timeout)
+            subprocess.run(["bash", post_release_script], env=env, check=True, timeout=hook_timeout, cwd=abs_project_dir)
         except subprocess.CalledProcessError as e:
             print(f"Warning: post-release hook exited with code {e.returncode}.", file=sys.stderr)
         except subprocess.TimeoutExpired:
