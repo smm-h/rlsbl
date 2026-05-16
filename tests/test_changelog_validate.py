@@ -512,6 +512,21 @@ class TestIsReleaseCommit:
         """Invalid SHA returns False."""
         assert _is_release_commit("0" * 40) is False
 
+    def test_monorepo_release_message_is_release(self, git_repo):
+        """A monorepo release commit message is a release commit."""
+        sha = _make_commit(git_repo, "lib.py", "mylib: release v1.2.3")
+        assert _is_release_commit(sha) is True
+
+    def test_monorepo_hyphenated_name_is_release(self, git_repo):
+        """A monorepo release message with hyphenated project name is a release commit."""
+        sha = _make_commit(git_repo, "lib.py", "my-lib: release v1.2.3")
+        assert _is_release_commit(sha) is True
+
+    def test_non_release_prefixed_message_is_not_release(self, git_repo):
+        """A prefixed message that is not a release is not a release commit."""
+        sha = _make_commit(git_repo, "lib.py", "mylib: fix bug")
+        assert _is_release_commit(sha) is False
+
     def test_rlsbl_version_file_is_changelog_only(self, git_repo):
         """A commit touching only .rlsbl/version is changelog-only (release infra)."""
         version_dir = git_repo / ".rlsbl"

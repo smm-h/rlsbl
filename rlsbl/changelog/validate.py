@@ -136,7 +136,7 @@ def _is_changelog_only_commit(sha: str) -> bool:
     return True
 
 
-_RELEASE_MSG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
+_RELEASE_MSG_RE = re.compile(r"^([\w-]+: release )?v\d+\.\d+\.\d+$")
 _FINALIZE_MSG_PREFIX = "chore: finalize changelog for "
 
 
