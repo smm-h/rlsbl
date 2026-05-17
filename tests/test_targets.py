@@ -1173,3 +1173,23 @@ class TestWriteVersionReturnPaths:
         target = SwiftAppleTarget()
         result = target.write_version(str(tmp_path), "1.0.0")
         assert result == ["VERSION"]
+
+
+@pytest.mark.xfail(reason="Go monorepo tag format not yet implemented")
+class TestGoMonorepoTagFormat:
+    """Tests for Go monorepo tag format using path-based tags (go/v0.1.1) instead of name-based (name@v0.1.1)."""
+
+    def test_go_monorepo_tag_uses_path(self):
+        """GoTarget().monorepo_tag_format with path should return 'go/v0.1.1' for Go modules."""
+        result = GoTarget().monorepo_tag_format("go-strictcli", "0.1.1", path="go/")
+        assert result == "go/v0.1.1"
+
+    def test_go_monorepo_tag_glob(self):
+        """GoTarget().monorepo_tag_glob with path should return 'go/v*' for Go modules."""
+        result = GoTarget().monorepo_tag_glob("go-strictcli", path="go/")
+        assert result == "go/v*"
+
+    def test_base_monorepo_tag_unchanged(self):
+        """NpmTarget base monorepo_tag_format is unchanged: 'mylib@v1.0.0'."""
+        result = NpmTarget().monorepo_tag_format("mylib", "1.0.0", path="packages/mylib/")
+        assert result == "mylib@v1.0.0"
