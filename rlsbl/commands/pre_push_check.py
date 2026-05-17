@@ -24,6 +24,38 @@ def _detect_version(dir_path="."):
     return None, None
 
 
+def _check_gitignore_guard(dir_path):
+    """Check that rlsbl-managed files are not gitignored.
+
+    Returns an error string listing gitignored paths, or None if all clear.
+    """
+    paths = [
+        os.path.join(dir_path, ".rlsbl", "changes", "unreleased.jsonl"),
+        os.path.join(dir_path, ".rlsbl", "changes", ".validated"),
+        os.path.join(dir_path, "CHANGELOG.md"),
+    ]
+    gitignored = []
+    for path in paths:
+        try:
+            result = subprocess.run(
+                ["git", "check-ignore", "-q", path],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                gitignored.append(path)
+            elif result.returncode == 128:
+                # Not in a git repo -- skip gracefully
+                return None
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            return None
+    if gitignored:
+        listed = ", ".join(gitignored)
+        return f"rlsbl-managed files are gitignored (must be tracked): {listed}"
+    return None
+
+
 
 def _get_commit_files(sha):
     """Get the list of files changed by a single commit.
@@ -312,6 +344,12 @@ def _run_monorepo_check(workspace_root, projects, changed_files, refs=None):
     for proj in affected:
         proj_dir = os.path.join(workspace_root, proj["path"])
 
+        # Gitignore guard: block if rlsbl-managed files are gitignored
+        gitignore_error = _check_gitignore_guard(proj_dir)
+        if gitignore_error:
+            failures.append((proj["name"], "?", gitignore_error))
+            continue
+
         if not changes_dir_exists(proj_dir):
             continue  # JSONL not set up for this project -- skip
 
@@ -368,6 +406,13 @@ def run_cmd(registry, args, flags):
                 # _run_monorepo_check always calls sys.exit, so this is unreachable
 
     # Single-project fallback
+
+    # Gitignore guard: block push if rlsbl-managed files are gitignored
+    gitignore_error = _check_gitignore_guard(".")
+    if gitignore_error:
+        print(f"Error: {gitignore_error}", file=sys.stderr)
+        sys.exit(1)
+
     if not changes_dir_exists("."):
         # JSONL changelog not set up -- warn but don't block
         print("Warning: JSONL changelog not set up. Run 'rlsbl scaffold --update' to create .rlsbl/changes/", file=sys.stderr)

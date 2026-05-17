@@ -8,6 +8,7 @@ import pytest
 
 from conftest import run_git as _run_git, git_head as _git_head
 from rlsbl.commands.pre_push_check import (
+    _check_gitignore_guard,
     _check_jsonl_changelog,
     _has_version_tag_push,
     run_cmd,
@@ -303,3 +304,70 @@ class TestVersionTagPushSkipsCheck:
                 run_cmd(None, [], {})
             # Should fail -- non-version tag doesn't skip the check
             assert exc_info.value.code == 1
+
+
+class TestGitignoreGuard:
+    """Unit tests for _check_gitignore_guard."""
+
+    def test_unreleased_jsonl_gitignored(self, mock_git_repo):
+        """Gitignored unreleased.jsonl triggers an error."""
+        (mock_git_repo / ".gitignore").write_text(".rlsbl/changes/unreleased.jsonl\n")
+        _run_git(mock_git_repo, "add", ".gitignore")
+        _run_git(mock_git_repo, "commit", "-q", "-m", "add gitignore")
+
+        result = _check_gitignore_guard(str(mock_git_repo))
+        assert result is not None
+        assert "unreleased.jsonl" in result
+
+    def test_validated_gitignored(self, mock_git_repo):
+        """Gitignored .validated triggers an error."""
+        (mock_git_repo / ".gitignore").write_text(".rlsbl/changes/.validated\n")
+        _run_git(mock_git_repo, "add", ".gitignore")
+        _run_git(mock_git_repo, "commit", "-q", "-m", "add gitignore")
+
+        result = _check_gitignore_guard(str(mock_git_repo))
+        assert result is not None
+        assert ".validated" in result
+
+    def test_changelog_md_gitignored(self, mock_git_repo):
+        """Gitignored CHANGELOG.md triggers an error."""
+        (mock_git_repo / ".gitignore").write_text("CHANGELOG.md\n")
+        _run_git(mock_git_repo, "add", ".gitignore")
+        _run_git(mock_git_repo, "commit", "-q", "-m", "add gitignore")
+
+        result = _check_gitignore_guard(str(mock_git_repo))
+        assert result is not None
+        assert "CHANGELOG.md" in result
+
+    def test_nothing_gitignored(self, mock_git_repo):
+        """No gitignored rlsbl files returns None."""
+        result = _check_gitignore_guard(str(mock_git_repo))
+        assert result is None
+
+    def test_multiple_files_gitignored(self, mock_git_repo):
+        """Multiple gitignored files are all listed in the error."""
+        (mock_git_repo / ".gitignore").write_text(
+            ".rlsbl/changes/unreleased.jsonl\n"
+            "CHANGELOG.md\n"
+        )
+        _run_git(mock_git_repo, "add", ".gitignore")
+        _run_git(mock_git_repo, "commit", "-q", "-m", "add gitignore")
+
+        result = _check_gitignore_guard(str(mock_git_repo))
+        assert result is not None
+        assert "unreleased.jsonl" in result
+        assert "CHANGELOG.md" in result
+
+
+class TestGitignoreGuardIntegration:
+    """Integration test: run_cmd exits 1 when an rlsbl file is gitignored."""
+
+    def test_run_cmd_exits_1_when_gitignored(self, mock_git_repo):
+        """run_cmd exits 1 when CHANGELOG.md is gitignored."""
+        (mock_git_repo / ".gitignore").write_text("CHANGELOG.md\n")
+        _run_git(mock_git_repo, "add", ".gitignore")
+        _run_git(mock_git_repo, "commit", "-q", "-m", "add gitignore")
+
+        with pytest.raises(SystemExit) as exc_info:
+            run_cmd(None, [], {})
+        assert exc_info.value.code == 1
