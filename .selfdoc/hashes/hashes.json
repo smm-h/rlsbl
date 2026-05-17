@@ -76,7 +76,7 @@
     "description": "b337bc36421669b080ecc9c900cfe9e9a36b65c431b0968975f153809ca75201"
   },
   "configuration.md": {
-    "content": "7e2083339b09153ccec6cdafa825cf391bca6b535da048dd70c0a5a9172d3832",
+    "content": "7edc284999f46438e58b56bcce745f42bd1acaf2b5a1c1fb046f892c2019f8cd",
     "description": "3014308e9e0bf5cac06ed58f0bc67c1305fda4a04d60e5046cd43fcd7d27be7c"
   },
   "gen-index.md": {
@@ -126,6 +126,10 @@
   "rlsbl-commands-check.md": {
     "content": "5f480920be44dc98fcf8cc9fb7aa6fdb2904905b5fa229bd32713b3025f000f4",
     "description": "ab1d51835ebada8632a1bc93237d28c9f8bde4fd60b8a4e046acdf63082821c2"
+  },
+  "rlsbl-commands-commit_cmd.md": {
+    "content": "06a2a9f7f0eb8d049b9014287dd71ed4102911558756d173151f1da6c8147b80",
+    "description": "999eb1499025e434dda0eda15a4f9bf2ae9334a4b1881cd0840b215c72550f86"
   },
   "rlsbl-commands-deploy_cmd.md": {
     "content": "3d8cdeca7fd9d005ede2fd531a4153c07d186c34541950a01ff0ead34a979d86",
@@ -190,6 +194,10 @@
   "rlsbl-commands-watch.md": {
     "content": "98f51fa5d8568c8b52076913c30b41517ab2a1ebf5f4427ef097614c7da83a6c",
     "description": "040d4c3d8d04767ed5eedaefa5174b06eb464978d9b702d06220e5206c10e49e"
+  },
+  "rlsbl-commands-yank.md": {
+    "content": "55244eb9cdb6a4df60182af106833f5208f0c2ade85aeee77219b90971cc7f76",
+    "description": "a9e9336e375a09e67b7e0580542a0f03965c5374596d630fc77c47b139ff6a3a"
   },
   "rlsbl-commands.md": {
     "content": "006f1a3679c8ee01ef28d9895e62d0c5bd623f063c26aa4c948e68a3206115d4",
