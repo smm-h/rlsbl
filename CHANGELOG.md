@@ -2,6 +2,12 @@
 
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- **Fix.** Release no longer aborts when the `.validated` changelog cache is updated during validation.
+
 ## 0.29.0
 
 ### Features
