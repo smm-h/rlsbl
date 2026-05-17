@@ -10,6 +10,8 @@ import unittest
 from io import StringIO
 from unittest.mock import patch
 
+import pytest
+
 from rlsbl.commands.init_cmd import (
     BASES_DIR,
     HASHES_FILE,
@@ -1409,6 +1411,97 @@ class TestScaffoldUntrack(unittest.TestCase):
         )
         self.assertEqual(status.stdout.strip(), "",
                          f"{target_file} removal should be committed, not just staged")
+
+
+# ---------------------------------------------------------------------------
+# Release rollback on push failure tests
+# ---------------------------------------------------------------------------
+
+
+class TestReleaseRollbackOnPushFailure(unittest.TestCase):
+    """Tests that a failed push during release rolls back local commits and tags."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+
+        # Initialize a real git repo
+        subprocess.run(["git", "init", "-q", "."], check=True)
+        subprocess.run(["git", "config", "user.email", "test@test.local"], check=True)
+        subprocess.run(["git", "config", "user.name", "Test"], check=True)
+
+        # Create package.json (npm target, version 1.0.0)
+        with open("package.json", "w") as f:
+            json.dump({"name": "test-pkg", "version": "1.0.0"}, f, indent=2)
+            f.write("\n")
+
+        # Create CHANGELOG.md
+        with open("CHANGELOG.md", "w") as f:
+            f.write("# Changelog\n\n## 1.0.1\n\nPatch release.\n")
+
+        # Create .rlsbl/changes/unreleased.jsonl with a valid entry
+        os.makedirs(os.path.join(".rlsbl", "changes"), exist_ok=True)
+        with open(os.path.join(".rlsbl", "changes", "unreleased.jsonl"), "w") as f:
+            f.write('{"commits":["abc1234"],"user_facing":true,'
+                    '"description":"Bugfix","type":"fix"}\n')
+
+        # Initial commit and tag
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "initial"], check=True)
+        subprocess.run(["git", "tag", "v1.0.0"], check=True)
+
+        # Record the pre-release HEAD SHA
+        self.pre_release_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    @pytest.mark.xfail(reason="release rollback not yet implemented")
+    @patch("rlsbl.commands.release.push_if_needed",
+           side_effect=subprocess.CalledProcessError(1, "git push"))
+    @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
+    @patch("rlsbl.commands.release.should_tag", return_value=False)
+    @patch("rlsbl.commands.release.extract_changelog_entry", return_value="- Bugfix")
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased",
+           return_value={"passed": True, "checks": {}})
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    def test_rollback_on_push_failure(self, _gh_inst, _gh_auth, _validate,
+                                      _gen_cl, _extract, _tag, _deploy, _push):
+        """When git push fails, local commits and tag from the release must be undone."""
+        from rlsbl.commands.release import run_cmd
+
+        # Run release -- push_if_needed raises CalledProcessError
+        with self.assertRaises(subprocess.CalledProcessError):
+            with patch("sys.stdout", new_callable=StringIO):
+                run_cmd("npm", ["patch"], {
+                    "yes": True,
+                    "quiet": True,
+                    "skip-remote-check": True,
+                })
+
+        # After push failure, HEAD should be at the pre-release SHA
+        # (version-bump and finalize commits should have been rolled back)
+        post_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        self.assertEqual(post_sha, self.pre_release_sha,
+                         "HEAD should be rolled back to pre-release position")
+
+        # The tag for the attempted version should not exist locally
+        tag_check = subprocess.run(
+            ["git", "tag", "-l", "v1.0.1"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        self.assertEqual(tag_check, "",
+                         "Tag v1.0.1 should not exist after failed push")
 
 
 if __name__ == "__main__":
