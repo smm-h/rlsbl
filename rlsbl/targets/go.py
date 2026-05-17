@@ -135,6 +135,27 @@ class GoTarget(BaseTarget):
         except (subprocess.CalledProcessError, FileNotFoundError) as exc:
             print(f"Warning: proxy notification failed for {ref}: {exc}")
 
+        # Install the binary locally for CLI projects
+        if self._has_cmd_main(dir_path):
+            matches = glob.glob(os.path.join(dir_path, "cmd", "*", "main.go"))
+            cmd_name = os.path.basename(os.path.dirname(matches[0]))
+            install_path = f"./cmd/{cmd_name}"
+        elif self._has_root_main(dir_path):
+            install_path = "."
+        else:
+            install_path = None
+
+        if install_path:
+            try:
+                subprocess.run(
+                    ["go", "install", install_path],
+                    cwd=dir_path,
+                    check=True,
+                )
+                print(f"Installed: go install {install_path}")
+            except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+                print(f"Warning: go install failed: {exc}")
+
     def read_version(self, dir_path):
         """Read version from the VERSION file."""
         version_path = os.path.join(dir_path, VERSION_FILE)

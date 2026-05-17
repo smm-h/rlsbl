@@ -1,12 +1,14 @@
 """Tests for Go binary distribution features (Homebrew tap, npm wrapper).
 
 Covers: config reading (githubOwner), Homebrew template vars and rendering,
-npm wrapper template vars, template_mappings, template rendering, and
-no-config baseline behavior.
+npm wrapper template vars, template_mappings, template rendering,
+no-config baseline behavior, and publish-time go install for CLI projects.
 """
 
 import json
 import os
+import subprocess
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -350,3 +352,87 @@ class TestNoConfigBaseline:
         template = open(_template_path("publish.yml.tpl")).read()
         content, _ = process_template(template, vars_)
         assert "npm publish" not in content
+
+
+# ---------------------------------------------------------------------------
+# Test class 8: publish go install for CLI projects
+# ---------------------------------------------------------------------------
+
+
+class TestGoPublishInstall:
+    """Test that publish() runs `go install` for CLI projects and skips it for libraries."""
+
+    def test_publish_installs_cli_project(self, tmp_path):
+        """publish() calls `go install .` for a project with package main at root."""
+        target = GoTarget()
+        (tmp_path / "go.mod").write_text("module github.com/user/mycli\n\ngo 1.21\n")
+        (tmp_path / "main.go").write_text("package main\n\nfunc main() {}\n")
+
+        with patch("rlsbl.targets.go.run") as mock_run, \
+             patch("subprocess.run") as mock_subprocess_run, \
+             patch("shutil.which", return_value="/usr/bin/go"):
+            mock_subprocess_run.return_value = subprocess.CompletedProcess(
+                args=["go", "install", "."], returncode=0
+            )
+            target.publish(str(tmp_path), "1.0.0")
+
+            # Verify go install was called with "."
+            mock_subprocess_run.assert_called_once_with(
+                ["go", "install", "."],
+                cwd=str(tmp_path),
+                check=True,
+            )
+
+    def test_publish_installs_cmd_project(self, tmp_path):
+        """publish() calls `go install ./cmd/<name>` for a project with cmd/ layout."""
+        target = GoTarget()
+        (tmp_path / "go.mod").write_text("module github.com/user/mycli\n\ngo 1.21\n")
+        cmd_dir = tmp_path / "cmd" / "mycli"
+        cmd_dir.mkdir(parents=True)
+        (cmd_dir / "main.go").write_text("package main\n\nfunc main() {}\n")
+
+        with patch("rlsbl.targets.go.run") as mock_run, \
+             patch("subprocess.run") as mock_subprocess_run, \
+             patch("shutil.which", return_value="/usr/bin/go"):
+            mock_subprocess_run.return_value = subprocess.CompletedProcess(
+                args=["go", "install", "./cmd/mycli"], returncode=0
+            )
+            target.publish(str(tmp_path), "1.0.0")
+
+            mock_subprocess_run.assert_called_once_with(
+                ["go", "install", "./cmd/mycli"],
+                cwd=str(tmp_path),
+                check=True,
+            )
+
+    def test_publish_skips_install_for_library(self, tmp_path):
+        """publish() does NOT call `go install` for a library project."""
+        target = GoTarget()
+        (tmp_path / "go.mod").write_text("module github.com/user/mylib\n\ngo 1.21\n")
+        (tmp_path / "mylib.go").write_text("package mylib\n\nfunc Hello() {}\n")
+
+        with patch("rlsbl.targets.go.run") as mock_run, \
+             patch("subprocess.run") as mock_subprocess_run, \
+             patch("shutil.which", return_value="/usr/bin/go"):
+            target.publish(str(tmp_path), "1.0.0")
+
+            # subprocess.run should NOT have been called (go install is skipped)
+            mock_subprocess_run.assert_not_called()
+
+    def test_publish_install_failure_is_non_fatal(self, tmp_path, capsys):
+        """publish() prints a warning but doesn't raise when go install fails."""
+        target = GoTarget()
+        (tmp_path / "go.mod").write_text("module github.com/user/mycli\n\ngo 1.21\n")
+        (tmp_path / "main.go").write_text("package main\n\nfunc main() {}\n")
+
+        with patch("rlsbl.targets.go.run") as mock_run, \
+             patch("subprocess.run") as mock_subprocess_run, \
+             patch("shutil.which", return_value="/usr/bin/go"):
+            mock_subprocess_run.side_effect = subprocess.CalledProcessError(
+                1, ["go", "install", "."]
+            )
+            # Should not raise
+            target.publish(str(tmp_path), "1.0.0")
+
+        captured = capsys.readouterr()
+        assert "Warning: go install failed" in captured.out
