@@ -617,6 +617,12 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     if changelog_file not in files_to_commit:
         files_to_commit.append(changelog_file)
 
+    # Include the .validated cache file if it exists (validation writes it
+    # earlier in the release flow, so the dirty-tree guard must expect it)
+    validated_file = os.path.normpath(os.path.join(get_changes_dir(version_dir), ".validated"))
+    if os.path.exists(validated_file) and validated_file not in files_to_commit:
+        files_to_commit.append(validated_file)
+
     # Build step (no-op for npm/pypi/go targets)
     try:
         target.build(primary_path, new_version)

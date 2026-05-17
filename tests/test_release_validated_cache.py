@@ -1,0 +1,142 @@
+"""Tests that the .validated cache file does not cause release abort.
+
+The dirty-tree guard in _run_release_mutating checks for unexpected modified
+files. Since validate_unreleased() writes .validated during the release flow,
+it must be included in the expected files set.
+"""
+
+import json
+import os
+import shutil
+import tempfile
+import unittest
+from io import StringIO
+from unittest.mock import patch
+
+
+class TestReleaseValidatedCache(unittest.TestCase):
+    """Tests that .validated is expected by the dirty-tree guard."""
+
+    def setUp(self):
+        self.orig_dir = os.getcwd()
+        self.tmp_dir = tempfile.mkdtemp()
+        os.chdir(self.tmp_dir)
+        # Create package.json so npm registry is detected
+        with open("package.json", "w") as f:
+            json.dump({"name": "test-pkg", "version": "1.0.0"}, f, indent=2)
+            f.write("\n")
+        # Create CHANGELOG.md with entry for the bumped version
+        with open("CHANGELOG.md", "w") as f:
+            f.write("# Changelog\n\n## 1.0.1\n\nPatch release.\n")
+        # Create .rlsbl/changes/ with unreleased.jsonl and .validated
+        changes_dir = os.path.join(".rlsbl", "changes")
+        os.makedirs(changes_dir, exist_ok=True)
+        with open(os.path.join(changes_dir, "unreleased.jsonl"), "w") as f:
+            f.write('{"commits":["abc1234"],"user_facing":true,"description":"Bugfix","type":"fix"}\n')
+        # The .validated file exists (written by validate_unreleased during release)
+        with open(os.path.join(changes_dir, ".validated"), "w") as f:
+            f.write("fakehash123\n")
+
+    def tearDown(self):
+        os.chdir(self.orig_dir)
+        shutil.rmtree(self.tmp_dir)
+
+    @patch("rlsbl.commands.release.release_lock")
+    @patch("rlsbl.commands.release.acquire_lock")
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.should_tag", return_value=False)
+    @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    @patch("rlsbl.commands.release.finalize_version")
+    @patch("rlsbl.commands.release.extract_changelog_entry", return_value="- Bugfix")
+    def test_validated_cache_does_not_trigger_abort(self, _extract, _finalize,
+                                                    _validate, _gen_cl,
+                                                    _deploy, _tag, _gh_inst,
+                                                    _gh_auth, _clean, _branch,
+                                                    _commit_files, mock_run, _push,
+                                                    _lock, _unlock):
+        """The .validated file modified by validation must not trigger the dirty-tree abort."""
+        from rlsbl.commands.release import run_cmd
+
+        # git status --porcelain shows .validated as modified (written by validation)
+        # along with the expected package.json (from version bump)
+        porcelain_recheck = " M .rlsbl/changes/.validated\n M package.json"
+
+        mock_run.side_effect = [
+            # run_cmd phase:
+            "",               # git fetch origin --quiet
+            "0",              # git rev-list --count HEAD..origin/main
+            "v1.0.0",         # git tag -l v1.0.0 (exists -> bump)
+            "",               # git tag -l v1.0.1 (doesn't exist -> proceed)
+            # _run_release_mutating phase:
+            porcelain_recheck,  # git status --porcelain (re-check guard)
+            "package.json",     # git diff --name-only -- package.json
+            "M package.json",   # git status --porcelain -- package.json
+            ".rlsbl/changes/.validated",  # git diff --name-only -- .rlsbl/changes/.validated
+            "M .rlsbl/changes/.validated",  # git status --porcelain -- .rlsbl/changes/.validated
+            # commit_files is mocked separately
+            "",                 # git tag v1.0.1
+            "",                 # git push origin v1.0.1
+            "",                 # gh release create ...
+            "abc123def",        # git rev-parse HEAD
+        ]
+
+        with patch("sys.stdout", new_callable=StringIO):
+            # Should NOT raise SystemExit -- .validated is expected
+            run_cmd("npm", ["patch"], {
+                "yes": True,
+                "quiet": False,
+            })
+
+    @patch("rlsbl.commands.release.release_lock")
+    @patch("rlsbl.commands.release.acquire_lock")
+    @patch("rlsbl.commands.release.push_if_needed")
+    @patch("rlsbl.commands.release.run")
+    @patch("rlsbl.commands.release.commit_files", return_value=True)
+    @patch("rlsbl.commands.release.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.release.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.release.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.release.should_tag", return_value=False)
+    @patch("rlsbl.commands.release.read_deploy_config", return_value=([], []))
+    @patch("rlsbl.commands.release.generate_changelog")
+    @patch("rlsbl.commands.release.validate_unreleased", return_value={"passed": True, "checks": {}})
+    def test_validated_only_dirty_still_aborts_unexpected(self, _validate, _gen_cl,
+                                                          _deploy, _tag, _gh_inst,
+                                                          _gh_auth, _clean, _branch,
+                                                          _commit_files, mock_run, _push,
+                                                          _lock, _unlock):
+        """An unexpected file (not .validated, not package.json) still aborts the release."""
+        from rlsbl.commands.release import run_cmd
+
+        # git status --porcelain shows an unexpected file alongside expected ones
+        porcelain_recheck = " M .rlsbl/changes/.validated\n M package.json\n?? rogue.txt"
+
+        mock_run.side_effect = [
+            # run_cmd phase:
+            "",               # git fetch origin --quiet
+            "0",              # git rev-list --count HEAD..origin/main
+            "v1.0.0",         # git tag -l v1.0.0 (exists -> bump)
+            "",               # git tag -l v1.0.1 (doesn't exist -> proceed)
+            # _run_release_mutating phase:
+            porcelain_recheck,  # git status --porcelain (re-check guard) -- has rogue.txt
+        ]
+
+        with patch("sys.stdout", new_callable=StringIO):
+            with self.assertRaises(SystemExit) as ctx:
+                run_cmd("npm", ["patch"], {
+                    "yes": True,
+                    "quiet": False,
+                })
+            self.assertEqual(ctx.exception.code, 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
