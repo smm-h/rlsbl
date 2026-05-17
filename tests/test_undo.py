@@ -4,6 +4,8 @@ import unittest
 from io import StringIO
 from unittest.mock import patch, call
 
+import pytest
+
 from rlsbl.commands.undo import run_cmd
 
 
@@ -173,6 +175,66 @@ class TestUndoMonorepo(unittest.TestCase):
         # Only 5 calls: no revert issued
         self.assertEqual(mock_run.call_count, 5)
         mock_push.assert_not_called()
+
+
+class TestUndoTwoCommitPattern(unittest.TestCase):
+    """Verify undo handles the two-commit release pattern where HEAD is a
+    finalize commit and HEAD~1 is the version-bump commit."""
+
+    @pytest.mark.xfail(reason="undo does not handle finalize commit at HEAD")
+    @patch("rlsbl.commands.undo.find_workspace_root", return_value=None)
+    @patch("rlsbl.commands.undo.push_if_needed")
+    @patch("rlsbl.commands.undo.get_current_branch", return_value="main")
+    @patch("rlsbl.commands.undo.is_clean_tree", return_value=True)
+    @patch("rlsbl.commands.undo.check_gh_auth", return_value=True)
+    @patch("rlsbl.commands.undo.check_gh_installed", return_value=True)
+    @patch("rlsbl.commands.undo.run")
+    def test_undo_handles_finalize_commit_at_head(self, mock_run, _gh_inst,
+                                                   _gh_auth, _clean,
+                                                   mock_branch, mock_push,
+                                                   _ws_root):
+        """When HEAD is a finalize commit (chore: finalize changelog for X.Y.Z)
+        and HEAD~1 is the version-bump commit (vX.Y.Z), undo should revert
+        both commits. Currently it skips the revert because HEAD's message
+        does not match the tag string."""
+
+        # Scenario:
+        #   HEAD   -> "chore: finalize changelog for 1.0.0"  (finalize commit)
+        #   HEAD~1 -> "v1.0.0"                               (version-bump commit)
+        #   Tag v1.0.0 points at HEAD
+        #
+        # After undo, both commits should be reverted.
+
+        mock_run.side_effect = [
+            "v1.0.0",                                      # git describe --tags --abbrev=0 --match v*
+            "",                                             # gh release delete v1.0.0 --yes
+            "",                                             # git push origin :v1.0.0
+            "",                                             # git tag -d v1.0.0
+            "chore: finalize changelog for 1.0.0",         # git log -1 --format=%s (HEAD — finalize commit)
+            "",                                             # git revert --no-edit HEAD (revert finalize)
+            "v1.0.0",                                      # git log -1 --format=%s (HEAD is now version-bump)
+            "",                                             # git revert --no-edit HEAD (revert version-bump)
+        ]
+
+        with patch("sys.stdout", new_callable=StringIO):
+            run_cmd("npm", [], {"yes": True})
+
+        # Both the finalize commit and the version-bump commit should be reverted
+        expected_calls = [
+            call("git", ["describe", "--tags", "--abbrev=0", "--match", "v*"]),
+            call("gh", ["release", "delete", "v1.0.0", "--yes"]),
+            call("git", ["push", "origin", ":v1.0.0"], timeout=120),
+            call("git", ["tag", "-d", "v1.0.0"]),
+            call("git", ["log", "-1", "--format=%s"]),
+            call("git", ["revert", "--no-edit", "HEAD"]),
+            call("git", ["log", "-1", "--format=%s"]),
+            call("git", ["revert", "--no-edit", "HEAD"]),
+        ]
+        mock_run.assert_has_calls(expected_calls, any_order=False)
+        self.assertEqual(mock_run.call_count, 8)
+
+        # Push should still be called after reverting
+        mock_push.assert_called_once_with("main")
 
 
 if __name__ == "__main__":
