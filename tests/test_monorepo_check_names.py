@@ -166,6 +166,7 @@ class TestDelay:
         """Delay should be applied between names, not after the last one."""
         _setup_workspace(mock_git_repo, ["a", "b", "c"])
         capsys.readouterr()
+        mock_sleep.reset_mock()
 
         mock_check.side_effect = [
             {"name": "a", "registry": "npm", "status": "available",
@@ -188,6 +189,7 @@ class TestDelay:
         """Default delay should be 200ms when --delay is not provided."""
         _setup_workspace(mock_git_repo, ["a", "b"])
         capsys.readouterr()
+        mock_sleep.reset_mock()
 
         mock_check.side_effect = [
             {"name": "a", "registry": "npm", "status": "available",
