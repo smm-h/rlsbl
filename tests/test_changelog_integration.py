@@ -229,7 +229,7 @@ class TestPrePushWithJsonl:
         refs = [(sha, initial_sha)]
         error = _check_jsonl_changelog(".", refs)
         assert error is not None
-        assert "no entries" in error.lower()
+        assert "no jsonl changelog entries found" in error.lower()
 
 
 class TestPrePushWithoutJsonl:
