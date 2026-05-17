@@ -617,12 +617,6 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
     if changelog_file not in files_to_commit:
         files_to_commit.append(changelog_file)
 
-    # Include the .validated cache file if it exists (validation writes it
-    # earlier in the release flow, so the dirty-tree guard must expect it)
-    validated_file = os.path.normpath(os.path.join(get_changes_dir(version_dir), ".validated"))
-    if os.path.exists(validated_file) and validated_file not in files_to_commit:
-        files_to_commit.append(validated_file)
-
     # Build step (no-op for npm/pypi/go targets)
     try:
         target.build(primary_path, new_version)
@@ -636,6 +630,13 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         dirty_files = parse_porcelain_paths(dirty_output)
         expected_files = set(files_to_commit)
         expected_files.add(os.path.join(lock_dir, "lock"))
+        # The .validated cache is written by changelog validation earlier in the
+        # release flow.  It may be tracked (dirty) or gitignored (invisible to
+        # git status).  Either way it is not a concurrent-change signal.
+        validated_file = os.path.normpath(
+            os.path.join(get_changes_dir(version_dir), ".validated")
+        )
+        expected_files.add(validated_file)
         # When --allow-dirty was used, files that were already dirty before the
         # release started are not "unexpected" -- only genuinely new modifications
         # (from e.g. concurrent processes) should trigger the abort.

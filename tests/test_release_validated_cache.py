@@ -2,7 +2,8 @@
 
 The dirty-tree guard in _run_release_mutating checks for unexpected modified
 files. Since validate_unreleased() writes .validated during the release flow,
-it must be included in the expected files set.
+it must be included in the expected_files set (not files_to_commit, since the
+file may be gitignored and should not be committed as part of the release).
 """
 
 import json
@@ -79,8 +80,8 @@ class TestReleaseValidatedCache(unittest.TestCase):
             porcelain_recheck,  # git status --porcelain (re-check guard)
             "package.json",     # git diff --name-only -- package.json
             "M package.json",   # git status --porcelain -- package.json
-            ".rlsbl/changes/.validated",  # git diff --name-only -- .rlsbl/changes/.validated
-            "M .rlsbl/changes/.validated",  # git status --porcelain -- .rlsbl/changes/.validated
+            # .validated is NOT in files_to_commit, so has_staged_or_modified
+            # won't check it -- it's only in expected_files for the guard
             # commit_files is mocked separately
             "",                 # git tag v1.0.1
             "",                 # git push origin v1.0.1
