@@ -2,3 +2,5 @@
 {"commits":["055bb827a6c7ddcf69f5a89cbdc738311be82668"],"user_facing":true,"description":"**Fix.** `.validated` cache is no longer gitignored; tracked per project rules.","type":"fix"}
 {"commits":["1f33e21db9c17cf9cc0654eef04c4986cb43570a"],"user_facing":true,"description":"**Feature.** Pre-push hook now blocks pushes when `unreleased.jsonl`, `.validated`, or `CHANGELOG.md` are gitignored.","type":"feature"}
 {"commits":["e65a0d2781b482c275a0de393dd9972f791111a5","2e06c0ee8d30b4ce1ec9b552f21997154aa0653c","d60fd6b81d9ed1882268c247c2d07d3120020d58"],"user_facing":false}
+{"commits":["5a422aeab4fc987a0a2ca0bcce183a4e81845470"],"user_facing":false}
+{"commits":["ff22bfe936485198db2e2519297d429f14128fe6"],"user_facing":false}
