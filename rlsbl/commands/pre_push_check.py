@@ -2,6 +2,7 @@
 
 import fnmatch
 import os
+import re
 import subprocess
 import sys
 
@@ -150,25 +151,63 @@ def _get_pushed_commits(refs):
     return commits
 
 
-def _parse_stdin_refs():
-    """Parse pre-push hook stdin to extract (local_sha, remote_sha) pairs.
+def _read_stdin_lines():
+    """Read raw pre-push hook stdin lines.
 
-    Each line is: <local ref> <local sha> <remote ref> <remote sha>
-    Returns a list of (local_sha, remote_sha) tuples, or None if stdin
-    is not readable or empty.
+    Returns a list of non-empty lines, or None if stdin is not readable
+    or empty.
     """
     try:
         if sys.stdin.isatty():
             return None
+        raw = sys.stdin.read().strip()
     except (AttributeError, OSError):
         return None
 
-    lines = sys.stdin.read().strip()
-    if not lines:
+    if not raw:
+        return None
+
+    lines = [line for line in raw.splitlines() if line.strip()]
+    return lines if lines else None
+
+
+def _has_version_tag_push(stdin_lines):
+    """Check whether any stdin line is pushing a version tag.
+
+    Version tags match ``refs/tags/v*`` (single-project) or
+    ``refs/tags/*@v*`` (monorepo scoped tags like ``mylib@v1.2.3``).
+
+    Returns True if at least one line pushes a version tag.
+    """
+    pattern = re.compile(r"^refs/tags/(v\d|[^/]+@v\d)")
+    for line in stdin_lines:
+        parts = line.split()
+        if len(parts) >= 4:
+            local_ref = parts[0]
+            if pattern.match(local_ref):
+                return True
+    return False
+
+
+def _parse_stdin_refs(stdin_lines=None):
+    """Parse pre-push hook stdin to extract (local_sha, remote_sha) pairs.
+
+    Each line is: <local ref> <local sha> <remote ref> <remote sha>
+
+    When *stdin_lines* is provided (a list of raw lines), parses those
+    directly instead of reading stdin.  When omitted, reads stdin via
+    ``_read_stdin_lines()``.
+
+    Returns a list of (local_sha, remote_sha) tuples, or None if the
+    input is empty or unreadable.
+    """
+    if stdin_lines is None:
+        stdin_lines = _read_stdin_lines()
+    if stdin_lines is None:
         return None
 
     refs = []
-    for line in lines.splitlines():
+    for line in stdin_lines:
         parts = line.split()
         if len(parts) >= 4:
             local_sha = parts[1]
@@ -308,10 +347,19 @@ def run_cmd(registry, args, flags):
 
     Exits 1 if any changelog entry is missing; exits 0 silently on success.
     """
+    # Read stdin once -- used for tag detection and ref parsing
+    stdin_lines = _read_stdin_lines()
+
+    # Optimisation: if the push includes a version tag, skip JSONL checks
+    # entirely.  The release flow (rlsbl release) already validates
+    # changelog coverage before pushing, so re-checking is redundant.
+    if stdin_lines is not None and _has_version_tag_push(stdin_lines):
+        sys.exit(0)
+
     # Detect monorepo context
     workspace_root = find_workspace_root(".")
     if workspace_root:
-        refs = _parse_stdin_refs()
+        refs = _parse_stdin_refs(stdin_lines)
         if refs is not None:
             changed_files = _get_changed_files(refs)
             if changed_files is not None:
@@ -326,7 +374,7 @@ def run_cmd(registry, args, flags):
         sys.exit(0)
 
     # JSONL mode: check commit coverage
-    refs = _parse_stdin_refs()
+    refs = _parse_stdin_refs(stdin_lines)
     if refs is not None:
         error = _check_jsonl_changelog(".", refs)
         if error is None:
