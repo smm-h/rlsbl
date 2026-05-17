@@ -1,8 +1,11 @@
 """Undo command that reverts the last release by deleting the GitHub Release, removing the git tag, and reverting the version bump commit."""
 
 import os
+import re
 import sys
 
+from ..changelog.files import get_changes_dir, unfinalize_version
+from ..changelog.generate import generate_changelog
 from ..utils import run, check_gh_installed, check_gh_auth, get_push_timeout, get_current_branch, push_if_needed, is_clean_tree
 from ..workspace import find_workspace_root, resolve_project
 
@@ -95,7 +98,7 @@ def run_cmd(registry, args, flags):
     except Exception:
         results.append(("Delete local tag", FAILED, f"git tag -d {tag}"))
 
-    # Revert the version bump commit (should be HEAD)
+    # Revert release commits (should be HEAD, or HEAD + HEAD~1 for two-commit pattern)
     # In monorepo mode, commit message is "<project>: release v<version>"
     # In standalone mode, commit message is the tag string (e.g., "v1.2.3")
     if monorepo_name:
@@ -105,10 +108,38 @@ def run_cmd(registry, args, flags):
     else:
         expected_msg = tag
 
+    # Extract the bare version string (without "v" prefix) for changelog operations
+    if monorepo_name:
+        bare_version = version_part.lstrip("v")
+    else:
+        bare_version = tag.lstrip("v")
+
+    _FINALIZE_RE = re.compile(r"^chore: finalize changelog for (.+)$")
+
     reverted = False
+    finalize_reverted = False
     try:
         head_msg = run("git", ["log", "-1", "--format=%s"])
-        if head_msg == expected_msg:
+
+        # Two-commit pattern: HEAD is the finalize commit
+        finalize_match = _FINALIZE_RE.match(head_msg)
+        if finalize_match:
+            finalize_version_str = finalize_match.group(1)
+            run("git", ["revert", "--no-edit", "HEAD"])
+            finalize_reverted = True
+
+            # Now check if the new HEAD is the version-bump commit
+            new_head_msg = run("git", ["log", "-1", "--format=%s"])
+            if new_head_msg == expected_msg:
+                run("git", ["revert", "--no-edit", "HEAD"])
+                reverted = True
+                results.append(("Revert commit", OK, "-"))
+            else:
+                # Finalize was reverted but version-bump wasn't at HEAD~1
+                reverted = True
+                results.append(("Revert commit", OK, "(finalize commit only)"))
+        elif head_msg == expected_msg:
+            # Single-commit pattern: HEAD is the version-bump commit
             run("git", ["revert", "--no-edit", "HEAD"])
             reverted = True
             results.append(("Revert commit", OK, "-"))
@@ -116,6 +147,20 @@ def run_cmd(registry, args, flags):
             results.append(("Revert commit", SKIPPED, f"HEAD ({head_msg}) does not match expected ({expected_msg})"))
     except Exception:
         results.append(("Revert commit", FAILED, "git revert --no-edit HEAD"))
+
+    # Restore changelog state if we reverted a finalize commit
+    if finalize_reverted:
+        try:
+            project_path = os.getcwd()
+            changes_dir = get_changes_dir(project_path)
+            unfinalize_version(changes_dir, bare_version)
+            generate_changelog(project_path)
+            # Commit the restored changelog files
+            run("git", ["add", changes_dir, os.path.join(project_path, "CHANGELOG.md")])
+            run("git", ["commit", "-m", f"chore: restore changelog after undo of {tag}"])
+            results.append(("Restore changelog", OK, "-"))
+        except Exception:
+            results.append(("Restore changelog", FAILED, "manually restore .rlsbl/changes/ and regenerate CHANGELOG.md"))
 
     # Push the revert commit to remote
     if reverted:

@@ -4,8 +4,6 @@ import unittest
 from io import StringIO
 from unittest.mock import patch, call
 
-import pytest
-
 from rlsbl.commands.undo import run_cmd
 
 
@@ -181,7 +179,9 @@ class TestUndoTwoCommitPattern(unittest.TestCase):
     """Verify undo handles the two-commit release pattern where HEAD is a
     finalize commit and HEAD~1 is the version-bump commit."""
 
-    @pytest.mark.xfail(reason="undo does not handle finalize commit at HEAD")
+    @patch("rlsbl.commands.undo.generate_changelog")
+    @patch("rlsbl.commands.undo.unfinalize_version", return_value=["unreleased.jsonl"])
+    @patch("rlsbl.commands.undo.get_changes_dir", return_value="/fake/.rlsbl/changes")
     @patch("rlsbl.commands.undo.find_workspace_root", return_value=None)
     @patch("rlsbl.commands.undo.push_if_needed")
     @patch("rlsbl.commands.undo.get_current_branch", return_value="main")
@@ -192,18 +192,19 @@ class TestUndoTwoCommitPattern(unittest.TestCase):
     def test_undo_handles_finalize_commit_at_head(self, mock_run, _gh_inst,
                                                    _gh_auth, _clean,
                                                    mock_branch, mock_push,
-                                                   _ws_root):
+                                                   _ws_root, _changes_dir,
+                                                   mock_unfinalize,
+                                                   mock_generate):
         """When HEAD is a finalize commit (chore: finalize changelog for X.Y.Z)
         and HEAD~1 is the version-bump commit (vX.Y.Z), undo should revert
-        both commits. Currently it skips the revert because HEAD's message
-        does not match the tag string."""
+        both commits and restore changelog state."""
 
         # Scenario:
         #   HEAD   -> "chore: finalize changelog for 1.0.0"  (finalize commit)
         #   HEAD~1 -> "v1.0.0"                               (version-bump commit)
         #   Tag v1.0.0 points at HEAD
         #
-        # After undo, both commits should be reverted.
+        # After undo, both commits should be reverted, and changelog should be restored.
 
         mock_run.side_effect = [
             "v1.0.0",                                      # git describe --tags --abbrev=0 --match v*
@@ -214,12 +215,15 @@ class TestUndoTwoCommitPattern(unittest.TestCase):
             "",                                             # git revert --no-edit HEAD (revert finalize)
             "v1.0.0",                                      # git log -1 --format=%s (HEAD is now version-bump)
             "",                                             # git revert --no-edit HEAD (revert version-bump)
+            "",                                             # git add (changelog restoration)
+            "",                                             # git commit (changelog restoration)
         ]
 
         with patch("sys.stdout", new_callable=StringIO):
             run_cmd("npm", [], {"yes": True})
 
-        # Both the finalize commit and the version-bump commit should be reverted
+        # Both the finalize commit and the version-bump commit should be reverted,
+        # then changelog restoration commits
         expected_calls = [
             call("git", ["describe", "--tags", "--abbrev=0", "--match", "v*"]),
             call("gh", ["release", "delete", "v1.0.0", "--yes"]),
@@ -231,7 +235,12 @@ class TestUndoTwoCommitPattern(unittest.TestCase):
             call("git", ["revert", "--no-edit", "HEAD"]),
         ]
         mock_run.assert_has_calls(expected_calls, any_order=False)
-        self.assertEqual(mock_run.call_count, 8)
+        # 8 original calls + 2 for changelog restoration (git add + git commit)
+        self.assertEqual(mock_run.call_count, 10)
+
+        # Verify changelog restoration was called
+        mock_unfinalize.assert_called_once_with("/fake/.rlsbl/changes", "1.0.0")
+        mock_generate.assert_called_once()
 
         # Push should still be called after reverting
         mock_push.assert_called_once_with("main")

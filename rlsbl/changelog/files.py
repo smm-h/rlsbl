@@ -99,6 +99,35 @@ def finalize_version(changes_dir: str, version: str) -> None:
         pass  # empty file
 
 
+def unfinalize_version(changes_dir: str, version: str) -> list[str]:
+    """Reverse a finalize_version: restore x.y.z.jsonl back to unreleased.jsonl.
+
+    1. Makes the versioned file writable.
+    2. Renames it to unreleased.jsonl.
+    3. Deletes the per-version .md file if present.
+    4. Returns the list of changed file paths (for committing).
+
+    Returns an empty list if the versioned file doesn't exist.
+    """
+    versioned = os.path.join(changes_dir, f"{version}.jsonl")
+    unreleased = os.path.join(changes_dir, "unreleased.jsonl")
+    versioned_md = os.path.join(changes_dir, f"{version}.md")
+
+    if not os.path.isfile(versioned):
+        return []
+
+    os.chmod(versioned, 0o644)
+    os.rename(versioned, unreleased)
+
+    changed: list[str] = [unreleased]
+
+    if os.path.isfile(versioned_md):
+        os.unlink(versioned_md)
+        changed.append(versioned_md)
+
+    return changed
+
+
 def is_read_only(path: str) -> bool:
     """Check if a file has no write permissions (for any user class)."""
     if not os.path.exists(path):

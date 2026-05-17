@@ -19,6 +19,7 @@ from .files import (
     is_read_only,
     list_versioned_files,
     read_unreleased,
+    unfinalize_version,
 )
 
 from .generate import generate_changelog, generate_version_file, generate_version_section
@@ -41,6 +42,7 @@ __all__ = [
     "parse_entry",
     "parse_jsonl",
     "read_unreleased",
+    "unfinalize_version",
     "resolve_hash",
     "resolve_hashes",
     "serialize_entry",
