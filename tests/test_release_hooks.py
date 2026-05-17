@@ -280,10 +280,11 @@ class TestWatchSHABeforePostHook:
                     return "v1.0.0"
                 return ""
             if "rev-parse" in joined:
-                # First call (after push, before post-release hook): return pre-hook SHA
+                # 1st call: pre_release_sha capture (before mutations)
+                # 2nd call: pushed_sha capture (after push, before post-release hook)
                 # Any subsequent call would return post-hook SHA
                 rev_parse_call_count += 1
-                if rev_parse_call_count == 1:
+                if rev_parse_call_count <= 2:
                     return pre_hook_sha
                 return post_hook_sha
             if "status --porcelain" in joined:

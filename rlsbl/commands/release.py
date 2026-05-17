@@ -663,46 +663,69 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
                 return True
         return False
 
+    # Capture HEAD before any git mutations so we can roll back on failure
+    pre_release_sha = run("git", ["rev-parse", "HEAD"])
+
     needs_commit = new_version != current_version or has_staged_or_modified(files_to_commit)
-    if files_to_commit and needs_commit:
-        commit_files(commit_msg, files_to_commit)
-        log(f"Committed: {commit_msg}")
-    elif not needs_commit:
-        log("No changes to commit")
+    try:
+        if files_to_commit and needs_commit:
+            commit_files(commit_msg, files_to_commit)
+            log(f"Committed: {commit_msg}")
+        elif not needs_commit:
+            log("No changes to commit")
 
-    # Finalize JSONL changelog: rename unreleased.jsonl to x.y.z.jsonl
-    changes_dir = get_changes_dir(version_dir)
-    finalize_version(changes_dir, new_version)
-    log(f"Finalized JSONL changelog for {new_version}")
-    # Regenerate CHANGELOG.md so version headings reflect the finalized
-    # version (e.g. "## 0.25.0") instead of "## Unreleased"
-    generate_changelog(version_dir)
-    changelog_path = os.path.join(version_dir, "CHANGELOG.md")
-    changelog_entry = extract_changelog_entry(changelog_path, new_version)
-    log("Regenerated CHANGELOG.md with version heading")
-    # Commit the finalized JSONL file and the new empty unreleased.jsonl
-    jsonl_finalized = os.path.normpath(os.path.join(changes_dir, f"{new_version}.jsonl"))
-    jsonl_unreleased = os.path.normpath(os.path.join(changes_dir, "unreleased.jsonl"))
-    # Also commit the generated per-version .md file if it exists
-    jsonl_md = os.path.normpath(os.path.join(changes_dir, f"{new_version}.md"))
-    changelog_file = vpath("CHANGELOG.md")
-    finalize_files = [jsonl_finalized, jsonl_unreleased, changelog_file]
-    if os.path.exists(jsonl_md):
-        finalize_files.append(jsonl_md)
-    commit_files(f"chore: finalize changelog for {new_version}", finalize_files)
-    log(f"Committed finalized changelog files")
+        # Finalize JSONL changelog: rename unreleased.jsonl to x.y.z.jsonl
+        changes_dir = get_changes_dir(version_dir)
+        finalize_version(changes_dir, new_version)
+        log(f"Finalized JSONL changelog for {new_version}")
+        # Regenerate CHANGELOG.md so version headings reflect the finalized
+        # version (e.g. "## 0.25.0") instead of "## Unreleased"
+        generate_changelog(version_dir)
+        changelog_path = os.path.join(version_dir, "CHANGELOG.md")
+        changelog_entry = extract_changelog_entry(changelog_path, new_version)
+        log("Regenerated CHANGELOG.md with version heading")
+        # Commit the finalized JSONL file and the new empty unreleased.jsonl
+        jsonl_finalized = os.path.normpath(os.path.join(changes_dir, f"{new_version}.jsonl"))
+        jsonl_unreleased = os.path.normpath(os.path.join(changes_dir, "unreleased.jsonl"))
+        # Also commit the generated per-version .md file if it exists
+        jsonl_md = os.path.normpath(os.path.join(changes_dir, f"{new_version}.md"))
+        changelog_file = vpath("CHANGELOG.md")
+        finalize_files = [jsonl_finalized, jsonl_unreleased, changelog_file]
+        if os.path.exists(jsonl_md):
+            finalize_files.append(jsonl_md)
+        commit_files(f"chore: finalize changelog for {new_version}", finalize_files)
+        log(f"Committed finalized changelog files")
 
-    # Create local git tag
-    run("git", ["tag", tag])
-    log(f"Tagged: {tag}")
+        # Create local git tag
+        run("git", ["tag", tag])
+        log(f"Tagged: {tag}")
 
-    # Push commits and tag
-    push_timeout = get_push_timeout()
-    if push_timeout != 120:
-        log(f"Push timeout: {push_timeout}s (from RLSBL_PUSH_TIMEOUT)")
-    push_if_needed(branch)
-    run("git", ["push", "origin", tag], timeout=push_timeout)
-    log(f"Pushed to origin/{branch}")
+        # Push commits and tag
+        push_timeout = get_push_timeout()
+        if push_timeout != 120:
+            log(f"Push timeout: {push_timeout}s (from RLSBL_PUSH_TIMEOUT)")
+        push_if_needed(branch)
+        run("git", ["push", "origin", tag], timeout=push_timeout)
+        log(f"Pushed to origin/{branch}")
+    except Exception:
+        # Roll back local mutations: delete tag (may not exist yet) and
+        # reset commits so the working tree looks like it did before the
+        # release attempt.
+        try:
+            run("git", ["tag", "-d", tag])
+        except Exception:
+            pass
+        run("git", ["reset", "--hard", pre_release_sha])
+        print(
+            f"Error: release failed. Local state has been rolled back to {pre_release_sha[:10]}.",
+            file=sys.stderr,
+        )
+        print(
+            "If the branch was partially pushed, you may need to run:\n"
+            f"  git push --force-with-lease origin {branch}",
+            file=sys.stderr,
+        )
+        raise
 
     # Capture the pushed commit SHA now, before any post-release hooks that
     # might create new commits and move HEAD past the release commit.
