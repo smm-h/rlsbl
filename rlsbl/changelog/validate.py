@@ -8,6 +8,7 @@ import subprocess
 from .files import read_unreleased
 from .resolve import resolve_hash, resolve_hashes
 from .schema import ChangelogEntry, validate_schema
+from ..utils import commit_files
 
 
 def _git_log_hashes(range_spec: str) -> list[str]:
@@ -147,6 +148,7 @@ def _write_cache(changes_dir: str) -> None:
     path = _cache_path(changes_dir)
     with open(path, "w", encoding="utf-8") as f:
         f.write(head + "\n")
+    commit_files("update validation cache", [path], allow_failure=True)
 
 
 def _is_cache_valid(changes_dir: str) -> bool:
