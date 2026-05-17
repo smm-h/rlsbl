@@ -14,6 +14,5 @@ coverage/
 .env.local
 *.local-only
 .rlsbl/lock
-.rlsbl/changes/.validated
 docs/_build/
 .wrangler/
