@@ -206,6 +206,32 @@ def _run_builtin_lint(flags, is_library=False, project_dir=None):
     return True
 
 
+def _run_selfdoc_check(flags, project_dir=None):
+    """Run selfdoc check if selfdoc.json exists in the project directory.
+
+    Checks documentation consistency before releasing. Non-fatal if selfdoc
+    is not installed; fatal if it is installed and the check fails.
+    When project_dir is set (monorepo mode), checks are resolved relative to it.
+    """
+    if flags.get("skip-docs") or flags.get("dry-run"):
+        if flags.get("skip-docs"):
+            print("Skipping selfdoc check")
+        return True
+
+    check_dir = project_dir if project_dir else "."
+    selfdoc_config = os.path.join(check_dir, "selfdoc.json")
+    if not os.path.exists(selfdoc_config):
+        return True
+
+    if not shutil.which("selfdoc"):
+        print("Note: selfdoc.json found but selfdoc is not installed. Skipping docs check.")
+        return True
+
+    print("Running selfdoc check...")
+    subprocess.run(["selfdoc", "check"], cwd=project_dir, check=True)
+    return True
+
+
 def run_cmd(registry, args, flags):
     """Release command handler.
 
@@ -403,6 +429,9 @@ def run_cmd(registry, args, flags):
 
     # Built-in lint runner
     _run_builtin_lint(flags, is_library=is_library, project_dir=abs_project_dir)
+
+    # Built-in selfdoc check
+    _run_selfdoc_check(flags, project_dir=abs_project_dir)
 
     # Run pre-release hook if present
     pre_release_script = os.path.join(version_dir, ".rlsbl", "hooks", "pre-release.sh")
