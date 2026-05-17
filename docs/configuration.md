@@ -25,7 +25,7 @@ Configuration precedence for tagging: CLI flag (`--no-tag`) > project config > u
 
 Monorepo workspace definition that lists all sub-projects, their relative paths, and optional names. rlsbl walks up from the current directory to find this file, so you can run release commands from within any sub-project. See the [monorepo guide](monorepo.md) for setup instructions, workspace commands, and subtree publishing.
 
-:-: table-config path=".rlsbl-monorepo/workspace.toml"
+The file uses TOML format with a `[[projects]]` array. Each entry has a `path` key (relative to the monorepo root) and an optional `name` key. If `name` is omitted, the directory basename is used.
 
 ## selfdoc.json
 
