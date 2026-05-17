@@ -4,3 +4,5 @@
 {"commits":["e65a0d2781b482c275a0de393dd9972f791111a5","2e06c0ee8d30b4ce1ec9b552f21997154aa0653c","d60fd6b81d9ed1882268c247c2d07d3120020d58"],"user_facing":false}
 {"commits":["5a422aeab4fc987a0a2ca0bcce183a4e81845470"],"user_facing":false}
 {"commits":["ff22bfe936485198db2e2519297d429f14128fe6"],"user_facing":false}
+{"commits":["44a6d4afb81e57f651f87e43f652cb7df00fe070"],"user_facing":true,"description":"**Fix.** Pre-push hook now reads all JSONL files (unreleased + versioned) for coverage, fixing release pushes being blocked after changelog finalization.","type":"fix"}
+{"commits":["78df85a3b2bedab2509f19f4753c22055fd02c09","cb3cef87005874bce94ecbb6661b01526a2d587a"],"user_facing":false}
