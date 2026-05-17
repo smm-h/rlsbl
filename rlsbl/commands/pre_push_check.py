@@ -216,7 +216,7 @@ def _has_version_tag_push(stdin_lines):
 
     Returns True if at least one line pushes a version tag.
     """
-    pattern = re.compile(r"^refs/tags/(v\d|[^/]+@v\d)")
+    pattern = re.compile(r"^refs/tags/(v\d|.+/v\d|[^/]+@v\d)")
     for line in stdin_lines:
         parts = line.split()
         if len(parts) >= 4:

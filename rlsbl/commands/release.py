@@ -312,7 +312,7 @@ def run_cmd(registry, args, flags):
 
     # If the current version has never been tagged, release it as-is (bootstrap)
     if monorepo_name:
-        current_tag = target.monorepo_tag_format(monorepo_name, current_version)
+        current_tag = target.monorepo_tag_format(monorepo_name, current_version, path=monorepo_project_path)
     else:
         current_tag = target.tag_format(current_version)
     current_tag_exists = len(run("git", ["tag", "-l", current_tag])) > 0
@@ -336,7 +336,7 @@ def run_cmd(registry, args, flags):
 
         new_version = bump_version(current_version, bump_type)
         if monorepo_name:
-            tag = target.monorepo_tag_format(monorepo_name, new_version)
+            tag = target.monorepo_tag_format(monorepo_name, new_version, path=monorepo_project_path)
         else:
             tag = target.tag_format(new_version)
         log(f"New version: {new_version} ({bump_type})")
@@ -356,7 +356,8 @@ def run_cmd(registry, args, flags):
         sys.exit(1)
 
     changes_dir = get_changes_dir(version_dir)
-    validation = validate_unreleased(changes_dir, tag_prefix=monorepo_name)
+    tag_glob = target.monorepo_tag_glob(monorepo_name, path=monorepo_project_path) if monorepo_name else None
+    validation = validate_unreleased(changes_dir, tag_glob=tag_glob)
     if not validation["passed"]:
         print("Error: JSONL changelog validation failed:", file=sys.stderr)
         for check_name, (passed, details) in validation["checks"].items():

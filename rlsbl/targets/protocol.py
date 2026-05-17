@@ -44,8 +44,12 @@ class ReleaseTarget(Protocol):
         """Format the git tag for a release. Returns f'v{version}' by default."""
         ...
 
-    def monorepo_tag_format(self, name: str, version: str) -> str:
+    def monorepo_tag_format(self, name: str, version: str, path: str | None = None) -> str:
         """Format the git tag for a monorepo release. Default: f'{name}@v{version}'."""
+        ...
+
+    def monorepo_tag_glob(self, name: str, path: str | None = None) -> str:
+        """Return a glob pattern matching all monorepo version tags. Default: f'{name}@v*'."""
         ...
 
     # --- Optional: Scaffold support ---

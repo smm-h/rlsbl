@@ -1175,7 +1175,6 @@ class TestWriteVersionReturnPaths:
         assert result == ["VERSION"]
 
 
-@pytest.mark.xfail(reason="Go monorepo tag format not yet implemented")
 class TestGoMonorepoTagFormat:
     """Tests for Go monorepo tag format using path-based tags (go/v0.1.1) instead of name-based (name@v0.1.1)."""
 
@@ -1193,3 +1192,27 @@ class TestGoMonorepoTagFormat:
         """NpmTarget base monorepo_tag_format is unchanged: 'mylib@v1.0.0'."""
         result = NpmTarget().monorepo_tag_format("mylib", "1.0.0", path="packages/mylib/")
         assert result == "mylib@v1.0.0"
+
+    def test_go_monorepo_tag_without_path_falls_back(self):
+        """GoTarget without path falls back to base name@v format."""
+        result = GoTarget().monorepo_tag_format("mylib", "1.0.0")
+        assert result == "mylib@v1.0.0"
+
+    def test_go_monorepo_tag_glob_without_path_falls_back(self):
+        """GoTarget glob without path falls back to base name@v* format."""
+        result = GoTarget().monorepo_tag_glob("mylib")
+        assert result == "mylib@v*"
+
+    @pytest.mark.parametrize("target_cls,name,path,version", [
+        (GoTarget, "go-strictcli", "go/", "0.1.1"),
+        (NpmTarget, "mylib", "packages/mylib/", "1.0.0"),
+        (PypiTarget, "mypkg", "python/", "2.3.4"),
+    ])
+    def test_tag_format_matches_glob_prefix(self, target_cls, name, path, version):
+        """For each target, monorepo_tag_format output starts with monorepo_tag_glob prefix (minus trailing *)."""
+        target = target_cls()
+        tag = target.monorepo_tag_format(name, version, path=path)
+        glob = target.monorepo_tag_glob(name, path=path)
+        # glob ends with *, the tag should start with the prefix before *
+        glob_prefix = glob.rstrip("*")
+        assert tag.startswith(glob_prefix), f"tag {tag!r} does not start with glob prefix {glob_prefix!r}"

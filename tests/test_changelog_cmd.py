@@ -225,8 +225,8 @@ class TestCmdValidate:
             cmd_validate({})
         assert exc_info.value.code == 1
 
-    def test_standalone_no_tag_prefix(self, rlsbl_repo):
-        """In standalone mode, validate_unreleased is called without tag_prefix."""
+    def test_standalone_no_tag_glob(self, rlsbl_repo):
+        """In standalone mode, validate_unreleased is called without tag_glob."""
         sha = _make_commit(rlsbl_repo)
         changes_dir = get_changes_dir(".")
         append_entry(changes_dir, ChangelogEntry(commits=[sha], user_facing=False))
@@ -247,10 +247,10 @@ class TestCmdValidate:
                 },
             }
             cmd_validate({})
-            mock_validate.assert_called_once_with(changes_dir, tag_prefix=None)
+            mock_validate.assert_called_once_with(changes_dir, tag_glob=None)
 
-    def test_monorepo_passes_tag_prefix(self, tmp_path, monkeypatch):
-        """In monorepo context, validate_unreleased receives tag_prefix."""
+    def test_monorepo_passes_tag_glob(self, tmp_path, monkeypatch):
+        """In monorepo context, validate_unreleased receives tag_glob computed from target."""
         monkeypatch.chdir(tmp_path)
 
         _run_git(tmp_path, "init", "-q")
@@ -292,7 +292,8 @@ class TestCmdValidate:
                 },
             }
             cmd_validate({})
-            mock_validate.assert_called_once_with(changes_dir, tag_prefix="mysub")
+            # No target detected in sub/ so fallback glob is name@v*
+            mock_validate.assert_called_once_with(changes_dir, tag_glob="mysub@v*")
 
     def test_monorepo_unregistered_project_errors(self, tmp_path, monkeypatch):
         """Error when inside a monorepo but not in a registered project."""

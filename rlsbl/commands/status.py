@@ -17,10 +17,10 @@ from ..utils import (
 from ..workspace import find_workspace_root, load_workspace, resolve_project
 
 
-def _collect_status(registry, target_path=".", tag_prefix=None):
+def _collect_status(registry, target_path=".", tag_glob=None):
     """Collect status data as a dict.
 
-    When tag_prefix is set (monorepo mode), it is forwarded to
+    When tag_glob is set (monorepo mode), it is forwarded to
     _unreleased_range so coverage uses the correct scoped tag.
 
     Returns None and prints an error if the project does not exist.
@@ -77,7 +77,7 @@ def _collect_status(registry, target_path=".", tag_prefix=None):
             # Count unreleased commits (excluding changelog-only commits,
             # consistent with changelog validate's coverage check)
             try:
-                range_spec = _unreleased_range(tag_prefix=tag_prefix)
+                range_spec = _unreleased_range(tag_glob=tag_glob)
                 result = subprocess.run(
                     ["git", "log", "--format=%H", range_spec],
                     capture_output=True, text=True, timeout=30,
@@ -157,8 +157,12 @@ def run_cmd(registry, args, flags):
     except Exception:
         pass
 
-    tag_prefix = monorepo_project["name"] if monorepo_project else None
-    data = _collect_status(registry, primary_path, tag_prefix=tag_prefix)
+    if monorepo_project:
+        target = TARGETS[registry]
+        tag_glob = target.monorepo_tag_glob(monorepo_project["name"], path=monorepo_project["path"])
+    else:
+        tag_glob = None
+    data = _collect_status(registry, primary_path, tag_glob=tag_glob)
 
     if flags.get("json"):
         print(_json.dumps(data, indent=2))
@@ -211,6 +215,10 @@ def run_cmd(registry, args, flags):
     # Monorepo awareness (detection already done above)
     if monorepo_count is not None:
         if monorepo_project is not None:
-            mono_tag = f"{monorepo_project['name']}@v{data['version']}"
+            target = TARGETS[registry]
+            mono_tag = target.monorepo_tag_format(
+                monorepo_project["name"], data["version"],
+                path=monorepo_project["path"],
+            )
             print(f"Mono tag:  {mono_tag}")
         print(f"Part of monorepo ({monorepo_count} project{'s' if monorepo_count != 1 else ''}). Run 'rlsbl monorepo status' for all.")

@@ -6,6 +6,7 @@ import sys
 
 from ..changelog.files import get_changes_dir, unfinalize_version
 from ..changelog.generate import generate_changelog
+from ..targets import TARGETS, detect_targets
 from ..utils import run, check_gh_installed, check_gh_auth, get_push_timeout, get_current_branch, push_if_needed, is_clean_tree
 from ..workspace import find_workspace_root, resolve_project
 
@@ -42,6 +43,7 @@ def run_cmd(registry, args, flags):
 
     # Monorepo detection
     monorepo_name = None
+    monorepo_project_path = None
     ws_root = find_workspace_root(".")
     if ws_root:
         project = resolve_project(ws_root, ".")
@@ -49,10 +51,19 @@ def run_cmd(registry, args, flags):
             print("Error: current directory is inside a monorepo but not inside any project.", file=sys.stderr)
             sys.exit(1)
         monorepo_name = project["name"]
+        monorepo_project_path = project["path"]
         os.chdir(ws_root)
 
     # Find the latest tag (scoped to project in monorepo mode)
-    match_pattern = f"{monorepo_name}@v*" if monorepo_name else "v*"
+    if monorepo_name:
+        target_entries = detect_targets(monorepo_project_path)
+        if target_entries:
+            target = TARGETS[target_entries[0].name]
+            match_pattern = target.monorepo_tag_glob(monorepo_name, path=monorepo_project_path)
+        else:
+            match_pattern = f"{monorepo_name}@v*"
+    else:
+        match_pattern = "v*"
     try:
         tag = run("git", ["describe", "--tags", "--abbrev=0", "--match", match_pattern])
     except Exception:
@@ -102,8 +113,9 @@ def run_cmd(registry, args, flags):
     # In monorepo mode, commit message is "<project>: release v<version>"
     # In standalone mode, commit message is the tag string (e.g., "v1.2.3")
     if monorepo_name:
-        # tag is "<project>@v<version>", extract version part
-        version_part = tag.split("@", 1)[1] if "@" in tag else tag
+        # Extract version from tag: handles both name@v1.2.3 and path/v1.2.3
+        _version_match = re.search(r"v(\d+\.\d+\.\d+)$", tag)
+        version_part = f"v{_version_match.group(1)}" if _version_match else tag
         expected_msg = f"{monorepo_name}: release {version_part}"
     else:
         expected_msg = tag

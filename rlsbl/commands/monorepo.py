@@ -383,6 +383,23 @@ def _generate_router(projects):
     return "\n".join(lines) + "\n"
 
 
+def _get_monorepo_tag_prefix(project):
+    """Return the tag prefix for a monorepo project's publish router condition.
+
+    Uses the target's monorepo_tag_glob to derive the prefix (glob minus
+    trailing ``*``). For Go projects this yields ``go/v``, for others
+    ``name@v``.
+    """
+    target_entries = detect_targets(project["path"])
+    if target_entries and target_entries[0].name in TARGETS:
+        glob = TARGETS[target_entries[0].name].monorepo_tag_glob(
+            project["name"], path=project["path"]
+        )
+        # Strip trailing * to get the prefix for startsWith
+        return glob.rstrip("*")
+    return f"{project['name']}@v"
+
+
 def _generate_publish_router(projects):
     """Generate publish router content for projects with publish workflows."""
     lines = []
@@ -396,8 +413,9 @@ def _generate_publish_router(projects):
     lines.append("jobs:")
 
     for p in projects:
+        tag_prefix = _get_monorepo_tag_prefix(p)
         lines.append(f"  {p['name']}:")
-        lines.append(f"    if: startsWith(github.event.release.tag_name, '{p['name']}@v')")
+        lines.append(f"    if: startsWith(github.event.release.tag_name, '{tag_prefix}')")
         lines.append(f"    uses: ./.github/workflows/{p['name']}-publish.yml")
         lines.append("")
 
@@ -567,21 +585,25 @@ def _cmd_status(flags):
             except Exception:
                 version = "?"
 
-        # Find latest tag
+        # Find latest tag using target-aware glob
         latest_tag = "(none)"
         latest_tag_version = None
         try:
+            if target_name != "none" and target_name in TARGETS:
+                tag_glob = TARGETS[target_name].monorepo_tag_glob(name, path=path)
+            else:
+                tag_glob = f"{name}@v*"
             result = subprocess.run(
-                ["git", "tag", "-l", f"{name}@v*", "--sort=-v:refname"],
+                ["git", "tag", "-l", tag_glob, "--sort=-v:refname"],
                 capture_output=True, text=True, check=True,
             )
             first_line = result.stdout.strip().split("\n")[0].strip() if result.stdout.strip() else ""
             if first_line:
                 latest_tag = first_line
-                # Extract version from tag like "name@v1.2.3"
-                prefix = f"{name}@v"
-                if first_line.startswith(prefix):
-                    latest_tag_version = first_line[len(prefix):]
+                # Extract version from tag (handles both name@v1.2.3 and path/v1.2.3)
+                version_match = re.search(r"v(\d+\.\d+\.\d+)$", first_line)
+                if version_match:
+                    latest_tag_version = version_match.group(1)
         except Exception:
             pass
 

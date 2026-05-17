@@ -6,6 +6,7 @@ import time
 
 from ..targets import TARGETS, detect_targets
 from ..utils import check_gh_auth, check_gh_installed, extract_changelog_entry, run
+from ..workspace import find_workspace_root, resolve_project
 
 
 def run_cmd(args, flags):
@@ -13,6 +14,9 @@ def run_cmd(args, flags):
 
     If no version is given, detects the current version from the project's
     primary target. Reads the changelog entry and updates the GitHub Release.
+
+    In monorepo mode, uses the project's monorepo tag format and reads
+    CHANGELOG.md from the project subdirectory.
     """
     dry_run = flags.get("dry-run", False)
 
@@ -23,8 +27,22 @@ def run_cmd(args, flags):
         print("Error: gh CLI is not authenticated.", file=sys.stderr)
         sys.exit(1)
 
+    # Detect monorepo context
+    monorepo_name = None
+    monorepo_project_path = None
+    monorepo_root = find_workspace_root(".")
+    if monorepo_root:
+        project = resolve_project(monorepo_root, ".")
+        if project is not None:
+            monorepo_name = project["name"]
+            monorepo_project_path = project["path"]
+            os.chdir(monorepo_root)
+
+    # Version directory: project subdir in monorepo, repo root otherwise
+    version_dir = monorepo_project_path if monorepo_name else "."
+
     # Detect primary target
-    entries = detect_targets(".")
+    entries = detect_targets(version_dir)
     if not entries:
         print("Error: no package.json, pyproject.toml, or go.mod found.", file=sys.stderr)
         sys.exit(1)
@@ -39,10 +57,15 @@ def run_cmd(args, flags):
 
     # Normalize: strip leading "v" for changelog lookup
     version = raw_version.lstrip("v")
-    tag = target.tag_format(version)
 
-    # Extract changelog entry
-    changelog_path = os.path.join(".", "CHANGELOG.md")
+    # Build the tag: monorepo format or standalone
+    if monorepo_name:
+        tag = target.monorepo_tag_format(monorepo_name, version, path=monorepo_project_path)
+    else:
+        tag = target.tag_format(version)
+
+    # Extract changelog entry from project subdir in monorepo mode
+    changelog_path = os.path.join(version_dir, "CHANGELOG.md")
     if not os.path.exists(changelog_path):
         print("Error: CHANGELOG.md not found.", file=sys.stderr)
         sys.exit(1)

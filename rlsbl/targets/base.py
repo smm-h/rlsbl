@@ -12,8 +12,11 @@ class BaseTarget:
     def tag_format(self, version):
         return f"v{version}"
 
-    def monorepo_tag_format(self, name, version):
+    def monorepo_tag_format(self, name, version, path=None):
         return f"{name}@v{version}"
+
+    def monorepo_tag_glob(self, name, path=None):
+        return f"{name}@v*"
 
     def template_dir(self):
         return None

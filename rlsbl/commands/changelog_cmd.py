@@ -9,6 +9,7 @@ from ..changelog.generate import generate_changelog
 from ..changelog.resolve import resolve_hash
 from ..changelog.schema import ChangelogEntry, validate_schema
 from ..changelog.validate import validate_unreleased
+from ..targets import TARGETS, detect_targets
 from ..utils import commit_files
 from ..workspace import find_workspace_root, resolve_project
 
@@ -93,7 +94,7 @@ def cmd_validate(flags):
         sys.exit(1)
 
     # Detect monorepo context for tag-scoped validation
-    tag_prefix = None
+    tag_glob = None
     monorepo_root = find_workspace_root(".")
     if monorepo_root:
         project = resolve_project(monorepo_root, ".")
@@ -107,10 +108,16 @@ def cmd_validate(flags):
                 file=sys.stderr,
             )
             sys.exit(1)
-        tag_prefix = project["name"]
+        # Compute the tag glob via the target for correct format (path-based for Go)
+        target_entries = detect_targets(project["path"])
+        if target_entries:
+            target = TARGETS[target_entries[0].name]
+            tag_glob = target.monorepo_tag_glob(project["name"], path=project["path"])
+        else:
+            tag_glob = f"{project['name']}@v*"
 
     changes_dir = get_changes_dir(".")
-    results = validate_unreleased(changes_dir, tag_prefix=tag_prefix)
+    results = validate_unreleased(changes_dir, tag_glob=tag_glob)
 
     overall = results["passed"]
     for name, (passed, details) in results["checks"].items():

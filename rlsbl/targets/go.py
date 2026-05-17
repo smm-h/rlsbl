@@ -184,6 +184,16 @@ class GoTarget(BaseTarget):
     def tag_format(self, version):
         return f"v{version}"
 
+    def monorepo_tag_format(self, name, version, path=None):
+        if path is not None:
+            return f"{path}v{version}"
+        return super().monorepo_tag_format(name, version, path)
+
+    def monorepo_tag_glob(self, name, path=None):
+        if path is not None:
+            return f"{path}v*"
+        return super().monorepo_tag_glob(name, path)
+
     def template_dir(self):
         return os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "templates", "go"

@@ -222,10 +222,10 @@ class TestStatusMonorepoAware:
 
 
 class TestStatusTagScoping:
-    """Tests that status coverage uses monorepo-scoped tags via tag_prefix."""
+    """Tests that status coverage uses monorepo-scoped tags via tag_glob."""
 
-    def test_monorepo_passes_tag_prefix(self, mock_git_repo, monkeypatch, capsys):
-        """In a monorepo project, _unreleased_range receives the project name as tag_prefix."""
+    def test_monorepo_passes_tag_glob(self, mock_git_repo, monkeypatch, capsys):
+        """In a monorepo project, _unreleased_range receives the computed tag_glob."""
         from unittest.mock import patch
 
         _cmd_init({})
@@ -244,9 +244,9 @@ class TestStatusTagScoping:
         captured_calls = []
         original_unreleased_range = _unreleased_range
 
-        def spy_unreleased_range(tag_prefix=None):
-            captured_calls.append(tag_prefix)
-            return original_unreleased_range(tag_prefix=tag_prefix)
+        def spy_unreleased_range(tag_glob=None):
+            captured_calls.append(tag_glob)
+            return original_unreleased_range(tag_glob=tag_glob)
 
         with patch(
             "rlsbl.commands.status._unreleased_range",
@@ -256,10 +256,10 @@ class TestStatusTagScoping:
             run_cmd("npm", [], {})
 
         assert len(captured_calls) == 1
-        assert captured_calls[0] == "mylib"
+        assert captured_calls[0] == "mylib@v*"
 
-    def test_standalone_no_tag_prefix(self, mock_git_repo, monkeypatch, capsys):
-        """In a standalone project, _unreleased_range receives no tag_prefix."""
+    def test_standalone_no_tag_glob(self, mock_git_repo, monkeypatch, capsys):
+        """In a standalone project, _unreleased_range receives no tag_glob."""
         from unittest.mock import patch
 
         # Create a standalone npm project (no monorepo init)
@@ -276,9 +276,9 @@ class TestStatusTagScoping:
         captured_calls = []
         original_unreleased_range = _unreleased_range
 
-        def spy_unreleased_range(tag_prefix=None):
-            captured_calls.append(tag_prefix)
-            return original_unreleased_range(tag_prefix=tag_prefix)
+        def spy_unreleased_range(tag_glob=None):
+            captured_calls.append(tag_glob)
+            return original_unreleased_range(tag_glob=tag_glob)
 
         with patch(
             "rlsbl.commands.status._unreleased_range",
@@ -290,8 +290,8 @@ class TestStatusTagScoping:
         assert len(captured_calls) == 1
         assert captured_calls[0] is None
 
-    def test_collect_status_forwards_tag_prefix(self, mock_git_repo, capsys):
-        """_collect_status passes tag_prefix through to _unreleased_range."""
+    def test_collect_status_forwards_tag_glob(self, mock_git_repo, capsys):
+        """_collect_status passes tag_glob through to _unreleased_range."""
         from unittest.mock import patch
 
         with open(str(mock_git_repo / "package.json"), "w") as f:
@@ -305,22 +305,22 @@ class TestStatusTagScoping:
         captured_calls = []
         original_unreleased_range = _unreleased_range
 
-        def spy_unreleased_range(tag_prefix=None):
-            captured_calls.append(tag_prefix)
-            return original_unreleased_range(tag_prefix=tag_prefix)
+        def spy_unreleased_range(tag_glob=None):
+            captured_calls.append(tag_glob)
+            return original_unreleased_range(tag_glob=tag_glob)
 
         with patch(
             "rlsbl.commands.status._unreleased_range",
             side_effect=spy_unreleased_range,
         ):
             from rlsbl.commands.status import _collect_status
-            _collect_status("npm", ".", tag_prefix="my-project")
+            _collect_status("npm", ".", tag_glob="my-project@v*")
 
         assert len(captured_calls) == 1
-        assert captured_calls[0] == "my-project"
+        assert captured_calls[0] == "my-project@v*"
 
-    def test_monorepo_root_no_tag_prefix(self, mock_git_repo, monkeypatch, capsys):
-        """At monorepo root (not a registered project), tag_prefix is None."""
+    def test_monorepo_root_no_tag_glob(self, mock_git_repo, monkeypatch, capsys):
+        """At monorepo root (not a registered project), tag_glob is None."""
         from unittest.mock import patch
 
         _cmd_init({})
@@ -341,9 +341,9 @@ class TestStatusTagScoping:
         captured_calls = []
         original_unreleased_range = _unreleased_range
 
-        def spy_unreleased_range(tag_prefix=None):
-            captured_calls.append(tag_prefix)
-            return original_unreleased_range(tag_prefix=tag_prefix)
+        def spy_unreleased_range(tag_glob=None):
+            captured_calls.append(tag_glob)
+            return original_unreleased_range(tag_glob=tag_glob)
 
         with patch(
             "rlsbl.commands.status._unreleased_range",
@@ -353,7 +353,7 @@ class TestStatusTagScoping:
             run_cmd("npm", [], {})
 
         assert len(captured_calls) == 1
-        # Root is not a project in the workspace, so no tag prefix
+        # Root is not a project in the workspace, so no tag glob
         assert captured_calls[0] is None
 
 
