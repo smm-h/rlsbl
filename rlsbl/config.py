@@ -84,6 +84,20 @@ def read_deploy_config():
     return targets, errors
 
 
+def get_publish_config(target_name):
+    """Read per-target publish config from .rlsbl/config.json.
+
+    Returns a dict like {"local": True, "token_var": "PYPI_TOKEN"}.
+    Returns empty dict if no config exists for this target.
+    """
+    config = read_project_config()
+    publish = config.get("publish", {})
+    if not isinstance(publish, dict):
+        return {}
+    target_config = publish.get(target_name, {})
+    return target_config if isinstance(target_config, dict) else {}
+
+
 def write_project_config(key, value):
     """Write or update a key in .rlsbl/config.json (creates dir if needed)."""
     os.makedirs(os.path.dirname(_project_config()), exist_ok=True)
