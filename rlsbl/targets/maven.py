@@ -3,9 +3,11 @@
 import os
 import re
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 
 from .base import BaseTarget
+from ..config import get_publish_config
 from ..utils import run
 
 
@@ -271,11 +273,24 @@ class MavenTarget(BaseTarget):
         ]
 
     def publish(self, dir_path, version):
-        """Publish via Gradle or Maven if GITHUB_TOKEN is available."""
-        token = os.environ.get("GITHUB_TOKEN")
+        """Publish via Gradle or Maven based on per-target config and token availability."""
+        pub_config = get_publish_config(self.name)
+
+        if pub_config.get("local") is False:
+            print(f"Skipping local {self.name} publish (config: local=false). CI will handle it.")
+            return
+
+        token_var = pub_config.get("token_var", "GITHUB_TOKEN")
+        token = os.environ.get(token_var)
         if not token:
+            if pub_config.get("local") is True:
+                print(
+                    f"ERROR: {self.name} publish requested (local=true) but {token_var} is not set.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             print(
-                "Skipping local Maven/Gradle publish (no GITHUB_TOKEN). CI will handle it."
+                f"Skipping local Maven/Gradle publish (no {token_var}). CI will handle it."
             )
             return
 

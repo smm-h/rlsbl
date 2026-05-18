@@ -3,8 +3,10 @@
 import os
 import re
 import subprocess
+import sys
 
 from .base import BaseTarget
+from ..config import get_publish_config
 from ..utils import run
 
 
@@ -102,10 +104,23 @@ class HexTarget(BaseTarget):
         ]
 
     def publish(self, dir_path, version):
-        """Publish to Hex if HEX_API_KEY is available, otherwise defer to CI."""
-        token = os.environ.get("HEX_API_KEY")
+        """Publish to Hex based on per-target config and HEX_API_KEY availability."""
+        pub_config = get_publish_config(self.name)
+
+        if pub_config.get("local") is False:
+            print(f"Skipping local {self.name} publish (config: local=false). CI will handle it.")
+            return
+
+        token_var = pub_config.get("token_var", "HEX_API_KEY")
+        token = os.environ.get(token_var)
         if not token:
-            print("Skipping local Hex publish (no HEX_API_KEY). CI will handle it.")
+            if pub_config.get("local") is True:
+                print(
+                    f"ERROR: {self.name} publish requested (local=true) but {token_var} is not set.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print(f"Skipping local Hex publish (no {token_var}). CI will handle it.")
             return
 
         try:

@@ -4,8 +4,10 @@ import json
 import os
 import re
 import subprocess
+import sys
 
 from .base import BaseTarget
+from ..config import get_publish_config
 from ..utils import run
 
 
@@ -147,10 +149,34 @@ class DenoTarget(BaseTarget):
         ]
 
     def publish(self, dir_path, version):
-        """Publish to JSR if DENO_TOKEN or JSR_TOKEN is available, otherwise defer to CI."""
-        token = os.environ.get("DENO_TOKEN") or os.environ.get("JSR_TOKEN")
+        """Publish to JSR based on per-target config and token availability.
+
+        Without config, accepts DENO_TOKEN or JSR_TOKEN. With config that sets
+        token_var, only the named variable is consulted.
+        """
+        pub_config = get_publish_config(self.name)
+
+        if pub_config.get("local") is False:
+            print(f"Skipping local {self.name} publish (config: local=false). CI will handle it.")
+            return
+
+        token_var = pub_config.get("token_var")
+        if token_var:
+            token = os.environ.get(token_var)
+            missing_msg = f"no {token_var}"
+        else:
+            token = os.environ.get("DENO_TOKEN") or os.environ.get("JSR_TOKEN")
+            missing_msg = "no DENO_TOKEN/JSR_TOKEN"
+
         if not token:
-            print("Skipping local Deno publish (no DENO_TOKEN/JSR_TOKEN). CI will handle it.")
+            if pub_config.get("local") is True:
+                effective_var = token_var or "DENO_TOKEN"
+                print(
+                    f"ERROR: {self.name} publish requested (local=true) but {effective_var} is not set.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print(f"Skipping local Deno publish ({missing_msg}). CI will handle it.")
             return
 
         try:
