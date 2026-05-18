@@ -4,12 +4,14 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import tomllib
 
 import tomlkit
 
 from .base import BaseTarget
+from ..config import get_publish_config
 from ..utils import run
 
 _MIN_VERSION_RE = re.compile(r">=\s*(\d+\.\d+(?:\.\d+)?)")
@@ -281,10 +283,34 @@ class PypiTarget(BaseTarget):
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def publish(self, dir_path, version):
-        """Publish to PyPI if a token is available, otherwise defer to CI."""
-        token = os.environ.get("PYPI_TOKEN") or os.environ.get("TWINE_PASSWORD")
+        """Publish to PyPI based on per-target config and token availability.
+
+        Without config, accepts either PYPI_TOKEN or TWINE_PASSWORD. With
+        config that sets token_var, only the named variable is consulted.
+        """
+        pub_config = get_publish_config(self.name)
+
+        if pub_config.get("local") is False:
+            print(f"Skipping local {self.name} publish (config: local=false). CI will handle it.")
+            return
+
+        token_var = pub_config.get("token_var")
+        if token_var:
+            token = os.environ.get(token_var)
+            missing_msg = f"no {token_var}"
+        else:
+            token = os.environ.get("PYPI_TOKEN") or os.environ.get("TWINE_PASSWORD")
+            missing_msg = "no PYPI_TOKEN"
+
         if not token:
-            print("Skipping local PyPI publish (no PYPI_TOKEN). CI will handle it.")
+            if pub_config.get("local") is True:
+                effective_var = token_var or "PYPI_TOKEN"
+                print(
+                    f"ERROR: {self.name} publish requested (local=true) but {effective_var} is not set.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print(f"Skipping local PyPI publish ({missing_msg}). CI will handle it.")
             return
 
         try:

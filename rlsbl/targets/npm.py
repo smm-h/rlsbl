@@ -4,8 +4,10 @@ import json
 import os
 import re
 import subprocess
+import sys
 
 from .base import BaseTarget
+from ..config import get_publish_config
 from ..utils import run
 
 _MIN_VERSION_RE = re.compile(r">=\s*(\d+(?:\.\d+)*)")
@@ -186,10 +188,23 @@ class NpmTarget(BaseTarget):
         ]
 
     def publish(self, dir_path, version):
-        """Publish to npm if NPM_TOKEN is available, otherwise defer to CI."""
-        token = os.environ.get("NPM_TOKEN")
+        """Publish to npm based on per-target config and NPM_TOKEN availability."""
+        pub_config = get_publish_config(self.name)
+
+        if pub_config.get("local") is False:
+            print(f"Skipping local {self.name} publish (config: local=false). CI will handle it.")
+            return
+
+        token_var = pub_config.get("token_var", "NPM_TOKEN")
+        token = os.environ.get(token_var)
         if not token:
-            print("Skipping local npm publish (no NPM_TOKEN). CI will handle it.")
+            if pub_config.get("local") is True:
+                print(
+                    f"ERROR: {self.name} publish requested (local=true) but {token_var} is not set.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print(f"Skipping local npm publish (no {token_var}). CI will handle it.")
             return
 
         try:

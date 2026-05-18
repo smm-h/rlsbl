@@ -3,10 +3,12 @@
 import os
 import re
 import subprocess
+import sys
 
 import tomlkit
 
 from .base import BaseTarget
+from ..config import get_publish_config
 from ..utils import run
 
 
@@ -177,10 +179,23 @@ class CargoTarget(BaseTarget):
         return mappings
 
     def publish(self, dir_path, version):
-        """Publish to crates.io if CARGO_REGISTRY_TOKEN is set, otherwise skip."""
-        token = os.environ.get("CARGO_REGISTRY_TOKEN")
+        """Publish to crates.io based on per-target config and token availability."""
+        pub_config = get_publish_config(self.name)
+
+        if pub_config.get("local") is False:
+            print(f"Skipping local {self.name} publish (config: local=false). CI will handle it.")
+            return
+
+        token_var = pub_config.get("token_var", "CARGO_REGISTRY_TOKEN")
+        token = os.environ.get(token_var)
         if not token:
-            print("Skipping local cargo publish (no CARGO_REGISTRY_TOKEN). CI will handle it.")
+            if pub_config.get("local") is True:
+                print(
+                    f"ERROR: {self.name} publish requested (local=true) but {token_var} is not set.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print(f"Skipping local cargo publish (no {token_var}). CI will handle it.")
             return
 
         try:
