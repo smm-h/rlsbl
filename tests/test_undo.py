@@ -2,7 +2,7 @@
 
 import unittest
 from io import StringIO
-from unittest.mock import patch, call
+from unittest.mock import ANY, patch, call
 
 from rlsbl.commands.undo import run_cmd
 
@@ -46,7 +46,7 @@ class TestUndoHappyPath(unittest.TestCase):
         expected_calls = [
             call("git", ["describe", "--tags", "--abbrev=0", "--match", "v*"]),
             call("gh", ["release", "delete", "v1.0.0", "--yes"]),
-            call("git", ["push", "origin", ":v1.0.0"], timeout=120),
+            call("git", ["push", "origin", ":v1.0.0"], timeout=120, env=ANY),
             call("git", ["tag", "-d", "v1.0.0"]),
             call("git", ["log", "-1", "--format=%s"]),
             call("git", ["revert", "--no-edit", "HEAD"]),
@@ -55,7 +55,7 @@ class TestUndoHappyPath(unittest.TestCase):
         self.assertEqual(mock_run.call_count, 6)
 
         # Verify push_if_needed was called with the current branch
-        mock_push.assert_called_once_with("main")
+        mock_push.assert_called_once_with("main", env=ANY)
 
 
 class TestUndoMonorepo(unittest.TestCase):
@@ -91,14 +91,14 @@ class TestUndoMonorepo(unittest.TestCase):
         expected_calls = [
             call("git", ["describe", "--tags", "--abbrev=0", "--match", "mylib@v*"]),
             call("gh", ["release", "delete", "mylib@v2.1.0", "--yes"]),
-            call("git", ["push", "origin", ":mylib@v2.1.0"], timeout=120),
+            call("git", ["push", "origin", ":mylib@v2.1.0"], timeout=120, env=ANY),
             call("git", ["tag", "-d", "mylib@v2.1.0"]),
             call("git", ["log", "-1", "--format=%s"]),
             call("git", ["revert", "--no-edit", "HEAD"]),
         ]
         mock_run.assert_has_calls(expected_calls, any_order=False)
         self.assertEqual(mock_run.call_count, 6)
-        mock_push.assert_called_once_with("main")
+        mock_push.assert_called_once_with("main", env=ANY)
 
     @patch("rlsbl.commands.undo.find_workspace_root", return_value="/fake/monorepo")
     @patch("rlsbl.commands.undo.resolve_project", return_value={"name": "mylib", "path": "packages/mylib"})
@@ -227,7 +227,7 @@ class TestUndoTwoCommitPattern(unittest.TestCase):
         expected_calls = [
             call("git", ["describe", "--tags", "--abbrev=0", "--match", "v*"]),
             call("gh", ["release", "delete", "v1.0.0", "--yes"]),
-            call("git", ["push", "origin", ":v1.0.0"], timeout=120),
+            call("git", ["push", "origin", ":v1.0.0"], timeout=120, env=ANY),
             call("git", ["tag", "-d", "v1.0.0"]),
             call("git", ["log", "-1", "--format=%s"]),
             call("git", ["revert", "--no-edit", "HEAD"]),
@@ -243,7 +243,7 @@ class TestUndoTwoCommitPattern(unittest.TestCase):
         mock_generate.assert_called_once()
 
         # Push should still be called after reverting
-        mock_push.assert_called_once_with("main")
+        mock_push.assert_called_once_with("main", env=ANY)
 
 
 if __name__ == "__main__":
