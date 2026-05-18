@@ -53,6 +53,9 @@ def load_workspace(root):
         if "path" not in proj or not isinstance(proj["path"], str):
             raise ValueError(f"projects[{i}] missing required 'path' string")
         entry = dict(proj)
+        # Normalize: strip trailing slashes so stored paths are consistent.
+        # Belt-and-suspenders with target-level tag format defenses.
+        entry["path"] = entry["path"].rstrip("/")
         if "name" not in entry or not entry["name"]:
             entry["name"] = os.path.basename(entry["path"])
         result.append(entry)
