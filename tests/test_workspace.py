@@ -138,6 +138,37 @@ class TestSaveWorkspace:
         assert loaded == [{"path": "b", "name": "b"}]
 
 
+class TestLoadWorkspacePathNormalization:
+    """load_workspace must strip trailing slashes from project paths."""
+
+    def test_strips_trailing_slash(self, tmp_project):
+        ws_dir = tmp_project / ".rlsbl-monorepo"
+        ws_dir.mkdir()
+        (ws_dir / "workspace.toml").write_text(
+            '[[projects]]\npath = "auth-gateway/"\nname = "auth-gateway"\n'
+        )
+        result = load_workspace(str(tmp_project))
+        assert result[0]["path"] == "auth-gateway"
+
+    def test_passes_through_when_no_trailing_slash(self, tmp_project):
+        ws_dir = tmp_project / ".rlsbl-monorepo"
+        ws_dir.mkdir()
+        (ws_dir / "workspace.toml").write_text(
+            '[[projects]]\npath = "auth-gateway"\nname = "auth-gateway"\n'
+        )
+        result = load_workspace(str(tmp_project))
+        assert result[0]["path"] == "auth-gateway"
+
+    def test_strips_trailing_slash_on_nested_path(self, tmp_project):
+        ws_dir = tmp_project / ".rlsbl-monorepo"
+        ws_dir.mkdir()
+        (ws_dir / "workspace.toml").write_text(
+            '[[projects]]\npath = "packages/foo/"\nname = "foo"\n'
+        )
+        result = load_workspace(str(tmp_project))
+        assert result[0]["path"] == "packages/foo"
+
+
 class TestWorkspaceExtraKeys:
     """Tests for extra-key preservation in save_workspace round-trips."""
 

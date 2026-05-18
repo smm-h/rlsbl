@@ -1216,3 +1216,23 @@ class TestGoMonorepoTagFormat:
         # glob ends with *, the tag should start with the prefix before *
         glob_prefix = glob.rstrip("*")
         assert tag.startswith(glob_prefix), f"tag {tag!r} does not start with glob prefix {glob_prefix!r}"
+
+    def test_go_monorepo_tag_no_trailing_slash_in_path(self):
+        """GoTarget().monorepo_tag_format inserts a slash when path lacks one."""
+        result = GoTarget().monorepo_tag_format("auth-gateway", "0.1.0", path="auth-gateway")
+        assert result == "auth-gateway/v0.1.0"
+
+    def test_go_monorepo_tag_glob_no_trailing_slash_in_path(self):
+        """GoTarget().monorepo_tag_glob inserts a slash when path lacks one."""
+        result = GoTarget().monorepo_tag_glob("auth-gateway", path="auth-gateway")
+        assert result == "auth-gateway/v*"
+
+    def test_go_monorepo_tag_with_trailing_slash_no_double(self):
+        """Trailing slash in path must not produce a double slash in the tag."""
+        result = GoTarget().monorepo_tag_format("auth-gateway", "0.1.0", path="auth-gateway/")
+        assert result == "auth-gateway/v0.1.0"
+
+    def test_go_monorepo_tag_glob_with_trailing_slash_no_double(self):
+        """Trailing slash in path must not produce a double slash in the glob."""
+        result = GoTarget().monorepo_tag_glob("auth-gateway", path="auth-gateway/")
+        assert result == "auth-gateway/v*"
