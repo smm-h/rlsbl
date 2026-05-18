@@ -168,7 +168,8 @@ def cmd_status(target, json):
 @strictcli.flag(name="no-commit", type=bool, help="Skip auto-commit of scaffolded files")
 @strictcli.flag(name="skip-shared", type=bool, help="Skip shared template processing")
 @strictcli.flag(name="no-tag", type=bool, help="Disable ecosystem tagging for this invocation")
-def cmd_scaffold(target, force, update, private, no_commit, skip_shared, no_tag):
+@strictcli.flag(name="dry-run", type=bool, help="Show planned changes without writing files or committing")
+def cmd_scaffold(target, force, update, private, no_commit, skip_shared, no_tag, dry_run):
     # Scaffold is special: if a project root exists, chdir to it;
     # if not, stay in cwd (for new projects).
     # However, if the current directory has project markers (pyproject.toml,
@@ -189,6 +190,7 @@ def cmd_scaffold(target, force, update, private, no_commit, skip_shared, no_tag)
         "no-commit": no_commit,
         "skip-shared": skip_shared,
         "no-tag": no_tag,
+        "dry-run": dry_run,
     }
 
     resolved_target = target or None

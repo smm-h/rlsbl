@@ -193,23 +193,31 @@ def _three_way_merge(ours_text, base_text, theirs_text):
                     pass
 
 
-def process_mappings(template_dir, mappings, vars_dict, force, update=False,
-                     existing_hashes=None):
-    """Process a list of template mappings: read each template, apply vars, write target files.
+def plan_mappings(template_dir, mappings, vars_dict, force, update=False):
+    """Compute what process_mappings would do, without writing anything.
 
-    Uses a universal three-way merge (via git merge-file) for existing files:
-    base (last scaffolded version) + ours (user's current file) + theirs (new template).
-    USER_OWNED files are never overwritten or merged (except LICENSE year update).
-
-    Returns (created, skipped, warnings, new_hashes).
-    created/skipped are lists of (target, status) tuples for unified display.
+    Returns a list of plan dicts. Each plan represents one mapping and contains:
+      - "target": the target file path
+      - "status": one of "new", "updated", "unchanged", "skipped", "user-owned",
+        or a string starting with "CONFLICTS"; or status values like
+        "overwritten", "created", "merged", "updated (additive merge)",
+        "year updated (...)" -- the same vocabulary the original function
+        produced for the (created, skipped) lists.
+      - "bucket": "created" or "skipped" -- which result list this entry belongs in
+      - "action": one of "write", "save_base_only", "license_year_update",
+        "gitignore_merge", "merge_write", "none". Tells apply_plans what to do.
+      - "content": the bytes to write (when action requires it). None otherwise.
+      - "base_content": template content to save as the new merge base. None
+        when no base should be saved this run.
+      - "warning": optional extra warning string emitted alongside this plan
+      - "unreplaced": list of unreplaced template var names (for warnings)
+      - "year_update": for license_year_update, a dict with "current_year",
+        "old_year" so apply can recompute the new content
+      - "additive_lines": for gitignore_merge, the lines to append
+      - "existing_content": for gitignore_merge, the original content
+      - "template_not_found": True for warning-only entries
     """
-    if existing_hashes is None:
-        existing_hashes = {}
-    created = []
-    skipped = []
-    warnings = []
-    new_hashes = {}
+    plans = []
 
     for mapping in mappings:
         template = mapping["template"]
@@ -217,7 +225,13 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
 
         template_path = os.path.join(template_dir, template)
         if not os.path.exists(template_path):
-            warnings.append(f"Template not found: {template_path}")
+            plans.append({
+                "target": target,
+                "status": None,
+                "bucket": None,
+                "action": "warn_only",
+                "warning": f"Template not found: {template_path}",
+            })
             continue
 
         with open(template_path, "r", encoding="utf-8") as f:
@@ -233,7 +247,6 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                 with open(target, "r", encoding="utf-8") as f:
                     content = f.read()
                 # Match "Copyright (c) YYYY" or "Copyright (c) YYYY-YYYY"
-                # Capture the original end-year to report the range in the status
                 old_year = None
                 def _capture_range(m):
                     nonlocal old_year
@@ -241,37 +254,50 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                         return m.group(0)
                     old_year = f"{m.group(1).split()[-1]}-{m.group(2)}"
                     return f"{m.group(1)}-{current_year}"
-                updated = re.sub(
+                updated_content = re.sub(
                     r"(Copyright\s+\(c\)\s+\d{4})-(\d{4})",
                     _capture_range,
                     content,
                 )
-                if updated == content:
-                    # No range found or range already current -- try single year
+                if updated_content == content:
                     def _capture_single(m):
                         nonlocal old_year
                         if m.group(2) == current_year:
                             return m.group(0)
                         old_year = m.group(2)
                         return f"{m.group(1)}{m.group(2)}-{current_year}"
-                    updated = re.sub(
+                    updated_content = re.sub(
                         r"(Copyright\s+\(c\)\s+)(\d{4})(?![-\d])",
                         _capture_single,
                         content,
                     )
-                if updated != content:
-                    with open(target, "w", encoding="utf-8") as f:
-                        f.write(updated)
+                if updated_content != content:
                     year_detail = (
                         f"year updated ({old_year} -> {old_year.split('-')[0]}-{current_year})"
                         if old_year and "-" in old_year
                         else f"year updated ({old_year} -> {old_year}-{current_year})"
                     ) if old_year else "year updated"
-                    created.append(("LICENSE", year_detail))
+                    plans.append({
+                        "target": "LICENSE",
+                        "status": year_detail,
+                        "bucket": "created",
+                        "action": "write_no_base",
+                        "content": updated_content,
+                    })
                 else:
-                    skipped.append((target, "user-owned"))
+                    plans.append({
+                        "target": target,
+                        "status": "user-owned",
+                        "bucket": "skipped",
+                        "action": "none",
+                    })
             else:
-                skipped.append((target, "user-owned"))
+                plans.append({
+                    "target": target,
+                    "status": "user-owned",
+                    "bucket": "skipped",
+                    "action": "none",
+                })
             continue
 
         # --- .gitignore: additive set-union merge (append new lines, never remove) ---
@@ -289,33 +315,41 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
                 if stripped and not stripped.startswith("#") and stripped not in existing_lines:
                     new_lines.append(line)
             if new_lines:
-                # Append new entries with a blank separator
                 parts = [existing_content.rstrip("\n"), ""] + new_lines + [""]
                 merged_content = "\n".join(parts)
-                with open(target, "w", encoding="utf-8") as f:
-                    f.write(merged_content)
-                _save_base(target, theirs)
-                new_hashes[target] = file_hash(target)
-                created.append((target, "updated (additive merge)"))
+                plans.append({
+                    "target": target,
+                    "status": "updated (additive merge)",
+                    "bucket": "created",
+                    "action": "write",
+                    "content": merged_content,
+                    "base_content": theirs,
+                })
             else:
-                _save_base(target, theirs)
-                skipped.append((target, "unchanged"))
+                plans.append({
+                    "target": target,
+                    "status": "unchanged",
+                    "bucket": "skipped",
+                    "action": "save_base_only",
+                    "base_content": theirs,
+                })
             continue
 
         # --- New file or force overwrite (non-user-owned): write and save base ---
         if not os.path.exists(target) or force:
             is_overwrite = os.path.exists(target) and force
-            target_dir = os.path.dirname(target)
-            if target_dir and target_dir != ".":
-                os.makedirs(target_dir, exist_ok=True)
-            with open(target, "w", encoding="utf-8") as f:
-                f.write(theirs)
-            _save_base(target, theirs)
-            new_hashes[target] = file_hash(target)
             status = "overwritten" if is_overwrite else "created"
-            created.append((target, status))
+            plan = {
+                "target": target,
+                "status": status,
+                "bucket": "created",
+                "action": "write",
+                "content": theirs,
+                "base_content": theirs,
+            }
             if unreplaced:
-                warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
+                plan["unreplaced"] = unreplaced
+            plans.append(plan)
             continue
 
         # --- Three-way merge for all other existing files ---
@@ -325,55 +359,274 @@ def process_mappings(template_dir, mappings, vars_dict, force, update=False,
 
         if base is None:
             # No base stored (legacy project or first update after migration).
-            # Cannot do a three-way merge. Seed the base for next time.
-            _save_base(target, theirs)
             if ours == theirs:
-                skipped.append((target, "unchanged, base seeded"))
+                plans.append({
+                    "target": target,
+                    "status": "unchanged, base seeded",
+                    "bucket": "skipped",
+                    "action": "save_base_only",
+                    "base_content": theirs,
+                })
             else:
-                warnings.append(
-                    f"{target}: no base stored, cannot merge; "
-                    "run scaffold --force to reset"
-                )
-                skipped.append((target, "no base -- run scaffold --force to enable merging"))
+                plans.append({
+                    "target": target,
+                    "status": "no base -- run scaffold --force to enable merging",
+                    "bucket": "skipped",
+                    "action": "save_base_only",
+                    "base_content": theirs,
+                    "warning": (
+                        f"{target}: no base stored, cannot merge; "
+                        "run scaffold --force to reset"
+                    ),
+                })
             continue
 
         if ours == base:
-            # User did not customize -- clean update: write theirs.
-            target_dir = os.path.dirname(target)
-            if target_dir and target_dir != ".":
-                os.makedirs(target_dir, exist_ok=True)
-            with open(target, "w", encoding="utf-8") as f:
-                f.write(theirs)
-            _save_base(target, theirs)
-            new_hashes[target] = file_hash(target)
-            created.append((target, "updated"))
+            plan = {
+                "target": target,
+                "status": "updated",
+                "bucket": "created",
+                "action": "write",
+                "content": theirs,
+                "base_content": theirs,
+            }
             if unreplaced:
-                warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
+                plan["unreplaced"] = unreplaced
+            plans.append(plan)
         elif base == theirs:
-            # Template did not change -- nothing to do.
-            skipped.append((target, "unchanged"))
+            plans.append({
+                "target": target,
+                "status": "unchanged",
+                "bucket": "skipped",
+                "action": "none",
+            })
         elif ours == theirs:
-            # User and template converged to same content -- nothing to do.
-            skipped.append((target, "unchanged"))
+            plans.append({
+                "target": target,
+                "status": "unchanged",
+                "bucket": "skipped",
+                "action": "none",
+            })
         else:
-            # Both user and template changed -- three-way merge.
             merged, has_conflicts = _three_way_merge(ours, base, theirs)
+            if has_conflicts:
+                plan = {
+                    "target": target,
+                    "status": "CONFLICTS -- resolve manually",
+                    "bucket": "created",
+                    "action": "write",
+                    "content": merged,
+                    "base_content": theirs,
+                    "warning": f"{target}: merge conflicts detected, resolve manually",
+                }
+            else:
+                plan = {
+                    "target": target,
+                    "status": "merged",
+                    "bucket": "created",
+                    "action": "write",
+                    "content": merged,
+                    "base_content": theirs,
+                }
+            if unreplaced:
+                plan["unreplaced"] = unreplaced
+            plans.append(plan)
+
+    return plans
+
+
+def apply_plans(plans):
+    """Apply a list of plans from plan_mappings, performing all side effects.
+
+    Returns (created, skipped, warnings, new_hashes) matching the original
+    process_mappings return shape.
+    """
+    created = []
+    skipped = []
+    warnings = []
+    new_hashes = {}
+
+    for plan in plans:
+        action = plan.get("action")
+        target = plan["target"]
+
+        if action == "warn_only":
+            warnings.append(plan["warning"])
+            continue
+
+        if action == "none":
+            if plan["bucket"] == "skipped":
+                skipped.append((target, plan["status"]))
+            else:
+                created.append((target, plan["status"]))
+            continue
+
+        if action == "save_base_only":
+            _save_base(target, plan["base_content"])
+            if plan["bucket"] == "skipped":
+                skipped.append((target, plan["status"]))
+            else:
+                created.append((target, plan["status"]))
+            if plan.get("warning"):
+                warnings.append(plan["warning"])
+            continue
+
+        if action in ("write", "write_no_base"):
             target_dir = os.path.dirname(target)
             if target_dir and target_dir != ".":
                 os.makedirs(target_dir, exist_ok=True)
             with open(target, "w", encoding="utf-8") as f:
-                f.write(merged)
-            _save_base(target, theirs)
+                f.write(plan["content"])
+            if action == "write" and plan.get("base_content") is not None:
+                _save_base(target, plan["base_content"])
             new_hashes[target] = file_hash(target)
-            if has_conflicts:
-                created.append((target, "CONFLICTS -- resolve manually"))
-                warnings.append(f"{target}: merge conflicts detected, resolve manually")
+            if plan["bucket"] == "created":
+                created.append((target, plan["status"]))
             else:
-                created.append((target, "merged"))
-            if unreplaced:
-                warnings.append(f"{target}: unreplaced vars: {', '.join(unreplaced)}")
+                skipped.append((target, plan["status"]))
+            if plan.get("warning"):
+                warnings.append(plan["warning"])
+            if plan.get("unreplaced"):
+                warnings.append(
+                    f"{target}: unreplaced vars: {', '.join(plan['unreplaced'])}"
+                )
+            continue
 
     return created, skipped, warnings, new_hashes
+
+
+def process_mappings(template_dir, mappings, vars_dict, force, update=False,
+                     existing_hashes=None):
+    """Process a list of template mappings: read each template, apply vars, write target files.
+
+    Uses a universal three-way merge (via git merge-file) for existing files:
+    base (last scaffolded version) + ours (user's current file) + theirs (new template).
+    USER_OWNED files are never overwritten or merged (except LICENSE year update).
+
+    Returns (created, skipped, warnings, new_hashes).
+    created/skipped are lists of (target, status) tuples for unified display.
+
+    Implemented as plan_mappings() (pure analysis) + apply_plans() (side effects).
+    """
+    plans = plan_mappings(template_dir, mappings, vars_dict, force, update=update)
+    return apply_plans(plans)
+
+
+def _print_file_status_table(created, skipped):
+    """Print the unified file list table with dot-padded status column."""
+    all_files = [(t, s) for t, s in created] + [(t, s) for t, s in skipped]
+    if not all_files:
+        return
+    all_files.sort(key=lambda item: item[0])
+    max_target_len = max(len(t) for t, _ in all_files)
+    pad_width = max_target_len + 4
+    print("Files:")
+    for target, status in all_files:
+        dots = " " + "." * (pad_width - len(target)) + " "
+        print(f"  {target}{dots}{status}")
+
+
+def _print_dry_run_report(plans_groups, registry=None, registries=None):
+    """Print the file status table from plans without applying them.
+
+    plans_groups is a list of plan lists (registry plans, shared plans, etc.).
+    """
+    print("=" * 60)
+    print("DRY RUN -- no changes made")
+    print("=" * 60)
+
+    created = []
+    skipped = []
+    warnings = []
+    for plans in plans_groups:
+        for plan in plans:
+            if plan.get("action") == "warn_only":
+                warnings.append(plan["warning"])
+                continue
+            if plan.get("bucket") == "created":
+                created.append((plan["target"], plan["status"]))
+            elif plan.get("bucket") == "skipped":
+                skipped.append((plan["target"], plan["status"]))
+            if plan.get("warning"):
+                warnings.append(plan["warning"])
+            if plan.get("unreplaced"):
+                warnings.append(
+                    f"{plan['target']}: unreplaced vars: {', '.join(plan['unreplaced'])}"
+                )
+
+    _print_file_status_table(created, skipped)
+
+    if warnings:
+        print("Warnings:")
+        for w in warnings:
+            print(f"  {w}")
+
+    print()
+    print("DRY RUN -- no files were written, no commits made.")
+
+
+def _install_or_update_pre_push_hook():
+    """Install the rlsbl pre-push hook, upgrading older versions in place.
+
+    See rlsbl/hook_hashes.py for the historical hash set.
+
+    Behavior:
+      - .git missing                -> no-op
+      - hook missing                -> write current template, chmod 755
+      - hook matches current hash   -> no-op (already up to date)
+      - hook matches old known hash -> overwrite, print upgrade notice
+      - hook hash unknown           -> skip, print warning + unified diff
+    """
+    import difflib
+    from ..hook_hashes import (
+        CURRENT_PRE_PUSH_HOOK,
+        CURRENT_PRE_PUSH_HOOK_HASH,
+        PRE_PUSH_HOOK_HASHES,
+        compute_hook_hash,
+    )
+
+    if not os.path.isdir(".git"):
+        return
+
+    hook_target = os.path.join(".git", "hooks", "pre-push")
+
+    if not os.path.exists(hook_target):
+        os.makedirs(os.path.join(".git", "hooks"), exist_ok=True)
+        with open(hook_target, "w", encoding="utf-8") as f:
+            f.write(CURRENT_PRE_PUSH_HOOK)
+        os.chmod(hook_target, 0o755)
+        print("Installed pre-push hook (.git/hooks/pre-push)")
+        return
+
+    with open(hook_target, "r", encoding="utf-8") as f:
+        installed = f.read()
+    installed_hash = compute_hook_hash(installed)
+
+    if installed_hash == CURRENT_PRE_PUSH_HOOK_HASH:
+        return
+
+    if installed_hash in PRE_PUSH_HOOK_HASHES:
+        with open(hook_target, "w", encoding="utf-8") as f:
+            f.write(CURRENT_PRE_PUSH_HOOK)
+        os.chmod(hook_target, 0o755)
+        print("Updated pre-push hook (was an older rlsbl version).")
+        return
+
+    # Unknown content -- assume user-customized. Show a diff so the user can
+    # decide whether to delete the hook and re-scaffold to accept ours.
+    diff_lines = list(difflib.unified_diff(
+        installed.splitlines(keepends=True),
+        CURRENT_PRE_PUSH_HOOK.splitlines(keepends=True),
+        fromfile=hook_target,
+        tofile="rlsbl template",
+    ))
+    diff_text = "".join(diff_lines)
+    print(
+        "pre-push hook appears customized -- not overwriting. Diff:\n"
+        f"{diff_text}"
+        "  To accept the rlsbl template, delete the hook and re-run scaffold.",
+        file=sys.stderr,
+    )
 
 
 def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnings,
@@ -397,16 +650,14 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
             if entry.endswith(".sh"):
                 os.chmod(os.path.join(hooks_dir, entry), 0o755)
 
-    # Auto-install pre-push hook as a one-liner that delegates to the subcommand
-    hook_target = os.path.join(".git", "hooks", "pre-push")
-    if os.path.isdir(".git"):
-        if not os.path.exists(hook_target):
-            hook_content = "#!/usr/bin/env bash\nexec rlsbl pre-push-check\n"
-            os.makedirs(os.path.join(".git", "hooks"), exist_ok=True)
-            with open(hook_target, "w", encoding="utf-8") as f:
-                f.write(hook_content)
-            os.chmod(hook_target, 0o755)
-            print("Installed pre-push hook (.git/hooks/pre-push)")
+    # Install or update the pre-push hook.
+    #
+    # Strategy: content-hash detection. Every prior rlsbl-shipped hook content
+    # has its SHA-256 in PRE_PUSH_HOOK_HASHES. If the installed hook matches
+    # one of those, it's safe to overwrite with the current template. If the
+    # hash is unknown the user has likely customized it -- leave it alone and
+    # show a diff so they can decide.
+    _install_or_update_pre_push_hook()
 
     # Write scaffolding version marker so the pre-push hook can detect drift
     from rlsbl import __version__
@@ -429,18 +680,7 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
         ensure_tags(registries)
 
     # Print unified file list with dot-padded status column
-    all_files = [(t, s) for t, s in created] + [(t, s) for t, s in skipped]
-    if all_files:
-        # Sort by target path for stable output
-        all_files.sort(key=lambda item: item[0])
-        # Compute padding width: longest target path + minimum 4 dots
-        max_target_len = max(len(t) for t, _ in all_files)
-        pad_width = max_target_len + 4
-        print("Files:")
-        for target, status in all_files:
-            # Fill gap between target and status with dots
-            dots = " " + "." * (pad_width - len(target)) + " "
-            print(f"  {target}{dots}{status}")
+    _print_file_status_table(created, skipped)
 
     if warnings:
         print("Warnings:")
@@ -468,9 +708,20 @@ def _finalize_scaffold(existing_hashes, all_hash_dicts, created, skipped, warnin
         print("Skipping commit (--no-commit).")
         return
 
-    # Collect all files that were created/modified (not "unchanged" or "skipped")
+    # Collect all files that were created/modified (not "unchanged" or "skipped").
+    # Conflicted files contain merge markers and must NOT be committed.
+    conflicted_files = [t for t, s in created if s.startswith("CONFLICTS")]
     files_to_commit = [t for t, s in created
-                       if s not in ("unchanged", "skipped", "user-owned")]
+                       if s not in ("unchanged", "skipped", "user-owned")
+                       and not s.startswith("CONFLICTS")]
+    if conflicted_files:
+        print(
+            f"Skipped commit for {len(conflicted_files)} conflicted file(s). "
+            "Resolve markers and commit manually:",
+            file=sys.stderr,
+        )
+        for cf in conflicted_files:
+            print(f"  {cf}", file=sys.stderr)
     # Include .rlsbl/ internal files written during scaffold
     config_file = os.path.join(".rlsbl", "config.json")
     for rlsbl_file in [HASHES_FILE, os.path.join(".rlsbl", "version"), config_file]:
@@ -621,16 +872,20 @@ def run_cmd(registry, args, flags):
     if registry == "npm":
         npm_lockfile_missing = _check_npm_lockfile_missing()
 
+    dry_run = flags.get("dry-run", False)
+
     # Acquire advisory lock to prevent concurrent rlsbl operations
     acquire_lock()
 
     try:
         # Register this target in .rlsbl/config.json targets array
-        _ensure_target_in_config(registry)
+        # (skipped under --dry-run -- we don't write config)
+        if not dry_run:
+            _ensure_target_in_config(registry)
 
         # Determine if this is a private repository
         private = _resolve_private(flags)
-        if private:
+        if private and not dry_run:
             write_project_config("private", True)
 
         # Gather template variables
@@ -647,30 +902,28 @@ def run_cmd(registry, args, flags):
         reg_mappings = reg.template_mappings()
         if private:
             reg_mappings = _filter_mappings_for_private(reg_mappings)
-        reg_created, reg_skipped, reg_warnings, reg_hashes = process_mappings(
-            reg.template_dir(),
-            reg_mappings,
-            vars_dict,
-            force,
-            update,
-            existing_hashes,
+
+        reg_plans = plan_mappings(
+            reg.template_dir(), reg_mappings, vars_dict, force, update=update,
         )
 
-        # Process shared templates (skip if another registry already handled them)
-        shared_created, shared_skipped, shared_warnings, shared_hashes = [], [], [], {}
+        shared_plans = []
         if not flags.get("skip-shared"):
             shared_mappings = reg.shared_template_mappings()
             if private:
                 shared_mappings = _replace_post_release_hook_for_private(shared_mappings)
             shared_mappings = _append_deploy_workflow_if_configured(shared_mappings)
-            shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
-                reg.shared_template_dir(),
-                shared_mappings,
-                vars_dict,
-                force,
-                update,
-                existing_hashes,
+            shared_plans = plan_mappings(
+                reg.shared_template_dir(), shared_mappings, vars_dict, force, update=update,
             )
+
+        if dry_run:
+            _print_dry_run_report([reg_plans, shared_plans], registry=registry,
+                                   registries=[registry])
+            return
+
+        reg_created, reg_skipped, reg_warnings, reg_hashes = apply_plans(reg_plans)
+        shared_created, shared_skipped, shared_warnings, shared_hashes = apply_plans(shared_plans)
 
         created = reg_created + shared_created
         skipped = reg_skipped + shared_skipped
@@ -947,6 +1200,86 @@ def _merge_template_vars(registries_list, primary, target_paths):
     return merged
 
 
+def _plan_merged_publish(publish_target, merged_content, force, update):
+    """Compute a plan for the merged publish workflow (analysis only)."""
+    is_overwrite = os.path.exists(publish_target)
+    if not is_overwrite or force:
+        status = "overwritten" if is_overwrite else "created"
+        return {
+            "target": publish_target,
+            "status": status,
+            "bucket": "created",
+            "action": "write",
+            "content": merged_content,
+            "base_content": merged_content,
+        }
+    if update:
+        with open(publish_target, "r", encoding="utf-8") as f:
+            ours = f.read()
+        base = _load_base(publish_target)
+        if base is None:
+            if ours == merged_content:
+                return {
+                    "target": publish_target,
+                    "status": "unchanged, base seeded",
+                    "bucket": "skipped",
+                    "action": "save_base_only",
+                    "base_content": merged_content,
+                }
+            return {
+                "target": publish_target,
+                "status": "no base -- run scaffold --force to enable merging",
+                "bucket": "skipped",
+                "action": "save_base_only",
+                "base_content": merged_content,
+                "warning": (
+                    f"{publish_target}: no base stored, cannot merge; "
+                    "run scaffold --force to reset"
+                ),
+            }
+        if ours == base:
+            return {
+                "target": publish_target,
+                "status": "updated",
+                "bucket": "created",
+                "action": "write",
+                "content": merged_content,
+                "base_content": merged_content,
+            }
+        if base == merged_content or ours == merged_content:
+            return {
+                "target": publish_target,
+                "status": "unchanged",
+                "bucket": "skipped",
+                "action": "none",
+            }
+        merged_text, has_conflicts = _three_way_merge(ours, base, merged_content)
+        if has_conflicts:
+            return {
+                "target": publish_target,
+                "status": "CONFLICTS -- resolve manually",
+                "bucket": "created",
+                "action": "write",
+                "content": merged_text,
+                "base_content": merged_content,
+                "warning": f"{publish_target}: merge conflicts detected, resolve manually",
+            }
+        return {
+            "target": publish_target,
+            "status": "merged",
+            "bucket": "created",
+            "action": "write",
+            "content": merged_text,
+            "base_content": merged_content,
+        }
+    return {
+        "target": publish_target,
+        "status": "exists",
+        "bucket": "skipped",
+        "action": "none",
+    }
+
+
 def run_cmd_multi(registries_list, args, flags):
     """Scaffold for multiple registries with a merged publish workflow.
 
@@ -965,17 +1298,21 @@ def run_cmd_multi(registries_list, args, flags):
     if "npm" in registries_list:
         npm_lockfile_missing = _check_npm_lockfile_missing()
 
+    dry_run = flags.get("dry-run", False)
+
     # Acquire advisory lock to prevent concurrent rlsbl operations
     acquire_lock()
 
     try:
         # Register all targets in .rlsbl/config.json targets array
-        for r in registries_list:
-            _ensure_target_in_config(r)
+        # (skipped under --dry-run -- we don't write config)
+        if not dry_run:
+            for r in registries_list:
+                _ensure_target_in_config(r)
 
         # Determine if this is a private repository
         private = _resolve_private(flags)
-        if private:
+        if private and not dry_run:
             write_project_config("private", True)
 
         print(f"Multiple registries detected: {', '.join(registries_list)}")
@@ -997,86 +1334,38 @@ def run_cmd_multi(registries_list, args, flags):
 
         # Process primary registry CI template only (publish will come from merged)
         ci_mappings = [m for m in reg.template_mappings() if "publish" not in m["template"]]
-        ci_created, ci_skipped, ci_warnings, ci_hashes = process_mappings(
-            reg.template_dir(),
-            ci_mappings,
-            vars_dict,
-            force,
-            update,
-            existing_hashes,
+        ci_plans = plan_mappings(
+            reg.template_dir(), ci_mappings, vars_dict, force, update=update,
         )
 
-        # Generate and write merged publish workflow (skip for private repos)
-        merged_created, merged_skipped, merged_warnings, merged_hashes = [], [], [], {}
+        # Plan the merged publish workflow (skip for private repos)
+        merged_plans = []
         if not private:
             publish_target = os.path.join(".github", "workflows", "publish.yml")
             merged_content = _generate_merged_publish(registries_list, vars_dict)
+            merged_plans = [_plan_merged_publish(
+                publish_target, merged_content, force, update,
+            )]
 
-            target_dir = os.path.dirname(publish_target)
-            if target_dir:
-                os.makedirs(target_dir, exist_ok=True)
-
-            is_overwrite = os.path.exists(publish_target)
-            if not is_overwrite or force:
-                with open(publish_target, "w", encoding="utf-8") as f:
-                    f.write(merged_content)
-                _save_base(publish_target, merged_content)
-                merged_hashes[publish_target] = file_hash(publish_target)
-                status = "overwritten" if is_overwrite else "created"
-                merged_created.append((publish_target, status))
-            elif update:
-                # Three-way merge for updates
-                with open(publish_target, "r", encoding="utf-8") as f:
-                    ours = f.read()
-                base = _load_base(publish_target)
-                if base is None:
-                    _save_base(publish_target, merged_content)
-                    if ours == merged_content:
-                        merged_skipped.append((publish_target, "unchanged, base seeded"))
-                    else:
-                        merged_warnings.append(
-                            f"{publish_target}: no base stored, cannot merge; "
-                            "run scaffold --force to reset"
-                        )
-                        merged_skipped.append((publish_target,
-                                               "no base -- run scaffold --force to enable merging"))
-                elif ours == base:
-                    with open(publish_target, "w", encoding="utf-8") as f:
-                        f.write(merged_content)
-                    _save_base(publish_target, merged_content)
-                    merged_hashes[publish_target] = file_hash(publish_target)
-                    merged_created.append((publish_target, "updated"))
-                elif base == merged_content or ours == merged_content:
-                    merged_skipped.append((publish_target, "unchanged"))
-                else:
-                    merged_text, has_conflicts = _three_way_merge(ours, base, merged_content)
-                    with open(publish_target, "w", encoding="utf-8") as f:
-                        f.write(merged_text)
-                    _save_base(publish_target, merged_content)
-                    merged_hashes[publish_target] = file_hash(publish_target)
-                    if has_conflicts:
-                        merged_created.append((publish_target,
-                                               "CONFLICTS -- resolve manually"))
-                        merged_warnings.append(
-                            f"{publish_target}: merge conflicts detected, resolve manually")
-                    else:
-                        merged_created.append((publish_target, "merged"))
-            else:
-                merged_skipped.append((publish_target, "exists"))
-
-        # Process shared templates (once)
+        # Plan shared templates (once)
         shared_mappings = reg.shared_template_mappings()
         if private:
             shared_mappings = _replace_post_release_hook_for_private(shared_mappings)
         shared_mappings = _append_deploy_workflow_if_configured(shared_mappings)
-        shared_created, shared_skipped, shared_warnings, shared_hashes = process_mappings(
-            reg.shared_template_dir(),
-            shared_mappings,
-            vars_dict,
-            force,
-            update,
-            existing_hashes,
+        shared_plans = plan_mappings(
+            reg.shared_template_dir(), shared_mappings, vars_dict, force, update=update,
         )
+
+        if dry_run:
+            _print_dry_run_report(
+                [ci_plans, merged_plans, shared_plans],
+                registries=registries_list,
+            )
+            return
+
+        ci_created, ci_skipped, ci_warnings, ci_hashes = apply_plans(ci_plans)
+        merged_created, merged_skipped, merged_warnings, merged_hashes = apply_plans(merged_plans)
+        shared_created, shared_skipped, shared_warnings, shared_hashes = apply_plans(shared_plans)
 
         created = ci_created + merged_created + shared_created
         skipped = ci_skipped + merged_skipped + shared_skipped
