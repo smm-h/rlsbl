@@ -95,9 +95,11 @@ def run_cmd(registry, args, flags):
     except Exception:
         results.append(("Delete GitHub Release", FAILED, f"gh release delete {tag} --yes"))
 
-    # Delete remote tag
+    # Delete remote tag (marked as release-authorized: undo is part of the
+    # release flow, so the pre-push hook shouldn't warn about a manual push).
     try:
-        run("git", ["push", "origin", f":{tag}"], timeout=get_push_timeout())
+        undo_push_env = {**os.environ, "RLSBL_RELEASE_PUSH": "1"}
+        run("git", ["push", "origin", f":{tag}"], timeout=get_push_timeout(), env=undo_push_env)
         results.append(("Delete remote tag", OK, "-"))
     except Exception:
         results.append(("Delete remote tag", FAILED, f"git push origin :{tag}"))
@@ -187,7 +189,11 @@ def run_cmd(registry, args, flags):
         if should_push:
             try:
                 branch = get_current_branch()
-                push_if_needed(branch)
+                # Mark the revert push as release-authorized so the pre-push
+                # hook doesn't warn about a "manual push" to the release
+                # branch -- undo is part of the release flow.
+                push_env = {**os.environ, "RLSBL_RELEASE_PUSH": "1"}
+                push_if_needed(branch, env=push_env)
                 results.append(("Push", OK, "-"))
             except Exception:
                 results.append(("Push", FAILED, "git push"))
