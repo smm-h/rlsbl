@@ -3,11 +3,11 @@
 import glob
 import os
 import re
-import shutil
 import subprocess
 
 from .base import BaseTarget
 from ..config import read_project_config
+from ..utils import require_tool
 from ..npm_wrapper import (
     build_artifacts,
     build_npm_publish_jobs,
@@ -123,7 +123,7 @@ class GoTarget(BaseTarget):
             print("Warning: could not read module path from go.mod, skipping proxy notification")
             return
 
-        if not shutil.which("go"):
+        if not require_tool("go", fatal=False):
             print("Warning: 'go' not found on PATH, skipping proxy notification")
             return
 

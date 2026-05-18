@@ -2,7 +2,6 @@
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -31,6 +30,7 @@ from ..utils import (
     get_push_timeout,
     is_clean_tree,
     push_if_needed,
+    require_tool,
     run,
 )
 
@@ -124,7 +124,7 @@ def _run_builtin_tests(registry, flags, project_dir=None):
     if registry == "pypi":
         config = read_project_config()
         uv_verbose = config.get("uv_sync_verbose", False)
-        if shutil.which("uv"):
+        if require_tool("uv", fatal=False):
             sync_cmd = ["uv", "sync"]
             if not uv_verbose:
                 sync_cmd.append("--quiet")
@@ -133,7 +133,7 @@ def _run_builtin_tests(registry, flags, project_dir=None):
                 print("Error: uv sync failed.", file=sys.stderr)
                 sys.exit(1)
             result = subprocess.run(["uv", "run", "pytest"], cwd=project_dir)
-        elif shutil.which("pytest"):
+        elif require_tool("pytest", fatal=False):
             result = subprocess.run(["pytest"], cwd=project_dir)
         else:
             print("Warning: neither uv nor pytest found, skipping tests.", file=sys.stderr)
@@ -223,7 +223,7 @@ def _run_selfdoc_check(flags, project_dir=None):
     if not os.path.exists(selfdoc_config):
         return True
 
-    if not shutil.which("selfdoc"):
+    if not require_tool("selfdoc", fatal=False):
         print("Note: selfdoc.json found but selfdoc is not installed. Skipping docs check.")
         return True
 

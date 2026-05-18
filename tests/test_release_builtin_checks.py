@@ -66,7 +66,7 @@ class TestBuiltinTestRunner:
         _setup_pypi_project(tmp_project)
 
         with (
-            patch("rlsbl.commands.release.shutil.which") as mock_which,
+            patch("rlsbl.commands.release.require_tool") as mock_which,
             patch("rlsbl.commands.release.subprocess.run") as mock_run,
             patch("rlsbl.commands.release.read_project_config", return_value={}),
         ):
@@ -88,11 +88,11 @@ class TestBuiltinTestRunner:
         _setup_pypi_project(tmp_project)
 
         with (
-            patch("rlsbl.commands.release.shutil.which") as mock_which,
+            patch("rlsbl.commands.release.require_tool") as mock_which,
             patch("rlsbl.commands.release.subprocess.run") as mock_run,
             patch("rlsbl.commands.release.read_project_config", return_value={}),
         ):
-            def which_side_effect(name):
+            def which_side_effect(name, *args, **kwargs):
                 if name == "uv":
                     return None
                 if name == "pytest":
@@ -193,7 +193,7 @@ class TestBuiltinTestRunnerCwd:
         _setup_pypi_project(tmp_project)
 
         with (
-            patch("rlsbl.commands.release.shutil.which") as mock_which,
+            patch("rlsbl.commands.release.require_tool") as mock_which,
             patch("rlsbl.commands.release.subprocess.run") as mock_run,
             patch("rlsbl.commands.release.read_project_config", return_value={}),
         ):
@@ -211,7 +211,7 @@ class TestBuiltinTestRunnerCwd:
         project_dir = str(tmp_project / "libs" / "mylib")
 
         with (
-            patch("rlsbl.commands.release.shutil.which") as mock_which,
+            patch("rlsbl.commands.release.require_tool") as mock_which,
             patch("rlsbl.commands.release.subprocess.run") as mock_run,
             patch("rlsbl.commands.release.read_project_config", return_value={}),
         ):
@@ -230,11 +230,11 @@ class TestBuiltinTestRunnerCwd:
         project_dir = str(tmp_project / "libs" / "mylib")
 
         with (
-            patch("rlsbl.commands.release.shutil.which") as mock_which,
+            patch("rlsbl.commands.release.require_tool") as mock_which,
             patch("rlsbl.commands.release.subprocess.run") as mock_run,
             patch("rlsbl.commands.release.read_project_config", return_value={}),
         ):
-            def which_side_effect(name):
+            def which_side_effect(name, *args, **kwargs):
                 if name == "uv":
                     return None
                 if name == "pytest":
@@ -426,7 +426,7 @@ class TestSelfdocCheck:
         (tmp_project / "selfdoc.json").write_text("{}")
 
         with (
-            patch("rlsbl.commands.release.shutil.which") as mock_which,
+            patch("rlsbl.commands.release.require_tool") as mock_which,
             patch("rlsbl.commands.release.subprocess.run") as mock_run,
         ):
             mock_which.return_value = "/usr/bin/selfdoc"
@@ -464,7 +464,7 @@ class TestSelfdocCheck:
         (tmp_project / "selfdoc.json").write_text("{}")
 
         with (
-            patch("rlsbl.commands.release.shutil.which", return_value=None),
+            patch("rlsbl.commands.release.require_tool", return_value=None),
             patch("rlsbl.commands.release.subprocess.run") as mock_run,
         ):
             result = _run_selfdoc_check({})
@@ -479,7 +479,7 @@ class TestSelfdocCheck:
         (tmp_project / "selfdoc.json").write_text("{}")
 
         with (
-            patch("rlsbl.commands.release.shutil.which", return_value="/usr/bin/selfdoc"),
+            patch("rlsbl.commands.release.require_tool", return_value="/usr/bin/selfdoc"),
             patch(
                 "rlsbl.commands.release.subprocess.run",
                 side_effect=subprocess.CalledProcessError(1, ["selfdoc", "check"]),
@@ -495,7 +495,7 @@ class TestSelfdocCheck:
         (project_dir / "selfdoc.json").write_text("{}")
 
         with (
-            patch("rlsbl.commands.release.shutil.which", return_value="/usr/bin/selfdoc"),
+            patch("rlsbl.commands.release.require_tool", return_value="/usr/bin/selfdoc"),
             patch("rlsbl.commands.release.subprocess.run") as mock_run,
         ):
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)

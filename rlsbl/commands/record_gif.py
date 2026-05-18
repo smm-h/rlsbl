@@ -1,12 +1,12 @@
 """Record-gif command that captures a terminal demo GIF using vhs, suitable for embedding in README files and documentation pages."""
 
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
 
 from ..targets import TARGETS, detect_targets
+from ..utils import require_tool
 
 
 def _parse_int_flag(flags, name, default):
@@ -42,7 +42,7 @@ def run_cmd(registry, args, flags):
     Requires vhs (https://github.com/charmbracelet/vhs) to be installed.
     Output is saved to assets/demo.gif.
     """
-    if not shutil.which("vhs"):
+    if not require_tool("vhs", fatal=False):
         print("Error: vhs is required.", file=sys.stderr)
         print("Install: go install github.com/charmbracelet/vhs@latest", file=sys.stderr)
         sys.exit(1)

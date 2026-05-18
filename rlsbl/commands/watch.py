@@ -2,13 +2,12 @@
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from ..utils import run
+from ..utils import require_tool, run
 
 
 def _notify(title, body):
@@ -23,7 +22,7 @@ def _notify(title, body):
                  f'display notification "{escaped_body}" with title "{escaped_title}"'],
                 timeout=5, capture_output=True,
             )
-        elif shutil.which("notify-send"):
+        elif require_tool("notify-send", fatal=False):
             subprocess.run(
                 ["notify-send", "-u", "normal", title, body],
                 timeout=5, capture_output=True,

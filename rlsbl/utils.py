@@ -16,6 +16,29 @@ def run(cmd, args=None, timeout=120, env=None):
     return result.stdout.strip()
 
 
+def require_tool(name, purpose=None, fatal=True):
+    """Check that a CLI tool is available on PATH.
+
+    Args:
+        name: command name (e.g., "uv", "npm", "go").
+        purpose: optional human-readable reason ("for editable install"),
+            included in the error message when fatal.
+        fatal: if True, raise FileNotFoundError on missing tool; if False,
+            return None silently.
+
+    Returns the resolved path to the tool, or None if missing and not fatal.
+    """
+    path = shutil.which(name)
+    if path is None:
+        msg = f"Required tool not found on PATH: {name}"
+        if purpose:
+            msg += f" (needed {purpose})"
+        if fatal:
+            raise FileNotFoundError(msg)
+        return None
+    return path
+
+
 
 def find_project_root(start=None):
     """Walk up from start (default: cwd) to find .rlsbl/ or .rlsbl-monorepo/.
@@ -148,7 +171,7 @@ def find_commit_tool():
     Prints a one-time warning to stderr when falling back to git.
     """
     global _safegit_warning_shown
-    if shutil.which("safegit"):
+    if require_tool("safegit", fatal=False):
         return "safegit"
     if not _safegit_warning_shown:
         print(

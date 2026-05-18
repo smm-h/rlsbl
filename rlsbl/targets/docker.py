@@ -1,11 +1,10 @@
 """Docker release target using a VERSION file as source of truth, with opt-in activation via config and image publishing to a registry."""
 
 import os
-import shutil
 
 from .base import BaseTarget
 from ..config import read_project_config
-from ..utils import run
+from ..utils import require_tool, run
 
 VERSION_FILE = "VERSION"
 
@@ -80,7 +79,7 @@ class DockerTarget(BaseTarget):
                   "'docker.registry' in .rlsbl/config.json")
             return
 
-        if not shutil.which("docker"):
+        if not require_tool("docker", fatal=False):
             print("Error: 'docker' not found on PATH, cannot publish")
             return
 
