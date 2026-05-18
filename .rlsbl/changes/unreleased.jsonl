@@ -1,1 +1,2 @@
 {"commits":["b4b58c6568ef2f70e45a9d052a461fcfac0f8ccd"],"user_facing":true,"description":"**Status warning for unreleased commits.** `rlsbl status` now prints a prominent `! N commits ahead of <tag>` warning when the current project has unreleased commits since its last tag.","type":"feature"}
+{"commits":["9342a8e4e05e9bb94875eed87e9557a94deabdd8"],"user_facing":false}
