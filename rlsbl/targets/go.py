@@ -186,12 +186,14 @@ class GoTarget(BaseTarget):
 
     def monorepo_tag_format(self, name, version, path=None):
         if path is not None:
-            return f"{path}v{version}"
+            sep = "" if path.endswith("/") else "/"
+            return f"{path}{sep}v{version}"
         return super().monorepo_tag_format(name, version, path)
 
     def monorepo_tag_glob(self, name, path=None):
         if path is not None:
-            return f"{path}v*"
+            sep = "" if path.endswith("/") else "/"
+            return f"{path}{sep}v*"
         return super().monorepo_tag_glob(name, path)
 
     def template_dir(self):
