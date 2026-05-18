@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from .action_versions import format_action
+
 
 @dataclass
 class PlatformSpec:
@@ -136,13 +138,15 @@ def build_npm_publish_jobs(
         )
     publish_script = "\n          ".join(publish_lines)
 
+    checkout_action = format_action("actions/checkout")
+    setup_node_action = format_action("actions/setup-node")
     return f"""
   npm-publish:
     needs: [goreleaser]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: {checkout_action}
+      - uses: {setup_node_action}
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 
+from ..action_versions import format_action
 from ..utils import commit_files
 from ..workspace import find_workspace_root, load_workspace, save_workspace, WORKSPACE_DIR, WORKSPACE_FILE
 from ..workspace_graph import WorkspaceGraph
@@ -356,8 +357,8 @@ def _generate_router(projects):
     for p in projects:
         lines.append(f"      {p['name']}: ${{{{ steps.changes.outputs.{p['name']} }}}}")
     lines.append("    steps:")
-    lines.append("      - uses: actions/checkout@v4")
-    lines.append("      - uses: dorny/paths-filter@v3")
+    lines.append(f"      - uses: {format_action('actions/checkout')}")
+    lines.append(f"      - uses: {format_action('dorny/paths-filter')}")
     lines.append("        id: changes")
     lines.append("        with:")
     lines.append("          filters: |")
