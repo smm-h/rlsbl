@@ -104,19 +104,26 @@ def get_hook_timeout():
         return None
 
 
-def push_if_needed(branch):
-    """Push the branch to origin if local is ahead of remote."""
+def push_if_needed(branch, env=None):
+    """Push the branch to origin if local is ahead of remote.
+
+    Args:
+        branch: branch name to push.
+        env: optional environment dict passed to the push subprocess (e.g. to
+            set ``RLSBL_RELEASE_PUSH=1`` so the pre-push hook recognises the
+            push as release-authorized). Defaults to None (inherit current env).
+    """
     timeout = get_push_timeout()
     local = run("git", ["rev-parse", branch])
     try:
         remote = run("git", ["rev-parse", f"origin/{branch}"])
     except subprocess.CalledProcessError:
         # Remote branch doesn't exist yet; push it
-        run("git", ["push", "-u", "origin", branch], timeout=timeout)
+        run("git", ["push", "-u", "origin", branch], timeout=timeout, env=env)
         return
 
     if local != remote:
-        run("git", ["push", "origin", branch], timeout=timeout)
+        run("git", ["push", "origin", branch], timeout=timeout, env=env)
 
 
 def extract_changelog_entry(changelog_path, version):

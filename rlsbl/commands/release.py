@@ -734,8 +734,11 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
         push_timeout = get_push_timeout()
         if push_timeout != 120:
             log(f"Push timeout: {push_timeout}s (from RLSBL_PUSH_TIMEOUT)")
-        push_if_needed(branch)
-        run("git", ["push", "origin", tag], timeout=push_timeout)
+        # Mark pushes as release-authorized so the pre-push hook skips its
+        # "manual push" warning. The hook still runs JSONL coverage checks.
+        push_env = {**os.environ, "RLSBL_RELEASE_PUSH": "1"}
+        push_if_needed(branch, env=push_env)
+        run("git", ["push", "origin", tag], timeout=push_timeout, env=push_env)
         log(f"Pushed to origin/{branch}")
     except Exception:
         # Roll back local mutations: delete tag (may not exist yet) and
@@ -790,8 +793,8 @@ def _run_release_mutating(registry, reg, flags, quiet, log, new_version, current
                 log(f"Publishing subtree to {subtree_remote}...")
                 try:
                     run("git", ["subtree", "split", f"--prefix={monorepo_project_path}", "-b", "_rlsbl-subtree-tmp"])
-                    run("git", ["push", subtree_remote, f"_rlsbl-subtree-tmp:refs/tags/{plain_tag}"])
-                    run("git", ["push", subtree_remote, "_rlsbl-subtree-tmp:refs/heads/main"])
+                    run("git", ["push", subtree_remote, f"_rlsbl-subtree-tmp:refs/tags/{plain_tag}"], env=push_env)
+                    run("git", ["push", subtree_remote, "_rlsbl-subtree-tmp:refs/heads/main"], env=push_env)
                     log(f"Subtree published: {plain_tag} -> {subtree_remote}")
                 except Exception as e:
                     print(f"Warning: subtree push failed: {e}", file=sys.stderr)
